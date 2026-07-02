@@ -23,7 +23,7 @@ export const UNIVERSITIES: School[] = [
     acronym: 'RUN',
     locationsCount: 26,
     mapImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBFf8Ynl_a5V5MjIUSy7jPFq6l93wbIfzj-exNibt_LXLUh8GWNuh6KFAFWDpEXHOfiQF7pQanp0nvupSTAhFyJbZ6E9MZSPYwROimnSHmxAWlwq42FLTHUZSvCOvDwYSwowjvtr3yw86A2A_Zf5oQWW54K32vb3_6DoBUtR7nySxsmx9iwMwY9IHWFatEpt86iaCiizyjVEAKliRZJVanLhGSvehnH_F0s9lbkiokfvqH0LL8iXGwZUA2F_u3Brjb9erGTOXcGyVA', 
-    accentColor: '#10b981', // Emerald green
+    accentColor: '#175D39', // Emerald green
     brandColor: 'emerald',
     logoText: 'RUN',
     logoImage: 'https://run.edu.ng/wp-content/uploads/2021/04/run-logo.png',
@@ -47,7 +47,7 @@ export const UNIVERSITIES: School[] = [
     acronym: 'UI',
     locationsCount: 42,
     mapImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGdqITs0V8FtUmIn9Pu3Nw4ljHuKsmyTM0eN5MsW7oT07CkaHebJsd_0nGZOxRdMs16uZ5-TntRrLnVT3ujgum12N_fj1BmKcyalqv1BinQBI79B1JjTsZw35KIlCNaEwqeQwVzH3zH3DPDlDLMtysTsBJ4WNept0gDL43eV-g_7lu1Msgynw5zUyRrCfJ4UAjPg1TaCiGesLwL9I1LwgADC5WD2jFWZi3EUSdUenTv8p_RwjpUP1rcix1tajYsLRnxQBmYJivQW8',
-    accentColor: '#004ac6', // Blue
+    accentColor: '#175D39', // Emerald Green
     brandColor: 'indigo',
     logoText: 'UI',
     logoImage: 'https://upload.wikimedia.org/wikipedia/commons/0/00/University_of_Ibadan_logo.png',
@@ -71,7 +71,7 @@ export const UNIVERSITIES: School[] = [
     acronym: 'CU',
     locationsCount: 35,
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1200&q=80', // Custom abstract tech map
-    accentColor: '#962d2d', // Crimson Maroon
+    accentColor: '#175D39', // Crimson Maroon
     brandColor: 'crimson',
     logoText: 'CU',
     logoImage: 'https://upload.wikimedia.org/wikipedia/commons/2/25/Covenant_University_logo.png',
@@ -104,17 +104,17 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
   };
 
   return (
-    <div className="min-h-screen bg-[#f3faf7] flex flex-col justify-between py-8 px-4 sm:px-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#F2F2F2] flex flex-col justify-between py-8 px-4 sm:px-6 relative overflow-hidden">
       
       {/* Background Decorative Shapes */}
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-100/40 blur-3xl pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-50/40 blur-3xl pointer-events-none"></div>
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#175D39]/20/40 blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#175D39]/10/40 blur-3xl pointer-events-none"></div>
 
       {/* Top Bar with elegant back button */}
       <div className="max-w-xl mx-auto w-full flex items-center justify-start z-10">
         <button 
           onClick={onBack}
-          className="flex items-center justify-center w-10 h-10 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 rounded-full border border-gray-100 shadow-sm transition duration-250 cursor-pointer"
+          className="flex items-center justify-center w-10 h-10 bg-white hover:bg-[#175D39]/10 text-gray-700 hover:text-[#175D39] rounded-full border border-gray-100 shadow-sm transition duration-250 cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -126,10 +126,10 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
           
           {/* Main Logo & Title */}
           <div className="space-y-3 flex flex-col items-center">
-            <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center text-white shadow-xl shadow-emerald-600/10 border-4 border-white">
+            <div className="w-16 h-16 bg-[#175D39] rounded-full flex items-center justify-center text-white shadow-xl shadow-emerald-600/10 border-4 border-white">
               <GraduationCap className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0b1c30] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#175D39] tracking-tight">
               Select Your University
             </h1>
             <p className="text-sm text-gray-500 font-medium">
@@ -148,8 +148,8 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
                   onClick={() => setSelectedId(school.id)}
                   className={`relative p-5 bg-white rounded-3xl border-2 text-left cursor-pointer transition-all duration-300 flex items-center justify-between ${
                     isSelected 
-                      ? 'border-emerald-500 bg-white shadow-lg shadow-emerald-500/5' 
-                      : 'border-white hover:border-gray-100 bg-white hover:bg-[#fafafc] shadow-xs'
+                      ? 'border-[#175D39] bg-white shadow-lg shadow-emerald-500/5' 
+                      : 'border-white hover:border-gray-100 bg-white hover:bg-[#F2F2F2] shadow-xs'
                   }`}
                 >
                   <div className="flex items-center space-x-4">
@@ -171,9 +171,9 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
                         <span 
                           className="px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase font-mono tracking-wider border"
                           style={{
-                            color: school.id === 'run' ? '#059669' : school.id === 'ui' ? '#0254db' : '#b22d2d',
-                            borderColor: school.id === 'run' ? '#a7f3d0' : school.id === 'ui' ? '#bfdbfe' : '#fca5a5',
-                            backgroundColor: school.id === 'run' ? '#ecfdf5' : school.id === 'ui' ? '#eff6ff' : '#fef2f2',
+                            color: school.id === 'run' ? '#175D39' : school.id === 'ui' ? '#0254db' : '#175D39',
+                            borderColor: school.id === 'run' ? '#F2F2F2' : school.id === 'ui' ? '#F2F2F2' : '#F2F2F2',
+                            backgroundColor: school.id === 'run' ? '#F2F2F2' : school.id === 'ui' ? '#F2F2F2' : '#F2F2F2',
                           }}
                         >
                           {school.acronym}
@@ -189,7 +189,7 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
                   {/* Right side tick indicator or continue visual */}
                   <div className="flex items-center justify-center pr-1 select-none">
                     <div className={`w-[26px] h-[26px] rounded-full flex items-center justify-center transition-all duration-300 ${
-                      isSelected ? 'bg-emerald-500 text-white shadow-sm' : 'bg-transparent border border-gray-200'
+                      isSelected ? 'bg-[#175D39] text-white shadow-sm' : 'bg-transparent border border-gray-200'
                     }`}>
                       {isSelected ? (
                         <Check className="w-4 h-4 stroke-[3]" />
@@ -207,7 +207,7 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
           <div className="pt-3">
             <button
               onClick={handleContinue}
-              className="w-full bg-[#0b1c30] hover:bg-emerald-600 text-white font-bold py-4 px-6 rounded-2xl shadow-md transition-colors duration-250 cursor-pointer text-sm"
+              className="w-full bg-[#175D39] hover:bg-[#175D39] text-white font-bold py-4 px-6 rounded-2xl shadow-md transition-colors duration-250 cursor-pointer text-sm"
             >
               Tap to continue with {UNIVERSITIES.find(u => u.id === selectedId)?.name}
             </button>

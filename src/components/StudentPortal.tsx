@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   UserProfile, 
   AppNotification, 
   Transaction, 
-  RideRequest 
+  RideRequest,
+  RideStatus
 } from '../types';
-import { 
-  ADVERT_CARDS 
-} from '../data';
 import { UNIVERSITIES } from './SchoolSelection';
 import { 
   Car, 
@@ -19,7 +17,6 @@ import {
   Wallet, 
   ArrowRightLeft, 
   TrendingUp, 
-  DollarSign, 
   CheckCircle, 
   Info, 
   Calendar, 
@@ -30,31 +27,44 @@ import {
   Check, 
   BellRing,
   Award,
-  CircleAlert,
   ArrowUpRight,
   ShieldAlert,
   HelpCircle,
   Eye,
   Trash2,
   Send,
-  Copy
+  Copy,
+  MessageSquare,
+  Shield,
+  ThumbsUp,
+  XCircle,
+  UserCheck,
+  Zap,
+  Navigation,
+  RefreshCw,
+  Sparkles,
+  Compass,
+  LogOut
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
-const loadPaystackScript = (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if ((window as any).PaystackPop) {
-      resolve(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://js.paystack.co/v1/inline.js';
-    script.async = true;
-    script.id = 'paystack-inline-js';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-};
+export interface ActivePool {
+  id: string;
+  hostName: string;
+  hostAvatar: string;
+  hostMajor: string;
+  hostRating: number;
+  hostGender: string;
+  pickupId: string;
+  dropoffId: string;
+  vehicleType: 'Car' | 'Keke' | 'Shuttle';
+  currentRiders: { name: string; avatar: string; major: string; rating: number; gender: string }[];
+  maxRiders: number;
+  baseFare: number;
+  status: 'active' | 'closed' | 'transit';
+  driverAcceptCountdown?: number;
+  driverAccepted?: boolean;
+}
 
 interface StudentPortalProps {
   activeView: string;
@@ -74,6 +84,15 @@ interface StudentPortalProps {
   onDeleteAccount?: () => void;
 }
 
+// Interface for dynamic pooling simulation
+interface PoolMember {
+  name: string;
+  avatar: string;
+  major: string;
+  gender: string;
+  rating: number;
+}
+
 export const StudentPortal: React.FC<StudentPortalProps> = ({
   activeView,
   userProfile,
@@ -91,15 +110,43 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   selectedSchoolId,
   onDeleteAccount,
 }) => {
-  // Dynamic School Setup
+  // Current School Details
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const campusStops = selectedSchool.stops;
-  const mapImage = selectedSchool.mapImage;
 
-  // Booking Form State
+  // Booking details
   const [pickup, setPickup] = useState<string>('');
   const [dropoff, setDropoff] = useState<string>('');
+  const [vehicleType, setVehicleType] = useState<'Car' | 'Keke' | 'Shuttle'>('Car');
+  const [verifyPeer, setVerifyPeer] = useState<boolean>(true);
+  const [bookingMode, setBookingMode] = useState<'now' | 'schedule'>('now');
+  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [scheduledTime, setScheduledTime] = useState<string>('');
+  const [rideMode, setRideMode] = useState<'create' | 'find' | 'solo'>('create');
+  const [scheduledRides, setScheduledRides] = useState<{
+    id: string;
+    pickup: string;
+    dropoff: string;
+    mode: 'create' | 'solo';
+    date: string;
+    time: string;
+    vehicleType: string;
+    fare: number;
+  }[]>([]);
 
+  const [activePools, setActivePools] = useState<ActivePool[]>([]);
+  const [joinedPoolId, setJoinedPoolId] = useState<string | null>(null);
+  const [browseFilterPickup, setBrowseFilterPickup] = useState<string>('all');
+  const [browseFilterDropoff, setBrowseFilterDropoff] = useState<string>('all');
+  const [browseFilterVehicle, setBrowseFilterVehicle] = useState<string>('all');
+
+  // Countdown timer states
+  const [driverTimer, setDriverTimer] = useState<number>(60);
+  const [checkoutPool, setCheckoutPool] = useState<ActivePool | null>(null);
+  const [checkoutTimer, setCheckoutTimer] = useState<number>(30);
+  const [simulatedMatchTime, setSimulatedMatchTime] = useState<number>(15); // simulated driver accepts at 45s left (15s elapsed)
+  
+  // Initialize stops
   useEffect(() => {
     if (campusStops.length >= 2) {
       setPickup(campusStops[0].id);
@@ -107,1776 +154,2708 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     }
   }, [selectedSchoolId]);
 
-  const [vehicleType, setVehicleType] = useState<'Car' | 'Keke' | 'Shuttle'>('Car');
-  const [verifyPeer, setVerifyPeer] = useState<boolean>(true);
-  const [estimateLoading, setEstimateLoading] = useState<boolean>(false);
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  // Initialize simulated active pools dynamically
+  useEffect(() => {
+    const stored = localStorage.getItem('campusride_active_pools');
+    if (stored) {
+      try {
+        setActivePools(JSON.parse(stored));
+      } catch (e) {
+        console.error("Error parsing stored active pools", e);
+      }
+    } else if (campusStops && campusStops.length >= 4) {
+      const initial: ActivePool[] = [];
+      setActivePools(initial);
+      localStorage.setItem('campusride_active_pools', JSON.stringify(initial));
+    }
+  }, [selectedSchoolId, campusStops]);
 
-  // Fund Wallet States
-  const [fundAmount, setFundAmount] = useState<number>(2500);
+  // Set default currency symbol
+  const currencySymbol = "₦";
+
+  // Ride Pricing Multipliers & Tiers
+  // Standard prices based on vehicle type
+  const getBasePrice = () => {
+    if (vehicleType === 'Car') return 350;
+    if (vehicleType === 'Keke') return 200;
+    return 100; // Shuttle Bus
+  };
+
+  const basePrice = getBasePrice();
+  const priceTiers = {
+    tier1: basePrice, // 1 rider
+    tier2: Math.round(basePrice * 0.5), // 2 riders
+    tier3: Math.round(basePrice * 0.33), // 3 riders
+    tier4: Math.round(basePrice * 0.25), // 4 riders (full)
+  };
+
+  // Local state for interactive ride flow
+  const [poolingState, setPoolingState] = useState<'idle' | 'forming' | 'matched' | 'transit' | 'arrived' | 'rated'>('idle');
+  const [lobbyMembers, setLobbyMembers] = useState<PoolMember[]>([
+    {
+      name: userProfile.name || 'Temi Adeyemi',
+      avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+      major: 'Software Eng',
+      gender: 'Female',
+      rating: 4.8
+    }
+  ]);
+
+  // Chat room state
+  const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string; isUser: boolean }[]>([
+    { sender: 'System', text: 'You created a live pool. Seating occupancy: 1/4. Pricing tier: ' + currencySymbol + priceTiers.tier1 + '/seat.', time: '11:15 AM', isUser: false },
+  ]);
+  const [chatInput, setChatInput] = useState<string>('');
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Live simulation states
+  const [simStep, setSimStep] = useState<number>(0);
+  const [liveDistance, setLiveDistance] = useState<number>(0); // 0 to 100% of route
+  const [etaRemaining, setEtaRemaining] = useState<number>(5);
+  const [verificationCode] = useState<string>(() => Math.floor(1000 + Math.random() * 9000).toString());
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [sosActivated, setSosActivated] = useState<boolean>(false);
+  const [ratingScore, setRatingScore] = useState<number>(5);
+  const [reviewText, setReviewText] = useState<string>('');
+  const [tripCompleted, setTripCompleted] = useState<boolean>(false);
+
+  // Top Up Wallet States
+  const [fundAmount, setFundAmount] = useState<number>(1000);
   const [customFundAmount, setCustomFundAmount] = useState<string>('');
-  const [fundMethod, setFundMethod] = useState<string>('Paystack Unified (Card/Transfer)');
-  const [fundingSuccess, setFundingSuccess] = useState<boolean>(false);
+  const [showPaystackPopup, setShowPaystackPopup] = useState<boolean>(false);
+  const [paystackCard, setPaystackCard] = useState<string>('');
+  const [paystackExpiry, setPaystackExpiry] = useState<string>('');
+  const [paystackCvv, setPaystackCvv] = useState<string>('');
   const [paystackLoading, setPaystackLoading] = useState<boolean>(false);
-
-  // Send Money to Driver States
-  const [sendTargetDriver, setSendTargetDriver] = useState<string>('david');
-  const [directTransferAmount, setDirectTransferAmount] = useState<string>('');
-  const [transferMethod, setTransferMethod] = useState<'wallet' | 'paystack'>('wallet');
-  const [transferLoading, setTransferLoading] = useState<boolean>(false);
-  const [transferSuccess, setTransferSuccess] = useState<boolean>(false);
-  const [clipboardCopied, setClipboardCopied] = useState<boolean>(false);
-  const [virtualSimulateLoading, setVirtualSimulateLoading] = useState<boolean>(false);
+  const [transferCopied, setTransferCopied] = useState<boolean>(false);
 
   // Settings Toggles
-  const [pushRide, setPushRide] = useState<boolean>(true);
-  const [pushPromo, setPushPromo] = useState<boolean>(false);
-  const [shareLocation, setShareLocation] = useState<boolean>(true);
-  const [twoFactor, setTwoFactor] = useState<boolean>(true);
+  const [safetySharing, setSafetySharing] = useState<boolean>(true);
+  const [sameGenderOnly, setSameGenderOnly] = useState<boolean>(false);
+  const [lowBalanceAlert, setLowBalanceAlert] = useState<boolean>(true);
 
-  // Account Deletion States
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
-  const [deleteIdInput, setDeleteIdInput] = useState<string>('');
-  const [simulateOutstandingDebt, setSimulateOutstandingDebt] = useState<boolean>(false);
-  const [deleteError, setDeleteError] = useState<string>('');
-
-  // Get Stop Name Helper
+  // Helper to resolve stop name from ID
   const getStopName = (stopId: string) => {
     const stop = campusStops.find(s => s.id === stopId);
     return stop ? stop.name : stopId;
   };
 
-  // Get Stop Name from string or ID
-  const resolveStopName = (input: string) => {
-    if (input.includes('stop-')) {
-      return getStopName(input);
+  // Scroll to bottom of chat
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-    return input;
-  };
+  }, [chatMessages, poolingState]);
 
-  // Ride Cost Estimation Helper
-  const getRideCost = () => {
-    let base = 4.50;
-    if (vehicleType === 'Keke') base = 5.75;
-    if (vehicleType === 'Shuttle') base = 2.50;
+  // Simulated live driver pool forming action loop
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (poolingState === 'forming') {
+      const simulatedRiders: PoolMember[] = [
+        { name: 'Adeola S.', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80', major: 'Microbiology', gender: 'Female', rating: 4.7 },
+        { name: 'Chinedu O.', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80', major: 'Economics', gender: 'Male', rating: 4.9 },
+        { name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80', major: 'Mass Comm', gender: 'Female', rating: 4.6 }
+      ];
+
+      // Step-by-step pool members joining
+      timer = setTimeout(() => {
+        if (lobbyMembers.length === 1) {
+          // Add first rider
+          const rider = simulatedRiders[0];
+          setLobbyMembers(prev => [...prev, rider]);
+          setChatMessages(prev => [...prev, 
+            { sender: rider.name, text: 'Hey guys! Super glad I found this pool.', time: '11:16 AM', isUser: false },
+            { sender: 'System', text: `${rider.name} joined. Seating: 2/4. Price dropped to ${currencySymbol}${priceTiers.tier2}/seat.`, time: '11:16 AM', isUser: false }
+          ]);
+          onAddNotification({
+            id: `notif-${Date.now()}`,
+            title: 'Pool Expansion',
+            message: `${rider.name} joined your ride pool to ${getStopName(dropoff)}. Fair split initialized!`,
+            time: '11:16 AM',
+            date: 'Today',
+            isRead: false,
+            type: 'info'
+          });
+          setSimStep(1);
+        } else if (lobbyMembers.length === 2) {
+          // Add second rider
+          const rider = simulatedRiders[1];
+          setLobbyMembers(prev => [...prev, rider]);
+          setChatMessages(prev => [...prev, 
+            { sender: rider.name, text: 'Heading to classes? Mind if I hop in?', time: '11:17 AM', isUser: false },
+            { sender: 'System', text: `${rider.name} joined. Seating: 3/4. Price dropped to ${currencySymbol}${priceTiers.tier3}/seat.`, time: '11:17 AM', isUser: false }
+          ]);
+          setSimStep(2);
+        } else if (lobbyMembers.length === 3) {
+          // Add third rider (full!)
+          const rider = simulatedRiders[2];
+          setLobbyMembers(prev => [...prev, rider]);
+          setChatMessages(prev => [...prev, 
+            { sender: rider.name, text: 'Awesome, last seat is mine! Let’s request driver.', time: '11:18 AM', isUser: false },
+            { sender: 'System', text: `Pool is FULL (4/4). Price dropped to ${currencySymbol}${priceTiers.tier4}/seat! Match initialized.`, time: '11:18 AM', isUser: false }
+          ]);
+          setSimStep(3);
+
+          // Transition to matched with driver in 4 seconds
+          setTimeout(() => {
+            setPoolingState('matched');
+            setChatMessages(prev => [...prev, {
+              sender: 'David Alao (Driver)',
+              text: 'Hello everyone! I am driving the silver Toyota Corolla. Arriving in 2 minutes.',
+              time: '11:19 AM',
+              isUser: false
+            }]);
+            onAddNotification({
+              id: `notif-${Date.now()}`,
+              title: 'Driver Matched!',
+              message: 'David Alao (4.9★) has accepted your pool request. Use Verification PIN to board.',
+              time: '11:19 AM',
+              date: 'Today',
+              isRead: false,
+              type: 'success'
+            });
+          }, 3500);
+        }
+      }, 5000);
+    }
+    return () => clearTimeout(timer);
+  }, [poolingState, lobbyMembers]);
+
+  // Master countdown timer effect (runs every 1 second)
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
     
-    // Add premium if peer verified is toggled
-    if (verifyPeer) base += 0.50;
-    return base;
-  };
+    // We run the interval if the user is in forming lobby, confirming checkout, or if there are active pools
+    if (poolingState === 'forming' || checkoutPool || activePools.some(p => p.status === 'active')) {
+      interval = setInterval(() => {
+        // 1. Tick driver timer for active user in lobby
+        if (poolingState === 'forming') {
+          setDriverTimer(prev => {
+            if (prev <= 1) {
+              // Timer expired before match! Cancel pool.
+              setTimeout(() => {
+                handleResetPool();
+                alert("Match Request Expired: No driver accepted your ride pool within the 60-second window. The pool request has been automatically cancelled.");
+              }, 0);
+              return 60;
+            }
+            return prev - 1;
+          });
+        }
 
-  // Handle Request Ride Submit
-  const handleRequestRide = (e: React.FormEvent) => {
+        // 2. Tick checkout timer for confirmation modal
+        if (checkoutPool) {
+          setCheckoutTimer(prev => {
+            if (prev <= 1) {
+              setCheckoutPool(null);
+              alert("Seat join reservation window expired! Please try joining again.");
+              return 30;
+            }
+            return prev - 1;
+          });
+        }
+
+        // 3. Tick down driverAcceptCountdown for ALL active pools in background
+        setActivePools(prevPools => {
+          let hasChange = false;
+          const updated = prevPools.map(pool => {
+            if (pool.status === 'active') {
+              const currentCountdown = pool.driverAcceptCountdown !== undefined ? pool.driverAcceptCountdown : 60;
+              if (currentCountdown <= 1) {
+                hasChange = true;
+                return { ...pool, status: 'closed' as const, driverAcceptCountdown: 0 };
+              }
+              hasChange = true;
+              return { ...pool, driverAcceptCountdown: currentCountdown - 1 };
+            }
+            return pool;
+          }).filter(pool => pool.status === 'active' && (pool.driverAcceptCountdown === undefined || pool.driverAcceptCountdown > 0));
+
+          if (hasChange) {
+            localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+          }
+          return updated;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [poolingState, checkoutPool, activePools.length]);
+
+  // Reset driver timer to 60 when starting a new forming lobby
+  useEffect(() => {
+    if (poolingState === 'forming') {
+      setDriverTimer(60);
+    }
+  }, [poolingState]);
+
+  // Live path/trip progress simulation
+  useEffect(() => {
+    let progressInterval: NodeJS.Timeout;
+    if (poolingState === 'transit') {
+      progressInterval = setInterval(() => {
+        setLiveDistance(prev => {
+          if (prev >= 100) {
+            clearInterval(progressInterval);
+            setPoolingState('arrived');
+            // Complete ride transaction
+            const finalFare = Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1']);
+            onUpdateProfile({
+              walletBalance: Math.max(0, userProfile.walletBalance - finalFare),
+              tripsThisWeek: userProfile.tripsThisWeek + 1,
+              savedThisMonth: userProfile.savedThisMonth + (basePrice - finalFare)
+            });
+            onAddTransaction({
+              id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+              description: `Split Ride: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}`,
+              amount: finalFare,
+              date: 'Today',
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              method: 'Digital Wallet Split',
+              type: 'charge',
+              status: 'Completed'
+            });
+            onAddNotification({
+              id: `notif-${Date.now()}`,
+              title: 'Arrived at Destination!',
+              message: `You split the fare. paid ${currencySymbol}${finalFare} instead of ${currencySymbol}${basePrice}. Saved ${currencySymbol}${basePrice - finalFare}!`,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              date: 'Today',
+              isRead: false,
+              type: 'receipt'
+            });
+            return 100;
+          }
+          const nextDist = prev + 5;
+          setEtaRemaining(Math.max(1, Math.round((5 * (100 - nextDist)) / 100)));
+          return nextDist;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(progressInterval);
+  }, [poolingState]);
+
+  // Submit Request / Create Pool
+  const handleRequestPool = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!pickup || !dropoff) {
+      alert('Please specify your pickup and destination stops.');
+      return;
+    }
     if (pickup === dropoff) {
-      alert('Pickup and Dropoff locations cannot be identical.');
+      alert('Pickup and dropoff locations cannot be identical.');
       return;
     }
 
-    const calculatedCost = getRideCost();
-    if (userProfile.walletBalance < calculatedCost) {
-      alert(`Insufficient digital wallet balance to complete request. This ride costs $${calculatedCost.toFixed(2)}, but you only have $${userProfile.walletBalance.toFixed(2)}. Please reload funds.`);
+    const calculatedFare = priceTiers.tier1; // starting fare
+    if (userProfile.walletBalance < calculatedFare) {
+      alert(`Insufficient funds. This ride starts at ${currencySymbol}${calculatedFare}. Please top up your wallet.`);
       onNavigate('payments');
       return;
     }
 
-    setEstimateLoading(true);
-
-    // Simulate dispatch timing
-    setTimeout(() => {
-      setEstimateLoading(false);
-      const newRide: RideRequest = {
-        id: `REQ-${Math.floor(1000 + Math.random() * 9000)}`,
-        passengerId: userProfile.id,
-        passengerName: userProfile.name,
-        passengerAvatar: userProfile.avatar,
-        passengerRating: 4.8,
-        passengerType: 'Student',
-        pickup: getStopName(pickup),
-        dropoff: getStopName(dropoff),
-        status: 'requested',
-        vehicleType: vehicleType,
-        verifyPeer: verifyPeer,
-        cost: calculatedCost,
-        etaMinutes: 4,
-        date: 'Jun 19, 2026',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      onUpdateRide(newRide);
-      
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'Ride Request Uploaded',
-        message: `Your transit request from ${getStopName(pickup)} to ${getStopName(dropoff)} has been added to live queues. Dispatching nearest peer driver...`,
-        date: 'Jun 19, 2026',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isRead: false,
-        type: 'info'
-      });
-    }, 1200);
-  };
-
-  // Simulate Ride States (Interactive feedback looping)
-  const advanceSimulatedRide = () => {
-    if (!activeRide) return;
-
-    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    if (activeRide.status === 'requested') {
-      onUpdateRide({
-        ...activeRide,
-        status: 'accepted',
-        driverId: 'd-202',
-        driverName: 'David Moore',
-        driverAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
-        driverVehicle: 'Toyota Camry (Silver) • 4P-928X',
-        driverRating: 4.9,
-        etaMinutes: 3,
-      });
-
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'Driver Assigned',
-        message: `Toyota Camry Silver driven by David Moore has accepted your trip. ETA: 3 minutes.`,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        isRead: false,
-        type: 'success'
-      });
-    } else if (activeRide.status === 'accepted') {
-      onUpdateRide({
-        ...activeRide,
-        status: 'arriving',
-        etaMinutes: 1,
-      });
-
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'Driver Arrived at Pickup!',
-        message: `David Moore has arrived at ${activeRide.pickup}. Please proceed to the designated campus stop immediately.`,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        isRead: false,
-        type: 'alert'
-      });
-    } else if (activeRide.status === 'arriving') {
-      onUpdateRide({
-        ...activeRide,
-        status: 'in_transit',
-        etaMinutes: 5,
-      });
-
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'Transit in Progress',
-        message: `Your ride has commenced. Heading to ${activeRide.dropoff}. Travel safely.`,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        isRead: false,
-        type: 'info'
-      });
-    } else if (activeRide.status === 'in_transit') {
-      // Complete Ride: deduct funds, save transaction, increment trip metrics, reset ride
-      const fare = activeRide.cost;
-      onUpdateProfile({
-        walletBalance: userProfile.walletBalance - fare,
-        tripsThisWeek: userProfile.tripsThisWeek + 1,
-        carpoolRides: activeRide.verifyPeer ? userProfile.carpoolRides + 1 : userProfile.carpoolRides,
-        savedThisMonth: userProfile.savedThisMonth,
-      });
-
-      const newTxn: Transaction = {
-        id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
-        description: `Ride fare: ${activeRide.pickup} to ${activeRide.dropoff}`,
-        amount: -fare,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        method: 'Campus Wallet',
-        type: 'charge',
-        status: 'Completed',
-      };
-
-      onAddTransaction(newTxn);
-
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'Ride Completed & Receipt Generated',
-        message: `Successfully completed ride from ${activeRide.pickup} to ${activeRide.dropoff}. Paid ₦${fare.toFixed(2)} via digital wallet. Thank you for commuting with CampusRide!`,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        isRead: false,
-        type: 'receipt'
-      });
-
-      // Show receipt popup or alert
-      alert(`Trip Completed!\nFrom: ${activeRide.pickup}\nTo: ${activeRide.dropoff}\nFare: ₦${fare.toFixed(2)} deducted from Wallet.`);
-      onUpdateRide(null);
-      onNavigate('dashboard');
-    }
-  };
-
-  // Automatic trip progression loop for the student's booking view
-  React.useEffect(() => {
-    if (!activeRide) return;
-
-    let timeoutId: NodeJS.Timeout;
-
-    if (activeRide.status === 'requested') {
-      timeoutId = setTimeout(() => {
-        advanceSimulatedRide();
-      }, 4000); // 4 seconds to assign driver
-    } else if (activeRide.status === 'accepted') {
-      timeoutId = setTimeout(() => {
-        advanceSimulatedRide();
-      }, 5000); // 5 seconds to arrive at stop
-    } else if (activeRide.status === 'arriving') {
-      timeoutId = setTimeout(() => {
-        advanceSimulatedRide();
-      }, 4000); // 4 seconds to start ride
-    } else if (activeRide.status === 'in_transit') {
-      timeoutId = setTimeout(() => {
-        advanceSimulatedRide();
-      }, 6000); // 6 seconds to complete ride
-    }
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [activeRide?.status]);
-
-  const handleCustomFundSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    let amount = 0;
-    if (customFundAmount) {
-      amount = parseFloat(customFundAmount);
-    } else {
-      amount = fundAmount;
-    }
-
-    if (isNaN(amount) || amount <= 0) {
-      alert('Please enter a valid amount to fund your digital wallet.');
-      return;
-    }
-
-    setPaystackLoading(true);
-
-    try {
-      // 1. Load the Paystack inline script
-      const isLoaded = await loadPaystackScript();
-      if (!isLoaded) {
-        throw new Error('Failed to load Paystack script');
-      }
-
-      // 2. Setup Paystack configurations
-      const userEmail = userProfile.email || 'student@campusride.ng';
-      const reference = 'RELOAD-' + Date.now();
-      const publicKey = (import.meta as any).env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_d3000b9576da669fe0e5d1798df67b45cbdf20a8';
-
-      // 3. Initiate PaystackPop
-      const handler = (window as any).PaystackPop.setup({
-        key: publicKey,
-        email: userEmail,
-        amount: Math.round(amount * 105), // convert to kobo (adding subtle convenience processing rate if needed or literal NGN1 = 100 kobo)
-        currency: 'NGN',
-        ref: reference,
-        callback: (response: any) => {
-          setPaystackLoading(false);
-          // Paystack transaction completed! We credit the wallet balance
-          onUpdateProfile({ walletBalance: userProfile.walletBalance + amount });
-
-          const newTxn: Transaction = {
-            id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
-            description: `Paystack Wallet Reload (Ref: ${response.reference})`,
-            amount: amount,
-            date: 'Jun 19, 2026',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            method: 'Paystack checkout',
-            type: 'reload',
-            status: 'Completed',
-          };
-
-          onAddTransaction(newTxn);
-
-          onAddNotification({
-            id: `notif-${Date.now()}`,
-            title: 'Digital Wallet Funded via Paystack',
-            message: `Successfully reloaded ₦${amount.toFixed(2)} using Paystack checkout (Ref: ${response.reference}). New balance: ₦${(userProfile.walletBalance + amount).toFixed(2)}.`,
-            date: 'Jun 19, 2026',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isRead: false,
-            type: 'success'
-          });
-
-          setFundingSuccess(true);
-          setCustomFundAmount('');
-          setTimeout(() => {
-            setFundingSuccess(false);
-          }, 4000);
-        },
-        onClose: () => {
-          setPaystackLoading(false);
-          alert('Paystack secure payment session was closed.');
-        }
-      });
-
-      handler.openIframe();
-    } catch (err: any) {
-      console.warn('Paystack loader error, activating fallback: ', err.message);
-      // Fallback checkout simulation if script fails or is blocked
-      const confirmSimulation = window.confirm(
-        'Paystack inline payment script could not initialize. Proceed with the Sandbox Simulator payments route instead?'
-      );
-
-      setPaystackLoading(false);
-
-      if (confirmSimulation) {
-        onUpdateProfile({ walletBalance: userProfile.walletBalance + amount });
-
-        const newTxn: Transaction = {
-          id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
-          description: `Simulated Paystack Wallet Reload`,
-          amount: amount,
-          date: 'Jun 19, 2026',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          method: 'Paystack sandbox',
-          type: 'reload',
-          status: 'Completed',
-        };
-
-        onAddTransaction(newTxn);
-
-        onAddNotification({
-          id: `notif-${Date.now()}`,
-          title: 'Digital Wallet Funded (Sandbox Sim)',
-          message: `Successfully reloaded ₦${amount.toFixed(2)} via simulated Paystack checkout. New balance: ₦${(userProfile.walletBalance + amount).toFixed(2)}.`,
-          date: 'Jun 19, 2026',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          isRead: false,
-          type: 'receipt'
-        });
-
-        setFundingSuccess(true);
-        setCustomFundAmount('');
-        setTimeout(() => {
-          setFundingSuccess(false);
-        }, 4000);
-      }
-    }
-  };
-
-  const handleVirtualTransferSimulation = () => {
-    setVirtualSimulateLoading(true);
-    setTimeout(() => {
-      setVirtualSimulateLoading(false);
-      const randomAmount = 2500;
-      onUpdateProfile({ walletBalance: userProfile.walletBalance + randomAmount });
-
-      const newTxn: Transaction = {
-        id: `TXN-VIRT-${Math.floor(1000 + Math.random() * 9000)}`,
-        description: 'Paystack Dedicated Virtual Account Bank Deposit',
-        amount: randomAmount,
-        date: 'Jun 19, 2026',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        method: 'Direct Bank Transfer',
-        type: 'reload',
-        status: 'Completed',
-      };
-
-      onAddTransaction(newTxn);
-
-      onAddNotification({
-        id: `notif-virt-${Date.now()}`,
-        title: 'Virtual Account Deposit Credited',
-        message: `Your Paystack Dedicated Virtual Account has been credited with ₦${randomAmount.toFixed(2)} via Bank Transfer. New balance: ₦${(userProfile.walletBalance + randomAmount).toFixed(2)}.`,
-        date: 'Jun 19, 2026',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isRead: false,
-        type: 'success'
-      });
-
-      alert(`Webhook Credit Successful! ₦${randomAmount.toFixed(2)} deposited instantly to your Digital Wallet via Paystack Dedicated Virtual Account.`);
-    }, 1500);
-  };
-
-  const handleSendMoneyToDriver = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = parseFloat(directTransferAmount);
-    if (isNaN(amount) || amount <= 0) {
-      alert('Please enter a valid transfer amount.');
-      return;
-    }
-
-    let driverNameStr = 'Selected Driver';
-    if (sendTargetDriver === 'david') {
-      driverNameStr = 'David Moore';
-    } else if (sendTargetDriver === 'evelyn') {
-      driverNameStr = 'Evelyn Carter';
-    } else if (activeRide?.driverName) {
-      driverNameStr = activeRide.driverName;
-    } else if (driverProfile?.name) {
-      driverNameStr = driverProfile.name;
-    }
-
-    if (transferMethod === 'wallet') {
-      if (userProfile.walletBalance < amount) {
-        alert(`Insufficient balance in your digital wallet to send ₦${amount.toFixed(2)}. Please fund your wallet first.`);
+    if (bookingMode === 'schedule') {
+      if (!scheduledDate || !scheduledTime) {
+        alert('Please specify both scheduled date and time.');
         return;
       }
+      
+      const newSchedule = {
+        id: `SCH-${Math.floor(100000 + Math.random() * 900000)}`,
+        pickup,
+        dropoff,
+        mode: rideMode === 'solo' ? ('solo' as const) : ('create' as const),
+        date: scheduledDate,
+        time: scheduledTime,
+        vehicleType,
+        fare: rideMode === 'solo' ? basePrice : priceTiers.tier4,
+      };
 
-      setTransferLoading(true);
+      setScheduledRides(prev => [newSchedule, ...prev]);
+      onAddNotification({
+        id: `notif-${Date.now()}`,
+        title: 'Ride Scheduled Successfully!',
+        message: `Your ${rideMode === 'solo' ? 'Solo' : 'Pool'} ride from ${getStopName(pickup)} to ${getStopName(dropoff)} has been scheduled for ${scheduledDate} at ${scheduledTime}.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: 'Today',
+        isRead: false,
+        type: 'success'
+      });
+      
+      alert(`Success! Your ride has been scheduled for ${scheduledDate} at ${scheduledTime}.`);
+      setScheduledDate('');
+      setScheduledTime('');
+      return;
+    }
+
+    // Book now flow
+    if (rideMode === 'solo') {
+      // Direct solo booking - skip pool lobby forming
+      setLobbyMembers([
+        {
+          name: userProfile.name || 'Temi Adeyemi',
+          avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+          major: 'Software Eng',
+          gender: 'Female',
+          rating: 4.8
+        }
+      ]);
+      setChatMessages([
+        { sender: 'System', text: `Solo booking initiated. Route: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}. Matching you with a driver directly...`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+      ]);
+      setPoolingState('forming');
+      
+      // Instantly match after 1.5 seconds since it's solo!
       setTimeout(() => {
-        setTransferLoading(false);
-        // Deduct from student
-        onUpdateProfile({ walletBalance: userProfile.walletBalance - amount });
-
-        // Add charge transaction
-        const newTxn: Transaction = {
-          id: `TXN-SND-${Math.floor(10000 + Math.random() * 90000)}`,
-          description: `Wallet Transfer to Peer Driver (${driverNameStr})`,
-          amount: -amount,
-          date: 'Jun 19, 2026',
+        setPoolingState('matched');
+        setChatMessages(prev => [...prev, {
+          sender: 'David Alao (Driver)',
+          text: 'Hello! I accepted your Solo Ride request. Heading to your pickup location now. ETA: 2 minutes.',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          method: 'Digital Wallet',
-          type: 'charge',
-          status: 'Completed',
-        };
-        onAddTransaction(newTxn);
-
-        // Credit real logged in driver if matched
-        if (driverProfile && onUpdateDriverProfile) {
-          onUpdateDriverProfile({
-            todayEarnings: driverProfile.todayEarnings + amount
-          });
-        }
-
+          isUser: false
+        }]);
         onAddNotification({
-          id: `notif-snd-${Date.now()}`,
-          title: `Sent Money to ${driverNameStr}`,
-          message: `Successfully transferred ₦${amount.toFixed(2)} to driver ${driverNameStr} instantly.`,
-          date: 'Jun 19, 2026',
+          id: `notif-${Date.now()}`,
+          title: 'Solo Driver Matched!',
+          message: 'David Alao (4.9★) has accepted your solo request. Boarding PIN is ready.',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: 'Today',
           isRead: false,
-          type: 'receipt'
+          type: 'success'
         });
-
-        setTransferSuccess(true);
-        setDirectTransferAmount('');
-        setTimeout(() => setTransferSuccess(false), 4000);
-      }, 1000);
+      }, 1500);
     } else {
-      // Direct payment via Paystack!
-      setTransferLoading(true);
-      try {
-        const isLoaded = await loadPaystackScript();
-        if (!isLoaded) {
-          throw new Error('Paystack Script blocked');
-        }
-
-        const publicKey = (import.meta as any).env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_d3000b9576da669fe0e5d1798df67b45cbdf20a8';
-        const reference = 'SNDDRV-' + Date.now();
-
-        const handler = (window as any).PaystackPop.setup({
-          key: publicKey,
-          email: userProfile.email || 'student@campusride.ng',
-          amount: Math.round(amount * 100),
-          currency: 'NGN',
-          ref: reference,
-          callback: (response: any) => {
-            setTransferLoading(false);
-
-            // Add charge transaction
-            const newTxn: Transaction = {
-              id: `TXN-SND-${Math.floor(10000 + Math.random() * 90000)}`,
-              description: `Paystack Direct Transfer to Driver (${driverNameStr})`,
-              amount: -amount,
-              date: 'Jun 19, 2026',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              method: 'Paystack Checkout',
-              type: 'charge',
-              status: 'Completed',
-            };
-            onAddTransaction(newTxn);
-
-            // Credit real logged in driver if matched
-            if (driverProfile && onUpdateDriverProfile) {
-              onUpdateDriverProfile({
-                todayEarnings: driverProfile.todayEarnings + amount
-              });
-            }
-
-            onAddNotification({
-              id: `notif-snd-${Date.now()}`,
-              title: `Direct Sent to ${driverNameStr}`,
-              message: `Successfully transferred ₦${amount.toFixed(2)} to driver ${driverNameStr} via Paystack Gate (Ref: ${response.reference}).`,
-              date: 'Jun 19, 2026',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              isRead: false,
-              type: 'success'
-            });
-
-            setTransferSuccess(true);
-            setDirectTransferAmount('');
-            setTimeout(() => setTransferSuccess(false), 4000);
-          },
-          onClose: () => {
-            setTransferLoading(false);
-            alert('Transfer session closed.');
+      // Create pool flow (standard pool lobby search)
+      const newPoolId = `POOL-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newPool: ActivePool = {
+        id: newPoolId,
+        hostName: userProfile.name || 'Temi Adeyemi',
+        hostAvatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+        hostMajor: userProfile.major || 'B.S. Software Engineering',
+        hostRating: 4.8,
+        hostGender: 'Female',
+        pickupId: pickup,
+        dropoffId: dropoff,
+        vehicleType: vehicleType,
+        currentRiders: [
+          {
+            name: userProfile.name || 'Temi Adeyemi',
+            avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+            major: userProfile.major || 'Software Eng',
+            rating: 4.8,
+            gender: 'Female'
           }
-        });
-        handler.openIframe();
-      } catch (err: any) {
-        console.warn('Paystack direct error, fallback: ', err.message);
-        const confirmSimulation = window.confirm(
-          `Paystack blocked. Proceed with Simulated Direct Paystack Bank transfer to ${driverNameStr} (₦${amount.toFixed(2)})?`
-        );
-        setTransferLoading(false);
-        if (confirmSimulation) {
-          // Add transaction
-          const newTxn: Transaction = {
-            id: `TXN-SND-${Math.floor(10000 + Math.random() * 90000)}`,
-            description: `Simulated Paystack Transfer to Driver (${driverNameStr})`,
-            amount: -amount,
-            date: 'Jun 19, 2026',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            method: 'Paystack Direct Sim',
-            type: 'charge',
-            status: 'Completed',
-          };
-          onAddTransaction(newTxn);
+        ],
+        maxRiders: 4,
+        baseFare: basePrice,
+        status: 'active',
+        driverAcceptCountdown: 60,
+        driverAccepted: false
+      };
 
-          // Credit real logged in driver if matched
-          if (driverProfile && onUpdateDriverProfile) {
-            onUpdateDriverProfile({
-              todayEarnings: driverProfile.todayEarnings + amount
-            });
-          }
+      const updatedPools = [newPool, ...activePools];
+      setActivePools(updatedPools);
+      localStorage.setItem('campusride_active_pools', JSON.stringify(updatedPools));
+      setJoinedPoolId(newPoolId);
 
-          onAddNotification({
-            id: `notif-snd-${Date.now()}`,
-            title: `Direct Transfer Complete`,
-            message: `Successfully sent ₦${amount.toFixed(2)} to driver ${driverNameStr} via Sandbox Sim.`,
-            date: 'Jun 19, 2026',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isRead: false,
-            type: 'receipt'
-          });
-
-          setTransferSuccess(true);
-          setDirectTransferAmount('');
-          setTimeout(() => setTransferSuccess(false), 4000);
-        }
-      }
+      setLobbyMembers(newPool.currentRiders);
+      setChatMessages([
+        { sender: 'System', text: `You initiated a live pool. Route: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}. Looking for companions...`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+      ]);
+      setPoolingState('forming');
     }
   };
 
-  // Filter Transactions by search query
-  const filteredTxns = transactions.filter(t => 
-    t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Chat message submission
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    setChatMessages(prev => [...prev, {
+      sender: userProfile.name || 'Me',
+      text: chatInput,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isUser: true
+    }]);
+    setChatInput('');
+  };
+
+  // Quick reply messages
+  const sendQuickReply = (text: string) => {
+    setChatMessages(prev => [...prev, {
+      sender: userProfile.name || 'Me',
+      text: text,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isUser: true
+    }]);
+  };
+
+  // Trigger driver transit start
+  const handleStartTransit = () => {
+    setPoolingState('matched');
+    setChatMessages(prev => [...prev, {
+      sender: 'David Alao (Driver)',
+      text: 'Hello everyone! I accepted your pool request. Heading to your pickup location now. ETA: 2 minutes.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isUser: false
+    }]);
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Driver Matched!',
+      message: 'David Alao (4.9★) has accepted your pool request. Use Verification PIN to board.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'success'
+    });
+  };
+
+  // Reset pooling flow
+  const handleResetPool = () => {
+    if (joinedPoolId) {
+      const updated = activePools.map(pool => {
+        if (pool.id === joinedPoolId) {
+          const filteredRiders = pool.currentRiders.filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
+          return {
+            ...pool,
+            currentRiders: filteredRiders,
+            status: filteredRiders.length === 0 ? 'closed' : pool.status
+          };
+        }
+        return pool;
+      }).filter(pool => pool.currentRiders.length > 0);
+      
+      setActivePools(updated);
+      localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+      setJoinedPoolId(null);
+    }
+    setPoolingState('idle');
+    setLobbyMembers([]);
+    setLiveDistance(0);
+  };
+
+  // Delete a pool created by the user
+  const handleDeletePool = (poolId: string) => {
+    if (!confirm('Are you sure you want to delete this ride pool you created? This will cancel the lobby for all joined members.')) {
+      return;
+    }
+    
+    const updated = activePools.filter(p => p.id !== poolId);
+    setActivePools(updated);
+    localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+
+    if (joinedPoolId === poolId) {
+      setJoinedPoolId(null);
+      setPoolingState('idle');
+      setLobbyMembers([]);
+      setLiveDistance(0);
+    }
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Pool Deleted',
+      message: `You successfully deleted the ride pool (${poolId}) you created.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'warning'
+    });
+
+    alert('Ride pool deleted successfully.');
+  };
+
+  // Leave a pool joined by the user
+  const handleLeavePool = (poolId: string) => {
+    if (!confirm('Are you sure you want to leave this ride pool?')) {
+      return;
+    }
+
+    const updated = activePools.map(pool => {
+      if (pool.id === poolId) {
+        const filteredRiders = pool.currentRiders.filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
+        return {
+          ...pool,
+          currentRiders: filteredRiders,
+          status: filteredRiders.length === 0 ? 'closed' : pool.status as 'active' | 'closed' | 'transit'
+        };
+      }
+      return pool;
+    }).filter(pool => pool.currentRiders.length > 0);
+
+    setActivePools(updated);
+    localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+
+    if (joinedPoolId === poolId) {
+      setJoinedPoolId(null);
+      setPoolingState('idle');
+      setLobbyMembers([]);
+      setLiveDistance(0);
+    }
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Left Pool',
+      message: `You have successfully left the ride pool.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'info'
+    });
+
+    alert('You have successfully left the ride pool.');
+  };
+
+  // Cancel an active ride (solo or pool)
+  const handleCancelRide = () => {
+    if (!confirm('Are you sure you want to cancel your active ride?')) {
+      return;
+    }
+
+    if (joinedPoolId) {
+      const updated = activePools.map(pool => {
+        if (pool.id === joinedPoolId) {
+          const filteredRiders = pool.currentRiders.filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
+          return {
+            ...pool,
+            currentRiders: filteredRiders,
+            status: filteredRiders.length === 0 ? 'closed' : pool.status as 'active' | 'closed' | 'transit'
+          };
+        }
+        return pool;
+      }).filter(pool => pool.currentRiders.length > 0);
+
+      setActivePools(updated);
+      localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+    }
+
+    setJoinedPoolId(null);
+    setPoolingState('idle');
+    setLobbyMembers([]);
+    setLiveDistance(0);
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Ride Cancelled',
+      message: 'Your active ride has been successfully cancelled.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'warning'
+    });
+
+    alert('Your ride has been successfully cancelled.');
+  };
+
+  // Join existing pool handler
+  const handleJoinPool = (pool: ActivePool) => {
+    if (poolingState !== 'idle') {
+      alert("You are already in an active ride or pool lobby! Please complete or cancel your current trip before joining another pool.");
+      return;
+    }
+
+    if (pool.status === 'closed' || pool.currentRiders.length >= pool.maxRiders) {
+      alert("This pool is full and has been closed.");
+      return;
+    }
+
+    // Calculate split price for new rider count
+    const newRiderCount = pool.currentRiders.length + 1;
+    const poolVehicleType = pool.vehicleType;
+    let baseF = 350;
+    if (poolVehicleType === 'Car') baseF = 350;
+    else if (poolVehicleType === 'Keke') baseF = 200;
+    else baseF = 100;
+
+    let tierPriceMultiplier = 1;
+    if (newRiderCount === 2) tierPriceMultiplier = 0.5;
+    else if (newRiderCount === 3) tierPriceMultiplier = 0.33;
+    else if (newRiderCount === 4) tierPriceMultiplier = 0.25;
+
+    const finalJoinFare = Math.round(baseF * tierPriceMultiplier);
+
+    if (userProfile.walletBalance < finalJoinFare) {
+      alert(`Insufficient balance. Joining this pool requires at least ${currencySymbol}${finalJoinFare}. Please fund your wallet first.`);
+      onNavigate('payments');
+      return;
+    }
+
+    const newUserRider = {
+      name: userProfile.name || 'Temi Adeyemi',
+      avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+      major: userProfile.major || 'Software Eng',
+      rating: 4.8,
+      gender: 'Female'
+    };
+
+    const updatedRiders = [...pool.currentRiders, newUserRider];
+    const isClosedNow = updatedRiders.length >= pool.maxRiders;
+
+    const updatedPools = activePools.map(p => {
+      if (p.id === pool.id) {
+        return {
+          ...p,
+          currentRiders: updatedRiders,
+          status: isClosedNow ? 'closed' : p.status as 'active' | 'closed' | 'transit'
+        };
+      }
+      return p;
+    });
+
+    setActivePools(updatedPools);
+    localStorage.setItem('campusride_active_pools', JSON.stringify(updatedPools));
+    setJoinedPoolId(pool.id);
+
+    setPickup(pool.pickupId);
+    setDropoff(pool.dropoffId);
+    setVehicleType(pool.vehicleType);
+    setLobbyMembers(updatedRiders);
+    setChatMessages([
+      { sender: 'System', text: `You joined ${pool.hostName}'s pool! Route: ${getStopName(pool.pickupId)} ➔ ${getStopName(pool.dropoffId)}. Currently sharing with ${updatedRiders.length} companions. Current Split Fare: ${currencySymbol}${finalJoinFare}/seat.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+    ]);
+    setPoolingState('forming');
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Successfully Joined Pool!',
+      message: `You successfully joined ${pool.hostName}'s pool from ${getStopName(pool.pickupId)} to ${getStopName(pool.dropoffId)}. Estimated split fare is ${currencySymbol}${finalJoinFare}.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'success'
+    });
+
+    alert(`Successfully joined ${pool.hostName}'s pool! Redirecting to the Live forming lobby...`);
+    onNavigate('booking');
+  };
+
+  // Complete Rating
+  const handleRateSubmit = () => {
+    setPoolingState('idle');
+    alert('Thank you for rating your ride! Your split savings have been recorded.');
+  };
+
+  // Wallet Funding handler
+  const triggerTopup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalAmount = Number(customFundAmount) || fundAmount;
+    if (finalAmount <= 0) {
+      alert('Please enter a valid amount to top up.');
+      return;
+    }
+    setPaystackLoading(true);
+    setTimeout(() => {
+      onUpdateProfile({
+        walletBalance: userProfile.walletBalance + finalAmount
+      });
+      onAddTransaction({
+        id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+        description: 'Wallet Refilled (Paystack Unified Card)',
+        amount: finalAmount,
+        date: 'Today',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        method: 'Paystack Integrated Gateway',
+        type: 'reload',
+        status: 'Completed'
+      });
+      onAddNotification({
+        id: `notif-${Date.now()}`,
+        title: 'Wallet Top Up Successful!',
+        message: `Your balance has been credited with ${currencySymbol}${finalAmount} via Card/Transfer checkout.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: 'Today',
+        isRead: false,
+        type: 'success'
+      });
+      setPaystackLoading(false);
+      setShowPaystackPopup(false);
+      setCustomFundAmount('');
+      alert(`Success! Refilled wallet with ${currencySymbol}${finalAmount}.`);
+    }, 2000);
+  };
 
   return (
-    <div id="student-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#f8f9ff]">
-      
-      {/* Dynamic Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 border-b border-gray-100 pb-5">
-        <div>
-          <span className="text-xs font-bold text-primary uppercase tracking-wider font-mono">Verified Student Access</span>
-          <h1 className="text-2xl font-extrabold text-[#0b1c30] tracking-tight flex items-center">
-            {activeView === 'booking' && 'Request Campus Ride'}
-            {activeView === 'dashboard' && 'Rider Activity Dashboard'}
-            {activeView === 'notifications' && 'Notifications Inbox'}
-            {activeView === 'payments' && 'Wallet & Transactions'}
-            {activeView === 'profile' && 'Institutional Student ID'}
-            {activeView === 'settings' && 'App Configuration'}
-            {activeRide && <span className="ml-2 bg-[#ffddb8] text-[#855300] text-[10px] px-2 py-0.5 rounded-full uppercase font-bold animate-pulse">Ride Live</span>}
-          </h1>
-        </div>
-
-        <div className="mt-3 sm:mt-0 flex items-center space-x-3 text-xs">
-          <button 
-            onClick={() => onNavigate('payments')} 
-            className="bg-white border border-gray-200 shadow-xs hover:border-primary px-3 py-1.5 rounded-xl text-[#0b1c30] font-bold flex items-center space-x-1"
+    <div className="flex-1 flex flex-col h-full bg-slate-50 text-white overflow-y-auto">
+      <AnimatePresence mode="wait">
+        
+        {/* 1. VIEW CONTEXT: RIDE BOOKING / LOBBY / TRANSIT (ACTIVE VIEW = BOOKING) */}
+        {activeView === 'booking' && (
+          <motion.div
+            key="booking"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 sm:p-6 lg:p-8"
           >
-            <Wallet className="w-4 h-4 text-primary" />
-            <span>₦{userProfile.walletBalance.toFixed(2)}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* RENDER VIEW: BOOKING (REQUEST RIDE & MAPS) */}
-      {activeView === 'booking' && (
-        <div id="view-student-booking" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Interactive Simulated Map Canvas / Display Block */}
-          <div className="lg:col-span-8 space-y-6">
-            <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm relative">
-              
-              {/* Floating Overlay Header Status */}
-              <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between bg-white/95 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-gray-100/60 shadow-sm">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-xs font-bold text-[#0b1c30]">
-                    {!activeRide ? 'Idle • Selecting pickup stop' : `Status: ${activeRide.status.toUpperCase()}`}
-                  </span>
-                </div>
-                {activeRide && (
-                  <span className="text-[11px] font-mono font-bold text-primary bg-[#e5eeff] px-2.5 py-1 rounded-lg">
-                    {activeRide.status === 'requested' ? 'Locating peers' : activeRide.status === 'arriving' ? 'Driver Arrived!' : activeRide.status === 'in_transit' ? 'In transit' : 'Assigned'}
-                  </span>
-                )}
-              </div>
+          {/* LEFT SIDE OR MAIN BOOKING SECTION (7 COLS ON LARGE) */}
+          <div className="lg:col-span-7 flex flex-col space-y-6">
+            
 
-              {/* MAP IMAGE BASE */}
-              <div className="relative h-[480px] bg-slate-100">
-                <img 
-                  referrerPolicy="no-referrer"
-                  src={mapImage} 
-                  alt="Transit Map" 
-                  className="w-full h-full object-cover"
-                />
-                
-                {/* Simulated SVG Route Overlay overlay (Decorative & Highly functional) */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  {/* Draw mock path if active ride */}
-                  {activeRide && (
-                    <>
-                      <path 
-                        d="M 220 320 Q 380 220 520 180" 
-                        fill="none" 
-                        stroke="#004ac6" 
-                        strokeWidth="4" 
-                        strokeDasharray="6,4"
-                        className="animate-[dash_10s_linear_infinite]"
-                      />
-                      {/* Driver Marker */}
-                      {activeRide.status !== 'requested' && (
-                        <circle cx="340" cy="240" r="10" fill="#fea619" stroke="white" strokeWidth="2" className="animate-bounce" />
-                      )}
-                    </>
-                  )}
-                </svg>
 
-                {/* Simulated Markup pin flags */}
-                <div className="absolute top-[320px] left-[220px] bg-emerald-500 text-white p-1 rounded-full shadow-lg border border-white">
-                  <MapPin className="w-4 h-4" />
-                </div>
-                <div className="absolute top-[180px] left-[520px] bg-red-500 text-white p-1 rounded-full shadow-lg border border-white">
-                  <MapPin className="w-4 h-4" />
-                </div>
-
-                {/* Quick Map tooltips */}
-                <div className="absolute top-[290px] left-[230px] bg-white text-[9px] font-bold px-2 py-0.5 rounded shadow border border-gray-100 text-[#0b1c30]">
-                  {resolveStopName(pickup)}
-                </div>
-                <div className="absolute top-[150px] left-[530px] bg-white text-[9px] font-bold px-2 py-0.5 rounded shadow border border-gray-100 text-[#0b1c30]">
-                  {resolveStopName(dropoff)}
-                </div>
-              </div>
-
-              {/* Live ETA Tracker Footer Banner */}
-              {activeRide && activeRide.status !== 'requested' && (
-                <div className="bg-[#0b1c30] text-white p-4 flex flex-col sm:flex-row items-center justify-between border-t border-gray-800">
-                  <div className="flex items-center space-x-3">
-                    <img 
-                      referrerPolicy="no-referrer"
-                      src={activeRide.driverAvatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY'} 
-                      alt="Driver photograph" 
-                      className="w-11 h-11 rounded-full object-cover border-2 border-primary/40 shrink-0"
-                    />
-                    <div>
-                      <span className="text-xs font-bold font-mono text-[#ffddb8]">ACTIVE DRIVER</span>
-                      <h4 className="text-sm font-bold">{activeRide.driverName}</h4>
-                      <p className="text-[10px] text-gray-400">{activeRide.driverVehicle}</p>
+            {/* IF IDLE, RENDER BOOKING FORM */}
+            {poolingState === 'idle' && (
+              <>
+                {/* Main Form Booking details */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-150 shadow-xs space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <h2 className="text-lg font-black tracking-tight text-[#175D39] flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-[#175D39]" /> BOOK OR SCHEDULE A RIDE
+                    </h2>
+                    
+                    {/* Schedule vs Now Selector */}
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setBookingMode('now')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingMode === 'now'
+                            ? 'bg-[#175D39] text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Book Now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBookingMode('schedule')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingMode === 'schedule'
+                            ? 'bg-[#175D39] text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Schedule Ride
+                      </button>
                     </div>
                   </div>
+                  
+                  <form onSubmit={handleRequestPool} className="space-y-5">
+                    {/* Location Choice Section */}
+                    <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Pickup Spot Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Pickup Spot</label>
+                        <div className="relative">
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#175D39]" />
+                          <select
+                            value={pickup}
+                            onChange={(e) => setPickup(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#175D39] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#175D39]/50 appearance-none cursor-pointer"
+                          >
+                            {campusStops.map((stop) => (
+                              <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
+                                {stop.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
 
-                  <div className="mt-3 sm:mt-0 flex items-center space-x-4">
-                    <div className="text-right">
-                      <span className="text-[10px] text-gray-400 block uppercase font-mono">ESTIMATED ARRIVAL</span>
-                      <span className="text-base font-extrabold text-white">
-                        {activeRide.etaMinutes > 0 ? `${activeRide.etaMinutes} mins` : 'Arrived at Stop'}
+                      {/* Swap Button inside layout */}
+                      <div className="hidden md:flex absolute left-1/2 top-[32px] -translate-x-1/2 -translate-y-1/2 z-10">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const temp = pickup;
+                            setPickup(dropoff);
+                            setDropoff(temp);
+                          }}
+                          className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-md hover:border-[#175D39] text-[#175D39] flex items-center justify-center cursor-pointer transition-colors"
+                          title="Swap Route"
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Dropoff Spot Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Destination Stop</label>
+                        <div className="relative">
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#175D39]" />
+                          <select
+                            value={dropoff}
+                            onChange={(e) => setDropoff(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#175D39] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#175D39]/50 appearance-none cursor-pointer"
+                          >
+                            {campusStops.map((stop) => (
+                              <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
+                                {stop.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Schedule Date & Time inputs if bookingMode is schedule */}
+                    {bookingMode === 'schedule' && (
+                      <div className="grid grid-cols-2 gap-3 p-4 bg-[#F2F2F2] rounded-2xl border border-slate-200 animate-fadeIn">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Select Date</label>
+                          <div className="relative">
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#175D39]" />
+                            <input
+                              type="date"
+                              required
+                              value={scheduledDate}
+                              onChange={(e) => setScheduledDate(e.target.value)}
+                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Select Time</label>
+                          <div className="relative">
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#175D39]" />
+                            <input
+                              type="time"
+                              required
+                              value={scheduledTime}
+                              onChange={(e) => setScheduledTime(e.target.value)}
+                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Choose Mode tab selection: Create a Pool vs Go Solo */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Ride Mode Choice</label>
+                      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setRideMode('create')}
+                          className={`py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
+                            rideMode === 'create'
+                              ? 'bg-[#175D39] text-white shadow-md'
+                              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'
+                          }`}
+                        >
+                          <Users className="w-4 h-4" />
+                          <span>Create Pool</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setRideMode('solo')}
+                          className={`py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
+                            rideMode === 'solo'
+                              ? 'bg-[#175D39] text-white shadow-md'
+                              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'
+                          }`}
+                        >
+                          <Car className="w-4 h-4" />
+                          <span>Go Solo</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Option 1: CREATE POOL VIEW DETAILS */}
+                    {rideMode === 'create' && (
+                      <div className="space-y-4 animate-fadeIn">
+                        {/* Vehicle Type Select */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Choose Transit Vibe</label>
+                          <div className="grid grid-cols-3 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Car')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Car' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Car className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Car (Fast)</span>
+                              <span className="text-[10px] font-mono text-slate-500">From {currencySymbol}350</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Keke')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Keke' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Zap className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Keke (Vibe)</span>
+                              <span className="text-[10px] font-mono text-slate-500">From {currencySymbol}200</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Shuttle')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Shuttle' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Users className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Shuttle Bus</span>
+                              <span className="text-[10px] font-mono text-slate-500">From {currencySymbol}100</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Advanced Pooling Tiers display */}
+                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+                          <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Dynamic Pooling Tiers</span>
+                            <span className="text-[10px] font-mono text-slate-500">SPLIT COST AS OTHERS JOIN</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div className="bg-slate-100/40 p-2 rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-500 font-bold block mb-0.5">1 Rider</span>
+                              <span className="text-sm font-mono font-black text-slate-800">{currencySymbol}{priceTiers.tier1}</span>
+                            </div>
+                            <div className="bg-slate-100/40 p-2 rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-500 font-bold block mb-0.5">2 Riders</span>
+                              <span className="text-sm font-mono font-black text-slate-800">{currencySymbol}{priceTiers.tier2}</span>
+                            </div>
+                            <div className="bg-slate-100/40 p-2 rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-500 font-bold block mb-0.5">3 Riders</span>
+                              <span className="text-sm font-mono font-black text-slate-800">{currencySymbol}{priceTiers.tier3}</span>
+                            </div>
+                            <div className="bg-[#175D39]/10 p-2 rounded-xl border border-[#175D39]/40 ring-1 ring-[#175D39]/20">
+                              <span className="text-[10px] text-[#175D39] font-extrabold block mb-0.5 flex items-center justify-center gap-0.5">
+                                4 Full <span className="w-1.5 h-1.5 rounded-full bg-[#175D39] animate-pulse"></span>
+                              </span>
+                              <span className="text-sm font-mono font-black text-[#175D39]">{currencySymbol}{priceTiers.tier4}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Toggle safety companions option */}
+                        <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 rounded-lg bg-[#175D39]/15 flex items-center justify-center border border-[#175D39]/30">
+                              <ShieldCheck className="w-5 h-5 text-[#175D39]" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold block text-slate-800">Safe Student Peer Matching</span>
+                              <span className="text-[10px] text-slate-500 block">Only match with active university verified students</span>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={verifyPeer} 
+                              onChange={() => setVerifyPeer(!verifyPeer)} 
+                              className="sr-only peer" 
+                            />
+                            <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
+                          </label>
+                        </div>
+
+                        {/* CTA button */}
+                        <button
+                          type="submit"
+                          className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                        >
+                          <Users className="w-5 h-5" />
+                          {bookingMode === 'schedule' ? 'Schedule Pool Ride' : 'Form Live Ride Pool'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Option 2: FIND POOL VIEW DETAILS */}
+                    {rideMode === 'find' && (
+                      <div className="space-y-4 animate-fadeIn text-left">
+                        <div className="bg-[#F2F2F2] p-4 rounded-2xl border border-slate-200">
+                          <p className="text-xs font-bold text-[#175D39] uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                            <Search className="w-4 h-4" /> Available Pools Headed Your Way
+                          </p>
+                          <p className="text-[10px] text-slate-500">Join an existing campus ride pool to instantly slash your travel expenses today.</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {[
+                            { id: 'pool-sim-1', host: 'Tunde Bakare', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80', pickup: getStopName(pickup), dropoff: getStopName(dropoff), seats: 2, maxSeats: 4, fare: priceTiers.tier2, vehicleType: 'Car', major: 'Electrical Eng', rating: 4.8 },
+                            { id: 'pool-sim-2', host: 'Amina Yusuf', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80', pickup: getStopName(pickup), dropoff: getStopName(dropoff), seats: 3, maxSeats: 4, fare: priceTiers.tier3, vehicleType: 'Keke', major: 'Economics', rating: 4.9 },
+                            { id: 'pool-sim-3', host: 'Emeka Obi', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80', pickup: getStopName(pickup), dropoff: getStopName(dropoff), seats: 1, maxSeats: 4, fare: priceTiers.tier1, vehicleType: 'Shuttle', major: 'Mass Comm', rating: 4.6 }
+                          ].map((simPool) => (
+                            <div key={simPool.id} className="bg-slate-50 hover:bg-slate-100/80 border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+                              <div className="flex items-center space-x-3">
+                                <img 
+                                  referrerPolicy="no-referrer"
+                                  src={simPool.avatar} 
+                                  alt={simPool.host} 
+                                  className="w-11 h-11 rounded-2xl object-cover border border-slate-200 shadow-xs shadow-sm"
+                                />
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-black text-slate-800">{simPool.host}</span>
+                                    <span className="text-[9px] bg-[#175D39]/10 text-[#175D39] px-1.5 py-0.5 rounded-md font-bold">★ {simPool.rating}</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 font-medium font-sans">{simPool.major} • heading to {simPool.dropoff}</p>
+                                  <p className="text-[10px] text-slate-500 font-bold font-mono uppercase mt-0.5 text-slate-600">{simPool.vehicleType} Vehicle</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+                                <div className="text-right">
+                                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Est. Cost</span>
+                                  <span className="text-sm font-mono font-black text-[#175D39]">{currencySymbol}{simPool.fare}/seat</span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (userProfile.walletBalance < simPool.fare) {
+                                      alert(`Insufficient funds. You need ${currencySymbol}${simPool.fare} to join this pool.`);
+                                      onNavigate('payments');
+                                      return;
+                                    }
+                                    
+                                    const poolObj: ActivePool = {
+                                      id: simPool.id,
+                                      hostName: simPool.host,
+                                      hostAvatar: simPool.avatar,
+                                      hostMajor: simPool.major,
+                                      hostRating: simPool.rating,
+                                      hostGender: 'Verified Student',
+                                      pickupId: pickup,
+                                      dropoffId: dropoff,
+                                      vehicleType: simPool.vehicleType as 'Car' | 'Keke' | 'Shuttle',
+                                      currentRiders: [
+                                        {
+                                          name: simPool.host,
+                                          avatar: simPool.avatar,
+                                          major: simPool.major,
+                                          gender: 'Verified Student',
+                                          rating: simPool.rating
+                                        }
+                                      ],
+                                      maxRiders: 4,
+                                      baseFare: simPool.vehicleType === 'Car' ? 350 : simPool.vehicleType === 'Keke' ? 200 : 100,
+                                      status: 'active',
+                                      driverAcceptCountdown: 60,
+                                      driverAccepted: false
+                                    };
+                                    setCheckoutPool(poolObj);
+                                    setCheckoutTimer(30);
+                                  }}
+                                  className="bg-[#175D39] hover:bg-[#175D39]/95 text-white text-xs font-black py-2.5 px-4 rounded-xl cursor-pointer shadow-sm transition-colors"
+                                >
+                                  Join Pool
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Option 3: GO SOLO VIEW DETAILS */}
+                    {rideMode === 'solo' && (
+                      <div className="space-y-4 animate-fadeIn">
+                        {/* Vehicle Type Select */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Choose Solo Transit</label>
+                          <div className="grid grid-cols-3 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Car')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Car' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Car className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Solo Car</span>
+                              <span className="text-[10px] font-mono text-slate-500">{currencySymbol}{basePrice}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Keke')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Keke' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Zap className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Solo Keke</span>
+                              <span className="text-[10px] font-mono text-slate-500">{currencySymbol}{basePrice}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Shuttle')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Shuttle' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Users className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Solo Shuttle</span>
+                              <span className="text-[10px] font-mono text-slate-500">{currencySymbol}{basePrice}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Flat Fare Receipt preview */}
+                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-bold text-slate-600 uppercase block tracking-wider">Direct Solo Fare</span>
+                            <span className="text-[10px] text-slate-500">No companions, straight direct delivery.</span>
+                          </div>
+                          <span className="text-lg font-mono font-black text-slate-800">{currencySymbol}{basePrice}</span>
+                        </div>
+
+                        {/* Solo CTA Button */}
+                        <button
+                          type="submit"
+                          className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                        >
+                          <Car className="w-5 h-5" />
+                          {bookingMode === 'schedule' ? 'Schedule Solo Ride' : 'Book Direct Solo Ride'}
+                        </button>
+                      </div>
+                    )}
+                  </form>
+                </div>
+
+                {/* Scheduled rides section if any exist */}
+                {scheduledRides.length > 0 && (
+                  <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-xs space-y-4 animate-fadeIn text-left">
+                    <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar className="w-4.5 h-4.5" /> Your Scheduled Rides ({scheduledRides.length})
+                    </h3>
+
+                    <div className="space-y-2.5">
+                      {scheduledRides.map((ride) => (
+                        <div key={ride.id} className="bg-slate-50 border border-slate-150 p-4 rounded-2xl flex items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-slate-800 font-mono tracking-tight">{ride.id}</span>
+                              <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                                {ride.mode === 'solo' ? 'Solo' : 'Pool'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-700 font-medium">{getStopName(ride.pickup)} ➔ {getStopName(ride.dropoff)}</p>
+                            <p className="text-[10px] text-slate-500 font-semibold font-mono flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-[#175D39]" /> {ride.date} • <Clock className="w-3 h-3 text-[#175D39]" /> {ride.time}
+                            </p>
+                          </div>
+
+                          <div className="text-right flex flex-col items-end gap-2">
+                            <span className="text-xs font-mono font-black text-[#175D39]">{currencySymbol}{ride.fare}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm('Are you sure you want to cancel this scheduled ride?')) {
+                                  setScheduledRides(prev => prev.filter(r => r.id !== ride.id));
+                                  alert('Scheduled ride cancelled.');
+                                }
+                              }}
+                              className="text-[10px] text-red-600 hover:text-red-700 font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* IF POOL FORMING (LOBBY), RENDER COMPANION LOADER */}
+            {poolingState === 'forming' && (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6 flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="bg-[#175D39]/15 text-[#175D39] text-xs font-bold border border-[#175D39]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                      POOL FORMING LOBBY
+                    </span>
+                    <span className="text-xs font-mono text-slate-500">Route: {getStopName(pickup)} ➔ {getStopName(dropoff)}</span>
+                  </div>
+
+                  {/* Ticking Driver Accept Countdown Bar */}
+                  <div className="bg-amber-50 border border-amber-150 p-4 rounded-2xl flex items-center justify-between shadow-xs animate-fadeIn">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-5 h-5 text-amber-600 animate-spin" style={{ animationDuration: '4s' }} />
+                      <div>
+                        <span className="text-xs font-black text-amber-800 block uppercase tracking-wide">Waiting for Driver to Accept</span>
+                        <span className="text-[10px] text-amber-700 block font-semibold">Ride cancels automatically if no driver accepts</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xl font-mono font-black text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded-md">
+                        {driverTimer}s
                       </span>
                     </div>
-                    <div className="h-8 w-[1px] bg-gray-700 hidden sm:block"></div>
-                    <div>
-                      <span className="text-[10px] text-[#ffddb8] block font-bold font-mono">VERIFIED ACCOUNT</span>
-                      <span className="text-xs bg-[#e5eeff]/10 text-sky-200 px-2 py-0.5 rounded font-bold">★ {activeRide.driverRating} rating</span>
+                  </div>
+
+                  <div className="text-center py-6">
+                    <h3 className="text-2xl font-black text-[#175D39] tracking-tight">Searching for Companions...</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Connecting campus commuters traveling in your direction to minimize your transport fares live.</p>
+                  </div>
+
+                  {/* Occupancy Seating Tracker progress bar (just like user's wireframe) */}
+                  <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Seating Capacity Filled</span>
+                      <span className="text-sm font-mono font-black text-[#175D39]">{lobbyMembers.length}/4 SEATS</span>
+                    </div>
+
+                    {/* Seating progress bar indicators */}
+                    <div className="grid grid-cols-4 gap-2.5 h-3">
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 1 ? 'bg-[#175D39]' : 'bg-slate-200'}`}></div>
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 2 ? 'bg-[#175D39]' : 'bg-slate-200'} ${lobbyMembers.length === 1 ? 'animate-pulse bg-gray-750' : ''}`}></div>
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 3 ? 'bg-[#175D39]' : 'bg-slate-200'} ${lobbyMembers.length === 2 ? 'animate-pulse bg-gray-750' : ''}`}></div>
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 4 ? 'bg-[#175D39]' : 'bg-slate-200'} ${lobbyMembers.length === 3 ? 'animate-pulse bg-gray-750' : ''}`}></div>
+                    </div>
+
+                    {/* Pricing ticker based on joined members */}
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-xs">
+                      <span className="text-slate-500">Current Cost per Seat:</span>
+                      <span className="font-mono font-black text-lg text-[#175D39] flex items-center gap-1">
+                        {currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}
+                        <span className="text-[10px] text-gray-500 font-medium font-sans">/seat</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Joined Pool Members Cards */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Joined Commuters</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {lobbyMembers.map((member, idx) => (
+                        <div key={idx} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex items-center space-x-3">
+                          <img 
+                            referrerPolicy="no-referrer"
+                            src={member.avatar} 
+                            alt={member.name} 
+                            className="w-10 h-10 rounded-full object-cover border border-slate-150 shadow-xs shadow-sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold block text-slate-800 truncate">{member.name}</span>
+                            <span className="text-[10px] text-gray-500 font-mono tracking-wide uppercase truncate block">{member.major} • {member.gender}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-amber-400 bg-[#175D39]/10 border border-amber-500/20 px-1.5 py-0.5 rounded-lg shrink-0">
+                            ★ {member.rating}
+                          </span>
+                        </div>
+                      ))}
+                      {/* Placeholder spots */}
+                      {Array.from({ length: 4 - lobbyMembers.length }).map((_, idx) => (
+                        <div key={idx} className="bg-slate-50 border border-dashed border-slate-200 p-3 rounded-2xl flex items-center space-x-3 opacity-40">
+                          <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-black text-gray-600">
+                            ?
+                          </div>
+                          <div className="flex-1">
+                            <span className="text-xs font-bold block text-gray-600">Waiting...</span>
+                            <span className="text-[10px] text-gray-600 font-mono block">Looking for match</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* ADVERTS / PROMOTIONS CARD (AS SPECIFIED IN ADV LIST) */}
-            {ADVERT_CARDS.map(card => (
-              <div 
-                key={card.id} 
-                className="bg-[#dbe1ff]/30 text-[#00174b] p-6 rounded-3xl border border-[#b4c5ff]/40 flex flex-col md:flex-row items-center justify-between gap-6"
-              >
-                <div className="space-y-2 max-w-lg">
-                  <span className="bg-[#004ac6] text-white text-[9px] font-bold uppercase px-2 py-0.5 rounded-full font-mono">
-                    {card.tag}
-                  </span>
-                  <h3 className="text-lg font-extrabold tracking-tight">{card.title}</h3>
-                  <p className="text-xs text-slate-600 leading-relaxed">{card.description}</p>
-                </div>
-                <img 
-                  referrerPolicy="no-referrer"
-                  src={card.image} 
-                  alt="Advertisement Banner background" 
-                  className="w-full md:w-36 h-24 rounded-2xl object-cover border border-[#c3c6d7] shrink-0 shadow-sm"
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Main Booking Panel over interactive Map */}
-          <div className="lg:col-span-4 space-y-6">
-            {/* Live Trip Details (Visible during Active Rides) */}
-            {activeRide && (
-              <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-                    <h3 className="text-sm font-extrabold text-[#0b1c30]">Live Trip Status</h3>
-                  </div>
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                    activeRide.status === 'requested' ? 'bg-amber-100 text-amber-850' :
-                    activeRide.status === 'accepted' ? 'bg-blue-100 text-blue-800' :
-                    activeRide.status === 'arriving' ? 'bg-indigo-100 text-indigo-800' :
-                    'bg-emerald-100 text-emerald-800 animate-pulse'
-                  }`}>
-                    {activeRide.status === 'requested' && 'Matching...'}
-                    {activeRide.status === 'accepted' && 'Driver En Route'}
-                    {activeRide.status === 'arriving' && 'Driver Arrived'}
-                    {activeRide.status === 'in_transit' && 'In Transit'}
-                  </span>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 font-medium">From:</span>
-                    <span className="font-semibold text-[#0b1c30]">{activeRide.pickup}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 font-medium font-mono">To:</span>
-                    <span className="font-semibold text-[#0b1c30]">{activeRide.dropoff}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 font-medium font-mono">Estimated Fare:</span>
-                    <span className="font-bold text-primary">₦{activeRide.cost.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 font-medium">Vehicle Option:</span>
-                    <span className="font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded text-[10px] uppercase">{activeRide.vehicleType}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2">
+                <div className="pt-6 border-t border-slate-200 grid grid-cols-2 gap-3">
+                  {!joinedPoolId ? (
+                    <button
+                      onClick={handleCancelRide}
+                      className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Cancel Solo
+                    </button>
+                  ) : activePools.find(p => p.id === joinedPoolId)?.hostName === (userProfile.name || 'Temi Adeyemi') ? (
+                    <button
+                      onClick={() => handleDeletePool(joinedPoolId)}
+                      className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Pool
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleLeavePool(joinedPoolId)}
+                      className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Leave Pool
+                    </button>
+                  )}
                   <button
-                    onClick={() => {
-                      if (confirm('Are you sure you want to cancel your active commute request?')) {
-                        onUpdateRide(null);
-                        onAddNotification({
-                          id: `notif-${Date.now()}`,
-                          title: 'Trip Canceled',
-                          message: 'You have canceled your active commute request.',
-                          date: 'Jun 19, 2026',
-                          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                          isRead: false,
-                          type: 'alert'
-                        });
-                      }
-                    }}
-                    className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/50 hover:border-red-200 font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center space-x-1"
+                    onClick={handleStartTransit}
+                    className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1"
                   >
-                    Cancel Commute
+                    Match Driver Now
                   </button>
                 </div>
               </div>
             )}
 
-            {/* REQUEST RIDE FORM (Disabled if there is an active ride) */}
-            <div className={`bg-white rounded-3xl p-6 border border-gray-100 shadow-sm transition-opacity duration-300 ${activeRide && 'opacity-60 pointer-events-none'}`}>
-              <div className="flex items-center space-x-2.5 mb-6">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <Car className="w-5 h-5" />
+            {/* IF MATCHED WITH DRIVER */}
+            {poolingState === 'matched' && (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
+                <div className="flex justify-between items-center">
+                  <span className="bg-[#175D39]/15 text-[#175D39] text-xs font-bold border border-[#175D39]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                    DRIVER ARRIVING
+                  </span>
+                  <span className="text-xs font-mono text-slate-500">ETA: 2 Minutes</span>
                 </div>
-                <h2 className="text-lg font-extrabold text-[#0b1c30]">Book a Ride</h2>
+
+                {/* Driver Profile Summary */}
+                <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center space-x-4">
+                    <img 
+                      referrerPolicy="no-referrer"
+                      src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80" 
+                      alt="David Alao" 
+                      className="w-14 h-14 rounded-2xl object-cover border border-slate-150 shadow-xs shadow-md"
+                    />
+                    <div>
+                      <h3 className="text-base font-black text-[#175D39] flex items-center gap-1.5">
+                        David Alao 
+                        <span className="text-xs font-mono text-amber-400 bg-[#175D39]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          ★ 4.9
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500 font-bold font-mono">Toyota Corolla (Silver) • RUN-918-LA</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Mobile: +234 812 345 6789</p>
+                    </div>
+                  </div>
+                  
+                  {/* Security PIN code to unlock ride */}
+                  <div className="bg-white border border-slate-150 shadow-xs px-4 py-3 rounded-2xl text-center shrink-0">
+                    <span className="text-[10px] text-gray-500 font-bold block uppercase tracking-wider">BOARDING PIN</span>
+                    <span className="text-lg font-mono font-black tracking-widest text-[#175D39]">{verificationCode}</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Your Ride Pool Members</span>
+                  <div className="flex items-center space-x-2">
+                    {lobbyMembers.map((member, idx) => (
+                      <div key={idx} className="relative group">
+                        <img 
+                          referrerPolicy="no-referrer"
+                          src={member.avatar} 
+                          alt={member.name} 
+                          className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                        />
+                        <span className="absolute top-full left-1/2 -translate-x-1/2 bg-gray-950 text-white text-[9px] px-1.5 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap mt-1">
+                          {member.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-3">
+                  <button
+                    onClick={handleCancelRide}
+                    className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Cancel Ride
+                  </button>
+                  <button
+                    onClick={() => setPoolingState('transit')}
+                    className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    Board Vehicle
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* IF IN TRANSIT tracking map */}
+            {poolingState === 'transit' && (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
+                <div className="flex justify-between items-center">
+                  <span className="bg-[#175D39]/15 text-blue-400 text-xs font-bold border border-[#175D39]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
+                    RIDE IN TRANSIT
+                  </span>
+                  <span className="text-xs font-mono text-slate-500">ETA: {etaRemaining} Minutes</span>
+                </div>
+
+
+
+                {/* Active Trip Info details */}
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-950/40 border border-blue-900/30 flex items-center justify-center text-blue-400">
+                      <Shield className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold block text-slate-800">Emergency Response SOS</span>
+                      <span className="text-[10px] text-gray-500 block">Dispatchers notified of transit metrics</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSosActivated(!sosActivated);
+                      if (!sosActivated) {
+                        alert('SOS activated! Redundant distress beacon sent to campus emergency services and lead dispatcher Jenkins.');
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 border cursor-pointer ${
+                      sosActivated 
+                        ? 'bg-[#175D39] text-white border-[#175D39] animate-pulse' 
+                        : 'bg-transparent text-[#175D39] border-[#175D39]/30 hover:bg-[#175D39]/10'
+                    }`}
+                  >
+                    {sosActivated ? 'SOS ON' : 'Trigger SOS'}
+                  </button>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <button
+                    onClick={() => setPoolingState('arrived')}
+                    className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Simulate Arrival
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* IF ARRIVED / TRIP FINISHED - RENDER RATING & REVIEW SCREEN */}
+            {(poolingState === 'arrived' || poolingState === 'rated') && (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6 text-center">
+                <div className="w-16 h-16 bg-[#175D39]/10 border border-[#175D39]/20 text-[#175D39] rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <CheckCircle className="w-8 h-8" />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <h3 className="text-2xl font-black text-[#175D39] tracking-tight">Trip Completed!</h3>
+                  <p className="text-xs text-slate-500">You arrived safely at {getStopName(dropoff)}.</p>
+                </div>
+
+                {/* Pricing / Split Savings Receipt card */}
+                <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-3.5 max-w-sm mx-auto text-left">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block border-b border-slate-200 pb-2">Split Savings Receipt</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Standard Solo Ride:</span>
+                    <span className="font-mono text-slate-600 line-through">{currencySymbol}{basePrice}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Split Occupancy Fare ({lobbyMembers.length}/4 joined):</span>
+                    <span className="font-mono text-[#175D39] font-black">{currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
+                  </div>
+                  <div className="h-px bg-gray-850"></div>
+                  <div className="flex justify-between text-xs bg-emerald-950/20 p-2 rounded-lg border border-emerald-900/30">
+                    <span className="text-emerald-400 font-bold">Total Cash Saved:</span>
+                    <span className="font-mono text-emerald-400 font-black">+{currencySymbol}{basePrice - Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
+                  </div>
+                </div>
+
+                {/* Ride rating widgets */}
+                <div className="space-y-4 max-w-sm mx-auto">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Rate Driver & Companions</span>
+                  <div className="flex items-center justify-center space-x-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => setRatingScore(star)}
+                        className={`p-1.5 rounded-lg transition-transform hover:scale-110 cursor-pointer`}
+                      >
+                        <svg className={`w-8 h-8 ${star <= ratingScore ? 'text-amber-400 fill-amber-400' : 'text-gray-600'}`} fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
+
+                  <input 
+                    type="text" 
+                    placeholder="Add feedback comments... (optional)"
+                    value={reviewText}
+                    onChange={(e) => setReviewText(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none"
+                  />
+
+                  <button
+                    onClick={handleRateSubmit}
+                    className="w-full bg-[#175D39] hover:bg-[#175D39] text-slate-950 font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Finish & Close Trip
+                  </button>
+                </div>
+              </div>
+            )}
+            
+          </div>
+
+          {/* RIGHT SIDEBAR (5 COLS ON LARGE) - TRANSIT CHAT & ALERTS INBOX */}
+          <div className="lg:col-span-5 flex flex-col space-y-6">
+            
+            {/* Real-time Transit Chat Box inside Ride Pool */}
+            <div className="bg-white rounded-3xl border border-slate-200 flex flex-col h-[350px] lg:h-[450px] overflow-hidden">
+              <div className="p-4 border-b border-slate-200 bg-slate-100/50 flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#175D39]/15 flex items-center justify-center text-[#175D39]">
+                    <MessageSquare className="w-4.5 h-4.5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider block">Transit Pool Chat</h3>
+                    <span className="text-[10px] text-gray-500 block font-mono">ID: CHAT-POOL-8832</span>
+                  </div>
+                </div>
+                {poolingState === 'forming' || poolingState === 'matched' || poolingState === 'transit' ? (
+                  <span className="text-[10px] bg-[#175D39]/10 text-[#175D39] px-2 py-0.5 rounded-md font-mono font-bold animate-pulse">
+                    ● ACTIVE
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-slate-200 text-gray-500 px-2 py-0.5 rounded-md font-mono">
+                    OFFLINE
+                  </span>
+                )}
               </div>
 
-              <form onSubmit={handleRequestRide} className="space-y-4">
-                {/* Pickup stop selection */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#737686] uppercase tracking-wider block">Pickup Campus Stop</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-emerald-500">
-                      <MapPin className="w-4 h-4 stroke-[2.5]" />
+              {/* Chat Messages Scrolling Body */}
+              <div className="flex-1 p-4 overflow-y-auto space-y-3.5 flex flex-col">
+                {chatMessages.map((msg, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`max-w-[85%] flex flex-col ${
+                      msg.isUser ? 'self-end items-end' : 'self-start items-start'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 mb-1 text-[10px]">
+                      <span className="font-extrabold text-slate-500">{msg.sender}</span>
+                      <span className="text-gray-600 font-mono">{msg.time}</span>
                     </div>
-                    <select
-                      value={pickup}
-                      onChange={(e) => setPickup(e.target.value)}
-                      className="w-full pl-10 pr-3 py-3 bg-[#f8f9ff] border border-gray-100 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#0b1c30] cursor-pointer"
-                    >
-                      {campusStops.map(stop => (
-                        <option key={stop.id} value={stop.id}>{stop.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Dropoff stop selection */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#737686] uppercase tracking-wider block font-mono">Destination Stop</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-red-500">
-                      <MapPin className="w-4 h-4 stroke-[2.5]" />
-                    </div>
-                    <select
-                      value={dropoff}
-                      onChange={(e) => setDropoff(e.target.value)}
-                      className="w-full pl-10 pr-3 py-3 bg-[#f8f9ff] border border-gray-100 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#0b1c30] cursor-pointer"
-                    >
-                      {campusStops.map(stop => (
-                        <option key={stop.id} value={stop.id}>{stop.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Vehicle Selection Tab buttons (Car, Keke, Shuttle) */}
-                <div className="space-y-1 pt-1">
-                  <label className="text-xs font-bold text-[#737686] uppercase tracking-wider block">Vehicle Category</label>
-                  <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => setVehicleType('Car')}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all ${vehicleType === 'Car' ? 'bg-primary text-white shadow' : 'text-gray-500 hover:text-gray-900'}`}
-                    >
-                      Car (₦4.50)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVehicleType('Keke')}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all ${vehicleType === 'Keke' ? 'bg-[#855300] text-white shadow' : 'text-gray-500 hover:text-gray-900'}`}
-                    >
-                      Keke (₦5.75)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVehicleType('Shuttle')}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all ${vehicleType === 'Shuttle' ? 'bg-indigo-600 text-white shadow' : 'text-gray-500 hover:text-gray-900'}`}
-                    >
-                      Shuttle (₦2.50)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Peer verification option */}
-                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <ShieldCheck className="w-4 h-4 text-primary" />
-                    <div>
-                      <span className="text-[11px] font-bold text-[#0b1c30] block leading-none">Verify Peer ID</span>
-                      <span className="text-[9px] text-gray-400">Restricts to confirmed .edu accounts</span>
+                    <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                      msg.sender === 'System' 
+                        ? 'bg-slate-100/50 text-slate-600 border border-slate-200 italic text-center w-full font-mono'
+                        : msg.isUser 
+                          ? 'bg-[#175D39] text-white rounded-tr-none' 
+                          : 'bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-none'
+                    }`}>
+                      {msg.text}
                     </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={verifyPeer}
-                      onChange={(e) => setVerifyPeer(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary"></div>
-                  </label>
-                </div>
+                ))}
+                <div ref={chatBottomRef}></div>
+              </div>
 
-                <div className="border-t border-gray-100 pt-3 flex items-center justify-between text-xs">
-                  <span className="text-gray-500 font-medium">Estimated Fare:</span>
-                  <span className="text-lg font-extrabold text-[#0b1c30]">₦{getRideCost().toFixed(2)}</span>
+              {/* Quick Replies row */}
+              {poolingState !== 'idle' && (
+                <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth">
+                  {['On my way!', 'I am at the stop', 'Wait for me', 'Awesome split!'].map((phrase, index) => (
+                    <button
+                      key={index}
+                      onClick={() => sendQuickReply(phrase)}
+                      className="px-3 py-1 bg-slate-100 hover:bg-gray-850 text-slate-500 hover:text-white border border-slate-150 shadow-xs rounded-lg text-[10px] font-bold transition-all shrink-0 cursor-pointer"
+                    >
+                      {phrase}
+                    </button>
+                  ))}
                 </div>
+              )}
 
+              {/* Message Submit Footer Form */}
+              <form onSubmit={handleSendMessage} className="p-3 bg-slate-100/50 border-t border-slate-200 flex items-center space-x-2">
+                <input
+                  type="text"
+                  placeholder={poolingState === 'idle' ? 'Join a pool to text...' : 'Type message here...'}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={poolingState === 'idle'}
+                  className="flex-1 bg-slate-50 border border-slate-150 shadow-xs rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#175D39]/30 disabled:opacity-50"
+                />
                 <button
-                  id="student-request-ride-btn"
                   type="submit"
-                  disabled={estimateLoading}
-                  className="w-full py-3 bg-primary hover:bg-[#1d4ed8] text-white font-bold rounded-xl text-xs tracking-wider uppercase transition shadow-md shadow-blue-100 flex items-center justify-center space-x-2"
+                  disabled={poolingState === 'idle' || !chatInput.trim()}
+                  className="p-2.5 bg-[#175D39] hover:bg-[#175D39] disabled:bg-gray-850 text-white rounded-xl transition duration-150 cursor-pointer"
                 >
-                  {estimateLoading ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <Car className="w-4 h-4" />
-                  )}
-                  <span>{estimateLoading ? 'Checking Queues...' : 'Confirm Request'}</span>
+                  <Send className="w-4 h-4" />
                 </button>
               </form>
             </div>
 
-            {/* QUICK PREVIEW IF CURRENTLY VACANT */}
-            {!activeRide && (
-              <div className="bg-white rounded-3xl p-5 border border-gray-150 shadow-sm">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Available Peer Drivers Nearby</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-[#f8f9ff] text-xs">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                      <span className="font-bold">David Moore</span>
-                    </div>
-                    <span className="text-gray-500 font-mono">Camry (4 mins)</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-[#f8f9ff] text-xs">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                      <span className="font-bold">Evelyn Carter</span>
-                    </div>
-                    <span className="text-gray-500 font-mono">Elantra (8 mins)</span>
-                  </div>
-                </div>
+
+
+          </div>
+        </motion.div>
+      )}
+
+        {/* BROWSE ACTIVE POOLS VIEW */}
+        {activeView === 'browse_pools' && (
+          <motion.div
+            key="browse_pools"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
+          >
+          {/* Header Section */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-[#175D39] tracking-tight uppercase">Browse Active Pools</h1>
+              <p className="text-xs text-slate-500">
+                Join matching commutes created by fellow students to split fares and ride safely.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setRideMode('create');
+                onNavigate('booking');
+              }}
+              className="px-5 py-3 bg-[#175D39] hover:bg-[#175D39]/90 text-white font-bold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#175D39]/10"
+            >
+              <Plus className="w-4.5 h-4.5" />
+              <span>Start New Pool</span>
+            </button>
+          </div>
+
+          {/* Filters Widget Panel */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center space-x-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
+              <Search className="w-4 h-4 text-[#175D39]" />
+              <span>Search Filters</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Pickup filter */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Pickup Stop</label>
+                <select
+                  value={browseFilterPickup}
+                  onChange={(e) => setBrowseFilterPickup(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
+                >
+                  <option value="all">All Pickup Stops</option>
+                  {campusStops.map((stop) => (
+                    <option key={stop.id} value={stop.id}>{stop.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Dropoff filter */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Destination</label>
+                <select
+                  value={browseFilterDropoff}
+                  onChange={(e) => setBrowseFilterDropoff(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
+                >
+                  <option value="all">All Destinations</option>
+                  {campusStops.map((stop) => (
+                    <option key={stop.id} value={stop.id}>{stop.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Vehicle filter */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Vehicle Category</label>
+                <select
+                  value={browseFilterVehicle}
+                  onChange={(e) => setBrowseFilterVehicle(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
+                >
+                  <option value="all">All Vehicles (Any)</option>
+                  <option value="Car">Car (Cozy Comfort)</option>
+                  <option value="Keke">Keke Marwa (Tricycle)</option>
+                  <option value="Shuttle">Campus Shuttle Bus</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear filters row */}
+            {(browseFilterPickup !== 'all' || browseFilterDropoff !== 'all' || browseFilterVehicle !== 'all') && (
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => {
+                    setBrowseFilterPickup('all');
+                    setBrowseFilterDropoff('all');
+                    setBrowseFilterVehicle('all');
+                  }}
+                  className="text-[10px] font-bold text-[#175D39] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Clear Filters
+                </button>
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* RENDER VIEW: DASHBOARD (BENTO STATS & CURRENT ACTIVITY) */}
-      {activeView === 'dashboard' && (
-        <div id="view-student-activity-dashboard" className="space-y-6">
-          
-          {/* Active Ride Alert Panel if ongoing */}
-          {activeRide && (
-            <div className="bg-[#e5eeff] border border-primary/20 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center space-x-3.5">
-                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shrink-0 animate-pulse">
-                  <Car className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-[#00174b]">Active Trip Commencing</h3>
-                  <p className="text-xs text-gray-500">
-                    Your ride from <span className="font-semibold text-primary">{activeRide.pickup}</span> to <span className="font-semibold text-primary">{activeRide.dropoff}</span> is in state <span className="font-bold underline">{activeRide.status.replace('_', ' ')}</span>.
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => onNavigate('booking')} 
-                className="text-xs font-bold text-white bg-primary px-4 py-2 rounded-xl hover:bg-blue-700 transition"
-              >
-                View Live Map Tracking
-              </button>
+          {/* Pools Grid */}
+          {activePools.filter(pool => {
+            if (browseFilterPickup !== 'all' && pool.pickupId !== browseFilterPickup) return false;
+            if (browseFilterDropoff !== 'all' && pool.dropoffId !== browseFilterDropoff) return false;
+            if (browseFilterVehicle !== 'all' && pool.vehicleType !== browseFilterVehicle) return false;
+            return true;
+          }).length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {activePools.filter(pool => {
+                if (browseFilterPickup !== 'all' && pool.pickupId !== browseFilterPickup) return false;
+                if (browseFilterDropoff !== 'all' && pool.dropoffId !== browseFilterDropoff) return false;
+                if (browseFilterVehicle !== 'all' && pool.vehicleType !== browseFilterVehicle) return false;
+                return true;
+              }).map((pool) => {
+                const isUserJoined = joinedPoolId === pool.id;
+                const isFull = pool.currentRiders.length >= pool.maxRiders;
+                
+                // Determine prices dynamically based on vehicle
+                let baseF = 350;
+                if (pool.vehicleType === 'Car') baseF = 350;
+                else if (pool.vehicleType === 'Keke') baseF = 200;
+                else baseF = 100;
+
+                const splitFareMax = Math.round(baseF / pool.maxRiders);
+
+                return (
+                  <div key={pool.id} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col justify-between space-y-4 hover:shadow-lg transition-shadow duration-150">
+                    
+                    {/* Host Profile */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <img
+                          referrerPolicy="no-referrer"
+                          src={pool.hostAvatar}
+                          alt={pool.hostName}
+                          className="w-10 h-10 rounded-full object-cover border border-slate-100 shadow-xs"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold block text-slate-800 truncate">{pool.hostName}</span>
+                          <span className="text-[10px] text-gray-500 font-medium block truncate uppercase tracking-wider">{pool.hostMajor} • {pool.hostGender}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-lg shrink-0 flex items-center gap-1 font-bold">
+                        ★ {pool.hostRating}
+                      </span>
+                    </div>
+
+                    {/* Driver Matching Ticking Timer */}
+                    <div className="flex items-center justify-between bg-amber-50/75 border border-amber-150 px-3 py-2 rounded-xl text-xs">
+                      <div className="flex items-center space-x-1.5 text-amber-800 font-semibold">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                        <span>Driver matching closes:</span>
+                      </div>
+                      <span className="font-mono font-black text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded-md">
+                        {pool.driverAcceptCountdown !== undefined ? pool.driverAcceptCountdown : 60}s
+                      </span>
+                    </div>
+
+                    {/* Route Line */}
+                    <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-[#175D39] shrink-0" />
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Pickup</span>
+                          <span className="text-xs font-bold text-slate-800 truncate block">{getStopName(pool.pickupId)}</span>
+                        </div>
+                      </div>
+                      <div className="h-4 border-l-2 border-dashed border-slate-200 ml-2"></div>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-red-500 shrink-0" />
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Destination</span>
+                          <span className="text-xs font-bold text-slate-800 truncate block">{getStopName(pool.dropoffId)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Capacity indicators */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        <span>Lobby Capacity</span>
+                        <span className={isFull ? 'text-red-500' : 'text-[#175D39]'}>
+                          {pool.currentRiders.length}/{pool.maxRiders} Seats Filled
+                        </span>
+                      </div>
+                      {/* Grid representation of filled seats */}
+                      <div className="grid grid-cols-4 gap-1.5 h-2">
+                        {Array.from({ length: pool.maxRiders }).map((_, idx) => (
+                          <div
+                            key={idx}
+                            className={`rounded-full h-full ${
+                              idx < pool.currentRiders.length ? 'bg-[#175D39]' : 'bg-slate-150'
+                            }`}
+                          ></div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Member Avatars */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center -space-x-2 overflow-hidden">
+                        {pool.currentRiders.map((rider, idx) => (
+                          <div key={idx} className="relative group/rider shrink-0">
+                            <img
+                              referrerPolicy="no-referrer"
+                              src={rider.avatar}
+                              alt={rider.name}
+                              className="w-7 h-7 rounded-full object-cover border-2 border-white"
+                            />
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-1 py-0.5 rounded-md opacity-0 group-hover/rider:opacity-100 transition-opacity whitespace-nowrap mb-1 z-10 font-bold">
+                              {rider.name} ({rider.major})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Vehicle Category Badge */}
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono ${
+                        pool.vehicleType === 'Car' 
+                          ? 'bg-emerald-50 border border-emerald-200 text-[#175D39]'
+                          : pool.vehicleType === 'Keke'
+                            ? 'bg-amber-50 border border-amber-200 text-amber-600'
+                            : 'bg-blue-50 border border-blue-200 text-blue-600'
+                      }`}>
+                        {pool.vehicleType.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Fare / Splits Box */}
+                    <div className="flex justify-between items-center bg-slate-50/70 border border-slate-200/40 p-3 rounded-2xl">
+                      <div>
+                        <span className="text-[9px] text-slate-500 block uppercase tracking-wide">Dynamic split fare</span>
+                        <div className="flex items-baseline space-x-1.5 mt-0.5">
+                          <span className="text-base font-extrabold text-[#175D39] font-mono">
+                            {currencySymbol}{splitFareMax}
+                          </span>
+                          <span className="text-[9px] text-slate-400 line-through font-mono">
+                            {currencySymbol}{baseF}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-emerald-600 font-bold block bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-wider border border-emerald-100 font-sans">
+                          Save up to {Math.round((1 - (splitFareMax / baseF)) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Join / Leave / Delete button */}
+                    {pool.hostName === (userProfile.name || 'Temi Adeyemi') ? (
+                      <button
+                        onClick={() => handleDeletePool(pool.id)}
+                        className="w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 shadow-xs"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Pool (Created by You)</span>
+                      </button>
+                    ) : pool.currentRiders.some(r => r.name === (userProfile.name || 'Temi Adeyemi')) ? (
+                      <button
+                        onClick={() => handleLeavePool(pool.id)}
+                        className="w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-xs"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Leave Pool</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setCheckoutPool(pool);
+                          setCheckoutTimer(30);
+                        }}
+                        disabled={isFull}
+                        className={`w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          isFull
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            : 'bg-[#175D39] hover:bg-[#175D39]/95 text-white shadow-md shadow-emerald-50'
+                        }`}
+                      >
+                        {isFull ? (
+                          <span>Full / Closed</span>
+                        ) : (
+                          <>
+                            <span>Join Pool</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          )}
-
-          {/* Bento Grid Metrics Display */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Stat Box 1: Trips This Week */}
-            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex items-center justify-between">
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block font-mono">Trips This Week</span>
-                <span className="text-3xl font-extrabold text-[#0b1c30] block">{userProfile.tripsThisWeek}</span>
-                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full inline-flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-0.5" />
-                  +18% from last registrar term
-                </span>
+          ) : (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 flex flex-col items-center justify-center text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-150 flex items-center justify-center text-[#175D39]">
+                <Compass className="w-8 h-8" />
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-[#e5eeff] text-primary flex items-center justify-center">
-                <Calendar className="w-6 h-6" />
+              <div className="space-y-1 max-w-sm">
+                <h3 className="text-base font-bold text-slate-800 uppercase tracking-tight">No Matching Ride Pools</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  There are currently no active ride pools that match your chosen pickup or destination filters. 
+                </p>
               </div>
-            </div>
-
-            {/* Stat Box 2: Carpool Rides */}
-            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex items-center justify-between">
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block font-mono">Carpool Shares</span>
-                <span className="text-3xl font-extrabold text-[#0b1c30] block">{userProfile.carpoolRides}</span>
-                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full inline-flex items-center">
-                  <Users className="w-3 h-3 mr-0.5" />
-                  5 peer verification points earned
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
-                <Users className="w-6 h-6" />
-              </div>
-            </div>
-
-            {/* Stat Box 3: Saved This Month */}
-            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex items-center justify-between">
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block font-mono">Financial Savings</span>
-                <span className="text-3xl font-extrabold text-[#0b1c30] block">₦{userProfile.savedThisMonth.toFixed(2)}</span>
-                <span className="text-[10px] text-primary font-bold bg-blue-50 px-2.5 py-0.5 rounded-full inline-flex items-center">
-                  Campus Commuter Rate Active
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <DollarSign className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            {/* Recent Trips Log Table */}
-            <div className="lg:col-span-8 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-extrabold text-[#0b1c30]">Recent Institutional Travels</h3>
-                  <p className="text-xs text-gray-400">Past trip logs completed securely under verified protocols.</p>
-                </div>
-                <button 
-                  onClick={() => onNavigate('booking')}
-                  className="text-xs font-bold text-primary hover:underline flex items-center"
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setBrowseFilterPickup('all');
+                    setBrowseFilterDropoff('all');
+                    setBrowseFilterVehicle('all');
+                  }}
+                  className="px-4 py-2.5 border border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-slate-50 cursor-pointer text-slate-700"
                 >
-                  <span>Request another</span>
-                  <Plus className="w-4 h-4 ml-0.5" />
+                  Reset Filters
+                </button>
+                <button
+                  onClick={() => {
+                    if (browseFilterPickup !== 'all') setPickup(browseFilterPickup);
+                    if (browseFilterDropoff !== 'all') setDropoff(browseFilterDropoff);
+                    onNavigate('booking');
+                  }}
+                  className="px-4 py-2.5 bg-[#175D39] hover:bg-[#175D39]/95 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+                >
+                  Start New Pool
                 </button>
               </div>
+            </div>
+          )}
+        </motion.div>
+      )}
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-gray-400 font-mono tracking-wider uppercase">
-                      <th className="pb-3 font-semibold">Route & Vehicle</th>
-                      <th className="pb-3 font-semibold">Date / Time</th>
-                      <th className="pb-3 font-semibold">Peer Driver</th>
-                      <th className="pb-3 font-semibold text-right">Fare</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.filter(t => t.type === 'charge').slice(0, 4).map((txn) => (
-                      <tr key={txn.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition duration-150">
-                        <td className="py-3">
-                          <span className="font-bold text-[#0b1c30] block">{txn.description.replace('Ride fare: ', '')}</span>
-                          <span className="text-[10px] text-gray-400">{txn.method}</span>
-                        </td>
-                        <td className="py-3">
-                          <span className="font-semibold text-gray-600 block">{txn.date}</span>
-                          <span className="text-[10px] text-gray-400">{txn.time}</span>
-                        </td>
-                        <td className="py-3">
-                          <span className="font-mono bg-[#e5eeff] text-primary px-2.5 py-0.5 rounded text-[10px] font-semibold inline-block">
-                            DAVID M. (Toyota Camry)
-                          </span>
-                        </td>
-                        <td className="py-3 text-right font-extrabold text-[#0b1c30]">
-                          ₦{Math.abs(txn.amount).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        {/* 2. VIEW CONTEXT: ACTIVITY DASHBOARD (CHARTS & HISTORIC TRIPS) */}
+        {activeView === 'dashboard' && (
+          <motion.div
+            key="dashboard"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
+          >
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">RIDER PORTAL SUMMARY</h1>
+          
+          {/* Quick Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Available balance</span>
+              <div className="text-2xl font-black text-[#175D39] font-mono mt-1">{currencySymbol}{userProfile.walletBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Ready for instant pool fares</p>
             </div>
 
-            {/* Campaign Banner / App Tip */}
-            <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
-              <h3 className="text-sm font-extrabold text-[#0b1c30] flex items-center">
-                <Info className="w-4 h-4 text-primary mr-1.5" />
-                Commuter Guidelines
-              </h3>
-              
-              <div className="space-y-3.5 text-xs text-slate-600 leading-relaxed">
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <span className="font-bold text-[#0b1c30] block mb-1">Peer Safety Protocols</span>
-                  Verify the license plate match on your screen with the incoming vehicle prior to entering.
-                </div>
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <span className="font-bold text-[#0b1c30] block mb-1">Late Cancellations</span>
-                  Cancellations requested details after a peer driver accepts the invite are subject to a standard ₦1.50 transit penalty.
-                </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Pooling savings (Month)</span>
+              <div className="text-2xl font-black text-slate-800 font-mono mt-1">+{currencySymbol}{userProfile.savedThisMonth.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
+              <p className="text-[10px] text-emerald-400 mt-0.5">Saved split cost by sharing rides</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Trips completed</span>
+              <div className="text-2xl font-black text-slate-800 font-mono mt-1">{userProfile.tripsThisWeek}</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Reliable campus commutes logged</p>
+            </div>
+          </div>
+
+          {/* Interactive Custom SVG Chart */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider">Weekly Transit Outlay</h3>
+                <p className="text-xs text-gray-500">Breakdown of transport expenses on campus (split vs. solo)</p>
+              </div>
+              <span className="text-xs bg-slate-100 border border-slate-150 shadow-xs px-3 py-1 rounded-xl font-mono">Last 7 Days</span>
+            </div>
+
+            {/* Custom SVG Bar Chart */}
+            <div className="h-[200px] w-full flex items-end justify-between pt-6 px-4">
+              {[
+                { day: 'Mon', split: 350, solo: 700 },
+                { day: 'Tue', split: 175, solo: 700 },
+                { day: 'Wed', split: 117, solo: 700 },
+                { day: 'Thu', split: 350, solo: 700 },
+                { day: 'Fri', split: 88,  solo: 700 },
+                { day: 'Sat', split: 0,   solo: 0 },
+                { day: 'Sun', split: 117, solo: 700 }
+              ].map((data, idx) => {
+                const maxVal = 700;
+                const splitHeight = data.split > 0 ? (data.split / maxVal) * 150 : 0;
+                const soloHeight = data.solo > 0 ? (data.solo / maxVal) * 150 : 0;
+                
+                return (
+                  <div key={idx} className="flex flex-col items-center flex-1 group relative">
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full mb-2 bg-gray-950 text-white text-[10px] p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all border border-slate-200 flex flex-col pointer-events-none z-10 whitespace-nowrap shadow-xl">
+                      <span className="font-extrabold text-[#175D39]">Split: {currencySymbol}{data.split}</span>
+                      <span className="text-slate-500 line-through">Solo: {currencySymbol}{data.solo}</span>
+                    </div>
+
+                    <div className="w-12 h-[150px] flex items-end justify-center gap-1">
+                      {/* Solo Ride Bar Indicator (Backdrop) */}
+                      <div 
+                        className="w-3.5 bg-slate-200 hover:bg-gray-700 rounded-t-sm transition-all duration-300"
+                        style={{ height: `${soloHeight}px` }}
+                      ></div>
+                      {/* Active Pool Split Bar */}
+                      <div 
+                        className="w-3.5 bg-gradient-to-t from-[#175D39] to-[#175D39] rounded-t-sm transition-all duration-300"
+                        style={{ height: `${splitHeight}px` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs font-mono text-gray-500 mt-2 block">{data.day}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-center items-center gap-6 pt-4 border-t border-slate-200 text-xs text-gray-500">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 bg-gradient-to-r from-[#175D39] to-[#175D39] rounded-xs"></span>
+                <span>Active Split Ride Outlay</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 bg-slate-200 rounded-xs"></span>
+                <span>Alternative Solo Transport Cost</span>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Historic Trips Log List */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
+            <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider">Past Completed Rides</h3>
+            {transactions.length > 0 ? (
+              <div className="space-y-3">
+                {transactions.map((txn, index) => (
+                  <div key={index} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                        <Car className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold block text-white">{txn.description}</span>
+                        <span className="text-[10px] text-gray-500 block font-mono">{txn.date} • {txn.time}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-mono font-black text-white block">-{currencySymbol}{txn.amount}</span>
+                      <span className="text-[9px] bg-[#175D39]/10 text-emerald-400 px-2 py-0.5 rounded-full uppercase font-mono tracking-wide">Paid</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-xs italic">
+                No recent trips on record. Choose "Request Ride" to get started!
+              </div>
+            )}
+          </div>
+        </motion.div>
       )}
 
-      {/* RENDER VIEW: NOTIFICATIONS INBOX */}
-      {activeView === 'notifications' && (
-        <div id="view-student-notifications" className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6 border-b border-gray-150 pb-4">
-            <div>
-              <h2 className="text-lg font-extrabold text-[#0b1c30]">Notifications & Alerts</h2>
-              <p className="text-xs text-gray-400">Real-time dispatcher logs, transit advisories, and digital balance logs.</p>
-            </div>
-            
+        {/* 3. VIEW CONTEXT: NOTIFICATIONS INBOX */}
+        {activeView === 'notifications' && (
+          <motion.div
+            key="notifications"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
+          >
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-black text-[#175D39] tracking-tight">NOTIFICATIONS INBOX</h1>
             <button
-              onClick={onMarkNotificationsRead}
-              className="text-xs px-3.5 py-2 bg-[#e5eeff] text-primary hover:bg-blue-100 rounded-xl font-bold transition flex items-center space-x-1.5"
+              onClick={() => {
+                onMarkNotificationsRead();
+                alert('All messages marked as read.');
+              }}
+              className="text-xs text-[#175D39] hover:underline font-bold cursor-pointer"
             >
-              <Check className="w-4 h-4" />
-              <span>Mark all as read</span>
+              Mark all as read
             </button>
           </div>
 
           <div className="space-y-3">
-            {notifications.map((notif) => (
+            {notifications.map((notif, index) => (
               <div 
-                key={notif.id} 
-                className={`p-4 rounded-2xl border transition-all flex items-start space-x-3.5 ${notif.isRead ? 'bg-white border-gray-100 text-gray-500' : 'bg-blue-50/40 border-[#b4c5ff]/40 shadow-xs text-slate-800'}`}
+                key={index} 
+                className={`p-5 rounded-2xl border transition-all ${
+                  notif.isRead 
+                    ? 'bg-white border-slate-200 opacity-70' 
+                    : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-blue-500/10'
+                }`}
               >
-                {/* Visual Category Icon */}
-                <div className={`w-9 h-9 rounded-xl shrink-0 flex items-center justify-center ${
-                  notif.type === 'receipt' ? 'bg-[#e5eeff] text-primary' : 
-                  notif.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 
-                  notif.type === 'alert' ? 'bg-red-50 text-red-600' : 
-                  'bg-indigo-50 text-indigo-600'
-                }`}>
-                  {notif.type === 'receipt' && <CreditCard className="w-5 h-5" />}
-                  {notif.type === 'success' && <CheckCircle className="w-5 h-5" />}
-                  {notif.type === 'alert' && <AlertTriangle className="w-5 h-5" />}
-                  {notif.type === 'info' && <Info className="w-5 h-5" />}
-                </div>
-
-                {/* Notification Text block */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between">
-                    <h4 className={`text-sm font-extrabold ${notif.isRead ? 'text-slate-700' : 'text-[#0b1c30]'}`}>
-                      {notif.title}
-                    </h4>
-                    <div className="text-right shrink-0">
-                      <span className="text-[10px] text-gray-400 block font-mono">{notif.date}</span>
-                      <span className="text-[9px] text-gray-400 block font-mono">{notif.time}</span>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start space-x-3.5">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      notif.type === 'success' 
+                        ? 'bg-[#175D39]/10 text-emerald-400' 
+                        : notif.type === 'receipt' 
+                          ? 'bg-[#175D39]/10 text-blue-450' 
+                          : 'bg-slate-200 text-slate-500'
+                    }`}>
+                      <BellRing className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider">{notif.title}</h3>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{notif.message}</p>
                     </div>
                   </div>
-                  <p className="text-xs mt-1 leading-relaxed">{notif.message}</p>
+                  <span className="text-[10px] text-gray-500 font-mono tracking-wide shrink-0">{notif.time}</span>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* RENDER VIEW: PAYMENTS & WALLET */}
-      {activeView === 'payments' && (
-        <div id="view-student-payments" className="space-y-6">
+        {/* 4. VIEW CONTEXT: WALLET & PAYMENTS SCREEN */}
+        {activeView === 'payments' && (
+          <motion.div
+            key="payments"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
+          >
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">WALLET & PAYMENTS</h1>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            {/* Column 1: Wallet Card & Paystack Virtual Account Details */}
-            <div className="space-y-6">
-              {/* Wallet Balance reloading card */}
-              <div className="bg-[#0b1c30] text-white rounded-3xl p-6 relative overflow-hidden shadow-xl shadow-blue-900/15">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-[#ffddb8]/10 rounded-full blur-2xl"></div>
+            {/* LEFT COLUMN: VIRTUAL CARD & FUNDING CHANNELS (7 COLS) */}
+            <div className="lg:col-span-7 space-y-6">
+              
+              {/* Sleek Virtual Debit Card Mockup */}
+              <div className="bg-gradient-to-br from-[#F2F2F2] via-[#175D39] to-black rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-xs relative overflow-hidden shadow-xl ring-1 ring-[#175D39]/10 min-h-[220px] flex flex-col justify-between">
+                <div className="absolute top-0 right-0 w-[40%] h-[40%] rounded-full bg-[#175D39]/5 blur-3xl pointer-events-none"></div>
                 
-                <div className="relative z-10 flex flex-col h-full justify-between space-y-8">
-                  <div>
-                    <div className="flex items-center space-x-2.5 mb-2.5">
-                      <div className="w-6 h-6 rounded-md bg-[#fea619] text-[#2a1700] flex items-center justify-center">
-                        <Wallet className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs font-bold text-[#ffddb8] uppercase tracking-widest font-mono">Digital Student Wallet</span>
-                    </div>
-                    <h3 className="text-[11px] text-sky-200 uppercase font-mono tracking-wider">Available Balance</h3>
-                    <span className="text-4xl font-extrabold block tracking-tight">₦{userProfile.walletBalance.toFixed(2)}</span>
+                <div className="flex justify-between items-start relative z-10">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest font-mono">CAMPUS TRANSIT PASS</span>
+                    <h3 className="text-lg font-black text-white">{userProfile.name || 'Temi Adeyemi'}</h3>
                   </div>
+                  <span className="bg-[#175D39]/10 text-[#175D39] text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border border-[#175D39]/20 uppercase">
+                    STUDENT COMMUTER
+                  </span>
+                </div>
 
-                  <div className="space-y-3">
-                    <span className="text-[11px] text-gray-400 font-mono block">Paystack Secure Checkout Active</span>
-                    <div className="flex space-x-2">
-                      <span className="bg-[#e5eeff]/10 px-2 py-0.5 rounded text-[10px] font-bold">Auto-Reload Active</span>
-                      <span className="bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold">Verified Account Secure</span>
-                    </div>
+                <div className="my-6 relative z-10">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase block tracking-wider font-mono">DIGITAL BALANCE</span>
+                  <div className="text-3xl sm:text-4xl font-black text-[#175D39] font-mono mt-0.5 tracking-tight">
+                    {currencySymbol}{userProfile.walletBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}
                   </div>
+                </div>
+
+                <div className="flex justify-between items-center relative z-10 text-[10px] font-mono text-gray-500 border-t border-slate-200 pt-4">
+                  <span>METRIC: {userProfile.idNumber || 'RUN/2022/10432'}</span>
+                  <span>EXP: TRANSIT END</span>
                 </div>
               </div>
 
-              {/* Paystack Virtual Account details */}
-              <div className="bg-white rounded-3xl p-5 border border-gray-150 shadow-xs">
-                <div className="flex items-center space-x-2.5 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <ArrowRightLeft className="w-4 h-4" />
+              {/* Instant Fund Wallet Form */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
+                <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider flex items-center gap-1.5">
+                  <CreditCard className="w-4.5 h-4.5 text-[#175D39]" /> Reload Comm commuter wallet
+                </h3>
+                
+                <form onSubmit={(e) => { e.preventDefault(); setShowPaystackPopup(true); }} className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[1000, 2500, 5000].map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => { setFundAmount(amount); setCustomFundAmount(''); }}
+                        className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all cursor-pointer ${
+                          fundAmount === amount && !customFundAmount
+                            ? 'bg-gradient-to-b from-gray-900 to-slate-950 border-[#175D39] text-[#175D39]' 
+                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-white hover:bg-slate-100'
+                        }`}
+                      >
+                        +{currencySymbol}{amount.toLocaleString()}
+                      </button>
+                    ))}
                   </div>
-                  <div>
-                    <h4 className="text-sm font-extrabold text-[#0b1c30]">Paystack Virtual Account</h4>
-                    <p className="text-[9px] text-emerald-600 font-mono font-bold tracking-wide">AUTOMATIC CREDIT SERVICES</p>
-                  </div>
-                </div>
 
-                <p className="text-xs text-gray-500 leading-relaxed mb-4">
-                  Make a transfer to your personalized Paystack dedicated virtual bank account to credit your wallet instantly.
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Or Custom Top Up Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-mono font-black">{currencySymbol}</span>
+                      <input 
+                        type="number" 
+                        placeholder="Enter other sum (e.g. 10000)"
+                        value={customFundAmount}
+                        onChange={(e) => setCustomFundAmount(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 px-8 py-3 rounded-2xl text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-[#175D39] hover:bg-[#175D39] text-slate-800 font-black py-4 px-6 rounded-2xl shadow-lg transition-all text-xs uppercase tracking-wider cursor-pointer"
+                  >
+                    REFOUND WALLET WITH PAYSTACK CO
+                  </button>
+                </form>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: VIRTUAL NGN BANK TRANSFER DETAILS (5 COLS) */}
+            <div className="lg:col-span-5 space-y-6">
+              
+              {/* Virtual Account Details for Instant Bank Deposits */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
+                <div className="flex items-center space-x-2">
+                  <ArrowRightLeft className="w-5 h-5 text-[#175D39]" />
+                  <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider block">Instant Bank Transfer Channel</h3>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Make an online bank transfer to your customized virtual account below. Refills reflect instantly via automated credit tracking.
                 </p>
 
-                <div className="bg-[#f8f9ff] rounded-2xl p-4 space-y-3 border border-gray-100">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-gray-400 font-medium">Bank Name</span>
-                    <span className="font-bold text-[#0b1c30]">Wema Bank (Paystack)</span>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 font-mono text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Beneficiary Bank:</span>
+                    <span className="text-slate-800 font-black">Wema Bank Plc</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-gray-400 font-medium">Account Name</span>
-                    <span className="font-bold text-[#0b1c30] truncate max-w-[130px]">CR - {userProfile.name || 'Student Account'}</span>
-                  </div>
-                  <div className="flex justify-between items-start text-xs border-t border-gray-100 pt-2">
-                    <span className="text-gray-400 font-medium mt-1">Account Number</span>
-                    <div className="flex items-center space-x-1">
-                      <span className="font-mono font-extrabold text-[#0b1c30] text-sm tracking-widest">9920194830</span>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText('9920194830');
-                          setClipboardCopied(true);
-                          setTimeout(() => setClipboardCopied(false), 2500);
-                        }}
-                        className="p-1 hover:bg-gray-200 rounded transition text-gray-500"
-                        title="Copy Account Number"
-                        type="button"
-                      >
-                        {clipboardCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleVirtualTransferSimulation}
-                  disabled={virtualSimulateLoading}
-                  className="mt-4 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1.5 shadow-sm shadow-emerald-50"
-                  type="button"
-                >
-                  {virtualSimulateLoading ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <ArrowUpRight className="w-4 h-4" />
-                  )}
-                  <span>{virtualSimulateLoading ? 'Simulating Credit Webhook...' : 'Simulate Bank Transfer (₦2,500)'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Column 2: Reload digital funds form panel with Paystack */}
-            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center space-x-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-primary flex items-center justify-center">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-[#0b1c30] text-base">Paystack Checkout Reload</h3>
-                  <p className="text-[10px] text-primary font-bold font-mono tracking-wide">ONLINE INSTANT CREDITING</p>
-                </div>
-              </div>
-
-              {fundingSuccess && (
-                <div className="bg-emerald-50 text-emerald-700 text-xs p-3 rounded-xl border border-emerald-200 font-medium mb-3.5 flex items-center space-x-1.5">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Wallet reload complete! Balance updated instantly.</span>
-                </div>
-              )}
-
-              <form onSubmit={handleCustomFundSubmit} className="space-y-4">
-                
-                {/* Preconfigured buttons */}
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 tracking-wider block mb-2 font-mono uppercase">Select Reload Amount</span>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[1000, 2500, 5000, 10000].map((val) => (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Account Number:</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[#175D39] font-black tracking-widest">9283748291</span>
                       <button
-                        key={val}
-                        type="button"
                         onClick={() => {
-                          setFundAmount(val);
-                          setCustomFundAmount('');
+                          navigator.clipboard.writeText('9283748291');
+                          setTransferCopied(true);
+                          setTimeout(() => setTransferCopied(false), 2000);
                         }}
-                        className={`py-2 text-[11px] font-extrabold rounded-xl border transition ${fundAmount === val && !customFundAmount ? 'bg-primary text-white border-primary shadow-xs' : 'bg-transparent text-[#0b1c30] border-gray-200 hover:border-gray-400'}`}
+                        className="p-1 bg-slate-100 border border-slate-150 shadow-xs rounded-md text-slate-500 hover:text-white cursor-pointer"
                       >
-                        ₦{val}
+                        {transferCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Amount */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block font-mono">Or Enter Custom Naira Reload</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#737686]">
-                      <span className="text-xs font-bold font-mono">₦</span>
                     </div>
-                    <input
-                      type="number"
-                      value={customFundAmount}
-                      onChange={(e) => setCustomFundAmount(e.target.value)}
-                      placeholder="e.g. 3500"
-                      className="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#0b1c30]"
-                    />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Account Name:</span>
+                    <span className="text-slate-800 font-black truncate max-w-[150px]">CAMPUSRIDE-{userProfile.name?.split(' ')[0].toUpperCase() || 'STUDENT'}</span>
                   </div>
                 </div>
 
-                {/* Gateway config */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Payment Gateway Channel</label>
-                  <select
-                    value={fundMethod}
-                    onChange={(e) => setFundMethod(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#0b1c30] cursor-pointer"
-                  >
-                    <option value="Paystack Unified (Card/Transfer)">Paystack Checkout (Unified Card/USSD/Bank)</option>
-                    <option value="Paystack Sandbox Link">Paystack Sandbox Quick link</option>
-                  </select>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={paystackLoading}
-                  className="w-full py-3 bg-primary hover:bg-[#1d4ed8] text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-2 shadow-xs shadow-blue-105"
-                >
-                  {paystackLoading ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <CreditCard className="w-4 h-4" />
-                  )}
-                  <span>{paystackLoading ? 'Initializing Paystack Gateway...' : `Proceed with ₦${(customFundAmount ? parseFloat(customFundAmount) : fundAmount).toLocaleString()} Paystack`}</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Column 3: Send Money to Driver via Paystack */}
-            <div className="bg-white rounded-3xl p-6 border border-gray-150 shadow-xs">
-              <div className="flex items-center space-x-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
-                  <Send className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-[#0b1c30] text-base">Send Peer Commuter Funds</h3>
-                  <p className="text-[10px] text-orange-600 font-bold font-mono tracking-wide">DIRECT DISPATCH TRANSFERS</p>
-                </div>
-              </div>
-
-              {transferSuccess && (
-                <div className="bg-emerald-50 text-emerald-700 text-xs p-3 rounded-xl border border-emerald-200 font-medium mb-3.5 flex items-center space-x-1.5">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Transfer successful! Earnings credited instantly.</span>
-                </div>
-              )}
-
-              <form onSubmit={handleSendMoneyToDriver} className="space-y-4">
-                {/* Select target driver */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Target Driver to Credit</label>
-                  <select
-                    value={sendTargetDriver}
-                    onChange={(e) => setSendTargetDriver(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#f8f9ff] border border-gray-155 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500 focus:bg-white text-[#0b1c30] cursor-pointer"
-                  >
-                    {activeRide?.driverName && (
-                      <option value="active">Active Assigned Driver: {activeRide.driverName}</option>
-                    )}
-                    <option value="david">David Moore (Toyota Camry • Online)</option>
-                    <option value="evelyn">Evelyn Carter (Hyundai Elantra • Online)</option>
-                    {driverProfile?.name && driverProfile.name !== activeRide?.driverName && (
-                      <option value="self_driver">Registered Account: {driverProfile.name}</option>
-                    )}
-                  </select>
-                </div>
-
-                {/* Amount to send */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#737686] uppercase tracking-wider block">Naira Transfer Amount</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#737686]">
-                      <span className="text-xs font-bold font-mono">₦</span>
-                    </div>
-                    <input
-                      type="number"
-                      required
-                      value={directTransferAmount}
-                      onChange={(e) => setDirectTransferAmount(e.target.value)}
-                      placeholder="e.g. 1500"
-                      className="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-orange-500 focus:bg-white text-[#0b1c30]"
-                    />
-                  </div>
-                </div>
-
-                {/* Transfer Method option selector */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Select Dispatch Channel</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTransferMethod('wallet')}
-                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${transferMethod === 'wallet' ? 'border-orange-600 bg-orange-50/20 text-[#0b1c30]' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}
-                    >
-                      <span className="text-xs font-extrabold block">Virtual Wallet balance</span>
-                      <span className="text-[9px] text-gray-400 block mt-1">Deduct from ₦{userProfile.walletBalance.toFixed(2)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTransferMethod('paystack')}
-                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${transferMethod === 'paystack' ? 'border-orange-600 bg-orange-50/20 text-[#0b1c30]' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}
-                    >
-                      <span className="text-xs font-extrabold block">Paystack Direct Gateway</span>
-                      <span className="text-[9px] text-[#fea619] block font-mono font-bold mt-1">Unified Card Payments</span>
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={transferLoading}
-                  className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-2 shadow-xs shadow-orange-100"
-                >
-                  {transferLoading ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  <span>
-                    {transferLoading ? 'Transmitting Peer Settlement...' : 
-                     transferMethod === 'wallet' ? 'Confirm Instant Wallet Transfer' : 
-                     `Pay direct ₦${directTransferAmount || '0'} via Paystack`}
+                <div className="bg-yellow-950/25 border border-yellow-900/40 p-3 rounded-2xl flex items-start space-x-2.5">
+                  <Info className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                  <span className="text-[10px] text-yellow-500 leading-relaxed font-medium">
+                    Deposits via bank transfers are backed by unified central bank Escrow. Fees: ₦0 flat rate.
                   </span>
-                </button>
-              </form>
-            </div>
-          </div>
-
-          {/* Transaction Historial Table */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-lg font-extrabold text-[#0b1c30]">Wallet Transaction Ledger</h3>
-                <p className="text-xs text-gray-400">Chronological list of charges, transit reloads, and shared commuting rebates.</p>
+                </div>
               </div>
 
-              {/* Search bar inside Table */}
-              <div className="relative max-w-xs w-full">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Search className="w-4 h-4" />
-                </div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search ledger ID, route, etc..."
-                  className="w-full pl-9 pr-3 py-2 bg-[#f8f9ff] border border-gray-150 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#0b1c30]"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              {filteredTxns.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 font-medium">
-                  No transaction match records found on file.
-                </div>
-              ) : (
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-gray-450 tracking-wider uppercase font-mono">
-                      <th className="pb-3 font-semibold">Transaction ID</th>
-                      <th className="pb-3 font-semibold">Description</th>
-                      <th className="pb-3 font-semibold">Date / Time</th>
-                      <th className="pb-3 font-semibold">Fulfillment Method</th>
-                      <th className="pb-3 font-semibold text-right">Fund Flow</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTxns.map((txn) => (
-                      <tr key={txn.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                        <td className="py-3 font-mono text-[10px] font-bold text-gray-400">
-                          {txn.id}
-                        </td>
-                        <td className="py-3">
-                          <span className="font-bold text-[#0b1c30] block">{txn.description}</span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase inline-block mt-0.5 ${txn.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
-                            {txn.status}
-                          </span>
-                        </td>
-                        <td className="py-3">
-                          <span className="font-semibold text-gray-600 block">{txn.date}</span>
-                          <span className="text-[10px] text-gray-400 font-mono">{txn.time}</span>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-slate-600 font-semibold">{txn.method}</span>
-                        </td>
-                        <td className={`py-3 text-right font-extrabold text-[#0b1c30] ${txn.amount > 0 ? 'text-emerald-600' : 'text-[#0b1c30]'}`}>
-                          {txn.amount > 0 ? `+₦${txn.amount.toFixed(2)}` : `-₦${Math.abs(txn.amount).toFixed(2)}`}
-                        </td>
-                      </tr>
+              {/* Past Transactions Ledger list */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
+                <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider">Payments Transactions Ledger</h3>
+                {transactions.length > 0 ? (
+                  <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                    {transactions.map((txn, index) => (
+                      <div key={index} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold block text-slate-800 truncate max-w-[150px]">{txn.description}</span>
+                          <span className="text-[9px] text-gray-500 block font-mono">{txn.time} • {txn.method}</span>
+                        </div>
+                        <span className={`text-xs font-mono font-black ${txn.type === 'reload' ? 'text-[#175D39]' : 'text-[#175D39]'}`}>
+                          {txn.type === 'reload' ? '+' : '-'}{currencySymbol}{txn.amount}
+                        </span>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              )}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500 text-xs italic">
+                    No historic payments transactions.
+                  </div>
+                )}
+              </div>
+
             </div>
+
           </div>
-        </div>
+
+          {/* SIMULATED PAYSTACK MODAL CO-OVERLAY POPUP */}
+          <AnimatePresence>
+            {showPaystackPopup && (
+              <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-white text-slate-900 max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl border border-gray-200"
+                >
+                  {/* Paystack Styled header */}
+                  <div className="p-6 bg-gradient-to-r from-teal-500 to-[#175D39] text-white flex justify-between items-center">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold tracking-widest block uppercase opacity-75">Paystack Secure Checkout</span>
+                      <h4 className="text-base font-black">Refill {currencySymbol}{(Number(customFundAmount) || fundAmount).toLocaleString()}</h4>
+                    </div>
+                    <button 
+                      onClick={() => setShowPaystackPopup(false)}
+                      className="p-1.5 hover:bg-white/10 rounded-lg text-white"
+                    >
+                      <XCircle className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  {/* Checkout inputs form body */}
+                  <form onSubmit={triggerTopup} className="p-6 space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Cardholder Email</label>
+                      <input 
+                        type="text" 
+                        value={userProfile.email} 
+                        disabled 
+                        className="w-full bg-gray-50 border border-gray-200 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-gray-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Card Number</label>
+                      <div className="relative">
+                        <input 
+                          type="text" 
+                          placeholder="5399 2831 0984 2191"
+                          value={paystackCard}
+                          onChange={(e) => setPaystackCard(e.target.value)}
+                          required
+                          className="w-full bg-white border border-gray-300 px-3.5 py-2.5 rounded-xl text-xs font-mono text-slate-800"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-sm font-bold text-gray-500 font-mono">MASTERCARD</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Expiry Date</label>
+                        <input 
+                          type="text" 
+                          placeholder="09/29"
+                          value={paystackExpiry}
+                          onChange={(e) => setPaystackExpiry(e.target.value)}
+                          required
+                          className="w-full bg-white border border-gray-300 px-3.5 py-2.5 rounded-xl text-xs font-mono text-slate-800"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">CVV Pin</label>
+                        <input 
+                          type="password" 
+                          placeholder="***"
+                          maxLength={3}
+                          value={paystackCvv}
+                          onChange={(e) => setPaystackCvv(e.target.value)}
+                          required
+                          className="w-full bg-white border border-gray-300 px-3.5 py-2.5 rounded-xl text-xs font-mono text-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-3 rounded-2xl flex items-center justify-center gap-1.5 border border-gray-100 text-[10px] text-gray-500">
+                      <ShieldCheck className="w-4 h-4 text-[#175D39]" /> SECURE ADVANCED 256-BIT SSL ENCRYPTION
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={paystackLoading}
+                      className="w-full bg-[#175D39] hover:bg-[#175D39] text-slate-800 font-black py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer"
+                    >
+                      {paystackLoading ? 'Refilling Comm wallet...' : `PROCEED PAY ${currencySymbol}${(Number(customFundAmount) || fundAmount).toLocaleString()}`}
+                    </button>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+        </motion.div>
       )}
 
-      {/* RENDER VIEW: STUDENT PROFILE CARD */}
-      {activeView === 'profile' && (
-        <div id="view-student-profile" className="max-w-xl mx-auto bg-white rounded-3xl overflow-hidden border border-gray-150 shadow-md">
-          
-          {/* Header Backdrop Accent */}
-          <div className="h-28 bg-[#0b1c30] relative p-6 flex items-end">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary to-blue-900 opacity-60"></div>
-            <div className="relative z-10 flex items-center space-x-2 text-white">
-              <ShieldCheck className="w-5 h-5 text-[#ffddb8]" />
-              <span className="text-[10px] uppercase font-bold text-[#ffddb8] tracking-widest font-mono">Institutional Credentials Record</span>
-            </div>
-          </div>
+        {/* 5. VIEW CONTEXT: STUDENT PROFILE */}
+        {activeView === 'profile' && (
+          <motion.div
+            key="profile"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl"
+          >
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">STUDENT PROFILE</h1>
 
-          {/* User Details Form block */}
-          <div className="p-6 relative space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
-            {/* Absolute positioned Avatar */}
-            <div className="absolute -top-12 right-6">
+            <div className="flex flex-col sm:flex-row items-center gap-4 border-b border-slate-200 pb-6">
               <img 
                 referrerPolicy="no-referrer"
                 src={userProfile.avatar} 
-                alt="Alexis" 
-                className="w-24 h-24 rounded-2xl object-cover border-4 border-white shadow-md bg-white"
+                alt={userProfile.name} 
+                className="w-20 h-20 rounded-full object-cover border-2 border-slate-150 shadow-xs"
               />
-            </div>
-
-            <div>
-              <span className="bg-emerald-500/15 text-emerald-700 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-flex items-center">
-                <Check className="w-3.5 h-3.5 mr-1" />
-                Verified Student Commuter
-              </span>
-              <h2 className="text-xl font-extrabold text-[#0b1c30] mt-2 tracking-tight">{userProfile.name}</h2>
-              <p className="text-xs text-gray-500 font-medium">{userProfile.email}</p>
-            </div>
-
-            {/* Profile detail values spreadsheet */}
-            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-[9px] uppercase tracking-wider text-gray-400 font-mono block">Student ID Card Number</span>
-                <span className="text-xs font-bold text-[#0b1c30] leading-normal font-mono">{userProfile.idNumber}</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-[9px] uppercase tracking-wider text-gray-400 font-mono block">Enrolled Term State</span>
-                <span className="text-xs font-bold text-[#0b1c30] leading-normal truncate block">{userProfile.enrolledTerm}</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-[9px] uppercase tracking-wider text-gray-400 font-mono block">Verified Major Department</span>
-                <span className="text-xs font-bold text-[#0b1c30] leading-normal truncate block">{userProfile.major || 'B.S. Software Engineering'}</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-[9px] uppercase tracking-wider text-gray-400 font-mono block">Peer Account Status</span>
-                <span className="text-xs font-bold text-emerald-600 leading-normal flex items-center">
-                  <CheckCircle className="w-3.5 h-3.5 mr-1 text-emerald-500" />
-                  Active / Good Standing
+              <div className="text-center sm:text-left space-y-1">
+                <h3 className="text-lg font-black text-white">{userProfile.name}</h3>
+                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-[#175D39]/10 border border-[#175D39]/20 text-[#175D39] inline-block font-mono tracking-wider">
+                  Verified Commuter
                 </span>
+                <p className="text-xs text-gray-500 font-mono">Joined: June 2026</p>
               </div>
             </div>
 
-            {/* Registrar notice footer */}
-            <div className="bg-blue-50/50 p-4 rounded-xl border border-[#b4c5ff]/30 text-[11px] text-[#004ac6] leading-relaxed flex items-start space-x-2">
-              <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-              <span>
-                CampusRide profiles are synchronized with the University Directory. Any change to enrolled term states or department majors requires registrar adjustment.
-              </span>
-            </div>
+            {/* Profile inputs */}
+            <form onSubmit={(e) => { e.preventDefault(); alert('Profile successfully saved.'); }} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Full Legal Name</label>
+                  <input 
+                    type="text" 
+                    value={userProfile.name}
+                    onChange={(e) => onUpdateProfile({ name: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-white focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Registered Email Address</label>
+                  <input 
+                    type="email" 
+                    value={userProfile.email}
+                    disabled
+                    className="w-full bg-slate-50/50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-gray-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Registrar Matriculation ID</label>
+                  <input 
+                    type="text" 
+                    value={userProfile.idNumber}
+                    disabled
+                    className="w-full bg-slate-50/50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-gray-500 focus:outline-none font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Enrolled Academic Major</label>
+                  <input 
+                    type="text" 
+                    value={userProfile.major || 'Software Engineering'}
+                    onChange={(e) => onUpdateProfile({ major: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="bg-[#175D39] hover:bg-[#175D39] text-slate-950 font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Save Profile Details
+              </button>
+            </form>
+
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* RENDER VIEW: SETTINGS */}
-      {activeView === 'settings' && (
-        <div id="view-student-settings" className="max-w-xl mx-auto bg-white rounded-3xl p-6 border border-gray-150 shadow-sm space-y-6">
-          
-          <div>
-            <h2 className="text-lg font-extrabold text-[#0b1c30]">Portal Configuration Settings</h2>
-            <p className="text-xs text-gray-400">Configure notifications, locations privacy, and administrative security.</p>
-          </div>
+        {/* 6. VIEW CONTEXT: APP SETTINGS */}
+        {activeView === 'settings' && (
+          <motion.div
+            key="settings"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl"
+          >
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">APP SETTINGS</h1>
 
-          <div className="space-y-4">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
-            {/* Setting 1 */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-              <div>
-                <span className="text-xs font-bold text-[#0b1c30] block">Push Notification Alerts</span>
-                <span className="text-[10px] text-gray-400">Receive alerts when peer drivers arrive at stops</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={pushRide}
-                  onChange={(e) => setPushRide(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-              </label>
-            </div>
-
-            {/* Setting 2 */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-              <div>
-                <span className="text-xs font-bold text-[#0b1c30] block">Promotional & Campaign Alerts</span>
-                <span className="text-[10px] text-gray-400">Receive coupons, environmental points reports, etc.</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={pushPromo}
-                  onChange={(e) => setPushPromo(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-              </label>
-            </div>
-
-            {/* Setting 3 */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-              <div>
-                <span className="text-xs font-bold text-[#0b1c30] block">Real-time Location Share</span>
-                <span className="text-[10px] text-gray-400">Enable peer drivers to trace coordinate proximity</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={shareLocation}
-                  onChange={(e) => setShareLocation(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-              </label>
-            </div>
-
-            {/* Setting 4 */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-              <div>
-                <span className="text-xs font-bold text-[#0b1c30] block">Two-Factor PIN authorization</span>
-                <span className="text-[10px] text-gray-400">Ask for credential confirmation prior to loading funds</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={twoFactor}
-                  onChange={(e) => setTwoFactor(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-              </label>
-            </div>
-
-            {/* Danger Zone: Account Deletion Section */}
-            <div className="p-4 bg-red-50/50 rounded-2xl border border-red-150/60 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Trash2 className="w-4 h-4 text-red-500" />
-                <span className="text-xs font-bold text-red-700 uppercase tracking-wider block">Danger Zone</span>
-              </div>
-              <p className="text-[11px] text-[#737686] leading-normal">
-                Deleting your account will purge your student transit profile, digital wallet, and ride history. This action is permanent and irreversible.
-              </p>
-
-              {/* Debt simulator toggle for testing */}
-              <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-red-100 shadow-2xs">
+            <div className="space-y-4">
+              <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider border-b border-slate-200 pb-2">Transit Preferences</h3>
+              
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-[10px] font-bold text-gray-700 block">Reviewer Debt Tester</span>
-                  <span className="text-[9px] text-gray-400">Force simulate a pending ₦1,500.00 transit fee</span>
+                  <span className="text-xs font-bold block text-white">Continuous Live Location Share</span>
+                  <span className="text-[10px] text-gray-500 block">Transmit coordinate locks to drivers when pooling is active</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={simulateOutstandingDebt}
-                    onChange={(e) => setSimulateOutstandingDebt(e.target.checked)}
-                    className="sr-only peer"
+                  <input 
+                    type="checkbox" 
+                    checked={safetySharing} 
+                    onChange={() => setSafetySharing(!safetySharing)} 
+                    className="sr-only peer" 
                   />
-                  <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-red-500"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
                 </label>
               </div>
 
-              {!showDeleteConfirm ? (
-                <button
-                  id="btn-delete-account-trigger"
-                  onClick={() => {
-                    setShowDeleteConfirm(true);
-                    setDeleteIdInput('');
-                    setDeleteError('');
-                  }}
-                  className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-xl transition shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Request Account Deletion</span>
-                </button>
-              ) : (
-                <div className="bg-white p-4 rounded-xl border border-red-100 space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                    <span className="text-xs font-bold text-red-700">Confirm Account Deletion</span>
-                    <button 
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="text-[10px] text-gray-400 hover:text-gray-600 underline font-medium cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-
-                  {(simulateOutstandingDebt || userProfile.walletBalance < 0) ? (
-                    <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-[11px] text-red-700 space-y-1.5">
-                      <div className="flex items-center space-x-1 font-bold">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>Action Blocked: Outstanding Balance</span>
-                      </div>
-                      <p>
-                        Your wallet currently has outstanding fees or negative transit dues of <strong className="font-semibold">₦{simulateOutstandingDebt ? '1,500.00' : Math.abs(userProfile.walletBalance).toFixed(2)}</strong>. 
-                        Please visit your <span className="font-semibold underline cursor-pointer" onClick={() => onNavigate('payments')}>Payments & Wallet</span> screen to top up and settle your pending dues before deleting your profile.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="text-[11px] text-gray-500 leading-relaxed bg-amber-50/50 p-2.5 rounded-lg border border-amber-100 text-amber-800">
-                        To verify this permanent action, type your student ID: <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">{userProfile.idNumber}</strong> in the input field below.
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Type ID to delete</label>
-                        <input
-                          type="text"
-                          value={deleteIdInput}
-                          onChange={(e) => {
-                            setDeleteIdInput(e.target.value);
-                            setDeleteError('');
-                          }}
-                          placeholder={userProfile.idNumber}
-                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-red-500 focus:bg-white transition uppercase font-mono"
-                        />
-                      </div>
-
-                      {deleteError && (
-                        <p className="text-[10px] font-bold text-red-500">{deleteError}</p>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          if (deleteIdInput.trim().toUpperCase() !== userProfile.idNumber.toUpperCase()) {
-                            setDeleteError('Identification string mismatch. Please type your correct ID.');
-                            return;
-                          }
-                          if (onDeleteAccount) {
-                            onDeleteAccount();
-                          } else {
-                            alert('Account successfully deleted.');
-                            window.location.reload();
-                          }
-                        }}
-                        className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Permanently Terminate My Profile</span>
-                      </button>
-                    </div>
-                  )}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold block text-white">Same Gender Peer Matching</span>
+                  <span className="text-[10px] text-gray-500 block">Strict matching filters to isolate peers of the same gender</span>
                 </div>
-              )}
-            </div>
-          </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={sameGenderOnly} 
+                    onChange={() => setSameGenderOnly(!sameGenderOnly)} 
+                    className="sr-only peer" 
+                  />
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
+                </label>
+              </div>
 
-          <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-            <button 
-              onClick={() => alert('Administrative PIN updated successfully.')}
-              className="px-4 py-2 bg-[#0b1c30] hover:bg-[#213145] text-white text-xs font-semibold rounded-xl transition shadow-xs"
-            >
-              Update Security PIN
-            </button>
-            <button 
-              onClick={() => alert('Help ticket created. Dispatchers will contact peer email shortly.')}
-              className="text-xs font-bold text-primary hover:underline flex items-center"
-            >
-              <HelpCircle className="w-4 h-4 mr-0.5" />
-              <span>Contact Parking Systems Support</span>
-            </button>
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold block text-white">Low Balance Wallet Alerts</span>
+                  <span className="text-[10px] text-gray-500 block">System alert triggers when digital balance dips below ₦500</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={lowBalanceAlert} 
+                    onChange={() => setLowBalanceAlert(!lowBalanceAlert)} 
+                    className="sr-only peer" 
+                  />
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* Account deletion */}
+            <div className="space-y-4 pt-4 border-t border-slate-200">
+              <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider block">Danger Zone</h3>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Permanently delete your university commuter account. This clears your digital wallet balance, trips ledger, safety ratings, and registrar linkages completely. This action is irreversible.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteAccount && window.confirm('Are you absolutely sure you want to permanently delete your transit account? All remaining funds will be lost.')) {
+                    onDeleteAccount();
+                  }
+                }}
+                className="bg-[#175D39]/10 hover:bg-red-100 text-[#175D39] border border-[#175D39]/20 font-black py-3 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
+              >
+                Delete Transit Account
+              </button>
+            </div>
+
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
+
+      {/* JOIN POOL CONFIRMATION COUNTDOWN MODAL */}
+      <AnimatePresence>
+        {checkoutPool && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white border border-slate-200 text-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative"
+            >
+              {/* Pulse countdown badge at top */}
+              <div className="flex justify-between items-center mb-4">
+                <span className="bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                  JOIN RESERVATION TIMEOUT
+                </span>
+                <span className="text-sm font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">
+                  {checkoutTimer}s
+                </span>
+              </div>
+
+              {/* Title & Description */}
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-black text-[#175D39] tracking-tight">Confirm Seat Join</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Complete your pool join before the driver matching window closes!
+                </p>
+              </div>
+
+              {/* Pool specs */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 space-y-4">
+                {/* Host */}
+                <div className="flex items-center space-x-3 pb-3 border-b border-slate-200/60">
+                  <img
+                    referrerPolicy="no-referrer"
+                    src={checkoutPool.hostAvatar}
+                    alt={checkoutPool.hostName}
+                    className="w-9 h-9 rounded-full object-cover border border-slate-150"
+                  />
+                  <div>
+                    <span className="text-xs font-bold block text-slate-800">{checkoutPool.hostName} (Host)</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-mono">{checkoutPool.hostMajor}</span>
+                  </div>
+                </div>
+
+                {/* Route */}
+                <div className="space-y-1 text-xs text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#175D39]"></span>
+                    <span className="font-semibold">Pickup: <span className="font-bold text-slate-800">{getStopName(checkoutPool.pickupId)}</span></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span className="font-semibold">Destination: <span className="font-bold text-slate-800">{getStopName(checkoutPool.dropoffId)}</span></span>
+                  </div>
+                </div>
+
+                {/* Fare Split estimation */}
+                <div className="flex justify-between items-center pt-3 border-t border-slate-200/60">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Est. Split Price</span>
+                    <span className="text-lg font-mono font-black text-[#175D39]">
+                      {currencySymbol}{Math.round((checkoutPool.vehicleType === 'Car' ? 350 : checkoutPool.vehicleType === 'Keke' ? 200 : 100) / (checkoutPool.currentRiders.length + 1))}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Current Members</span>
+                    <span className="text-xs font-bold text-slate-800">
+                      {checkoutPool.currentRiders.length} of {checkoutPool.maxRiders}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress visual countdown */}
+              <div className="h-1 bg-slate-100 rounded-full overflow-hidden mb-6">
+                <motion.div 
+                  className="h-full bg-amber-500" 
+                  initial={{ width: '100%' }}
+                  animate={{ width: `${(checkoutTimer / 30) * 100}%` }}
+                  transition={{ ease: 'linear', duration: 1 }}
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutPool(null)}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Cancel Join
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleJoinPool(checkoutPool);
+                    setCheckoutPool(null);
+                  }}
+                  className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Confirm & Join
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

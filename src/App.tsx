@@ -13,28 +13,6 @@ import {
   INITIAL_NOTIFICATIONS, 
   INITIAL_TRANSACTIONS 
 } from './data';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  onAuthStateChanged, 
-  signOut, 
-  deleteUser 
-} from 'firebase/auth';
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  collection, 
-  query, 
-  where, 
-  addDoc,
-  getDocs,
-  writeBatch
-} from 'firebase/firestore';
-import { auth, db } from './firebase';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<{ email: string; name: string; uid?: string } | null>(null);
@@ -52,139 +30,114 @@ export default function App() {
 
   // Helper to get active user ID
   const getActiveUid = () => {
-    return auth.currentUser?.uid || currentUser?.uid;
+    return currentUser?.uid;
+  };
+
+  const loadUserSpecificData = (uid: string, role: UserRole) => {
+    // 1. Profile
+    if (role === 'student') {
+      const stored = localStorage.getItem(`campusride_user_profile_${uid}`);
+      if (stored) {
+        setUserProfile(JSON.parse(stored));
+      } else {
+        const defaultProfile = { 
+          ...INITIAL_STUDENT_PROFILE, 
+          id: uid, 
+          walletBalance: 2500,
+          name: currentUser?.name || 'Student Commuter',
+          email: currentUser?.email || 'student@campusride.edu'
+        };
+        localStorage.setItem(`campusride_user_profile_${uid}`, JSON.stringify(defaultProfile));
+        setUserProfile(defaultProfile);
+      }
+    } else if (role === 'driver') {
+      const stored = localStorage.getItem(`campusride_driver_profile_${uid}`);
+      if (stored) {
+        setDriverProfile(JSON.parse(stored));
+      } else {
+        const defaultProfile = { 
+          ...INITIAL_DRIVER_PROFILE, 
+          id: uid,
+          name: currentUser?.name || 'Driver Partner',
+          vehicle: 'Toyota Corolla (Silver) • RUN-918-LA',
+          status: 'Offline'
+        };
+        localStorage.setItem(`campusride_driver_profile_${uid}`, JSON.stringify(defaultProfile));
+        setDriverProfile(defaultProfile);
+      }
+    }
+
+    // 2. Notifications
+    const storedNotifs = localStorage.getItem(`campusride_notifications_${uid}`);
+    if (storedNotifs) {
+      setNotifications(JSON.parse(storedNotifs));
+    } else {
+      localStorage.setItem(`campusride_notifications_${uid}`, JSON.stringify(INITIAL_NOTIFICATIONS));
+      setNotifications(INITIAL_NOTIFICATIONS);
+    }
+
+    // 3. Transactions
+    const storedTxns = localStorage.getItem(`campusride_transactions_${uid}`);
+    if (storedTxns) {
+      setTransactions(JSON.parse(storedTxns));
+    } else {
+      localStorage.setItem(`campusride_transactions_${uid}`, JSON.stringify(INITIAL_TRANSACTIONS));
+      setTransactions(INITIAL_TRANSACTIONS);
+    }
+
+    // 4. Active Ride
+    const storedRide = localStorage.getItem(`campusride_active_ride_${uid}`);
+    if (storedRide) {
+      setActiveRide(JSON.parse(storedRide));
+    } else {
+      setActiveRide(null);
+    }
+
+    // 5. Selected School ID
+    const schoolId = localStorage.getItem(`campusride_selected_school_${uid}`);
+    setSelectedSchoolId(schoolId);
   };
 
   // Authentication State Listener & Syncer
   useEffect(() => {
-    let unsubActiveListeners = () => {};
-
-    const setupListeners = (uid: string, role: UserRole, email: string, name: string) => {
-      // Clean up previous listeners
-      unsubActiveListeners();
-
-      let foundRole = role;
-
-      // Set state
-      setCurrentUser({ email, name, uid });
-      setCurrentRole(foundRole);
-
-      // Listen for real-time changes
-      let unsubProfile = () => {};
-      if (foundRole === 'student') {
-        unsubProfile = onSnapshot(doc(db, "users", uid), (snap) => {
-          if (snap.exists()) {
-            setUserProfile(snap.data() as UserProfile);
-            if (snap.data().selectedSchoolId) {
-              setSelectedSchoolId(snap.data().selectedSchoolId);
-            }
-          }
-        });
-      } else if (foundRole === 'driver') {
-        unsubProfile = onSnapshot(doc(db, "drivers", uid), (snap) => {
-          if (snap.exists()) {
-            setDriverProfile(snap.data() as DriverState);
-            if (snap.data().selectedSchoolId) {
-              setSelectedSchoolId(snap.data().selectedSchoolId);
-            }
-          }
-        });
-      }
-
-      // Listen for notifications
-      const qNotifs = query(collection(db, "notifications"), where("userId", "==", uid));
-      const unsubNotifs = onSnapshot(qNotifs, (snap) => {
-        const notifsList: AppNotification[] = [];
-        snap.forEach((d) => {
-          notifsList.push({ id: d.id, ...d.data() } as AppNotification);
-        });
-        setNotifications(notifsList.length > 0 ? notifsList : INITIAL_NOTIFICATIONS);
-      });
-
-      // Listen for transactions
-      const qTxns = query(collection(db, "transactions"), where("userId", "==", uid));
-      const unsubTxns = onSnapshot(qTxns, (snap) => {
-        const txnsList: Transaction[] = [];
-        snap.forEach((d) => {
-          txnsList.push({ id: d.id, ...d.data() } as Transaction);
-        });
-        setTransactions(txnsList.length > 0 ? txnsList : INITIAL_TRANSACTIONS);
-      });
-
-      // Listen for active rides
-      const qRides = query(
-        collection(db, "rides"),
-        where(foundRole === 'student' ? "passengerId" : "driverId", "==", uid)
-      );
-      const unsubRides = onSnapshot(qRides, (snap) => {
-        let active: RideRequest | null = null;
-        snap.forEach((d) => {
-          const ride = d.data() as RideRequest;
-          if (ride.status !== 'completed' && ride.status !== 'canceled') {
-            active = { id: d.id, ...ride } as RideRequest;
-          }
-        });
-        setActiveRide(active);
-      });
-
-      unsubActiveListeners = () => {
-        unsubProfile();
-        unsubNotifs();
-        unsubTxns();
-        unsubRides();
-      };
-    };
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Find user profile
-        let foundRole: UserRole = 'student';
-        let profileData: any = null;
-
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          foundRole = 'student';
-          profileData = userSnap.data();
-        } else {
-          const driverRef = doc(db, "drivers", user.uid);
-          const driverSnap = await getDoc(driverRef);
-          if (driverSnap.exists()) {
-            foundRole = 'driver';
-            profileData = driverSnap.data();
-          } else if (user.email === 'admin@campusride.edu' || user.email?.includes('admin')) {
-            foundRole = 'admin';
-          }
+    const customSessionStr = localStorage.getItem('campusride_custom_session');
+    if (customSessionStr) {
+      try {
+        const session = JSON.parse(customSessionStr);
+        setCurrentUser({ email: session.email, name: session.name, uid: session.uid });
+        setCurrentRole(session.role);
+        
+        // Load user profiles
+        // We defer loadUserSpecificData slightly or run it directly
+        // Define a fast lookup for profiles
+        const uid = session.uid;
+        const role = session.role;
+        if (role === 'student') {
+          const stored = localStorage.getItem(`campusride_user_profile_${uid}`);
+          setUserProfile(stored ? JSON.parse(stored) : { ...INITIAL_STUDENT_PROFILE, id: uid, walletBalance: 2500, name: session.name, email: session.email });
+        } else if (role === 'driver') {
+          const stored = localStorage.getItem(`campusride_driver_profile_${uid}`);
+          setDriverProfile(stored ? JSON.parse(stored) : { ...INITIAL_DRIVER_PROFILE, id: uid, name: session.name, vehicle: 'Toyota Corolla (Silver) • RUN-918-LA' });
         }
+        
+        const storedNotifs = localStorage.getItem(`campusride_notifications_${uid}`);
+        setNotifications(storedNotifs ? JSON.parse(storedNotifs) : INITIAL_NOTIFICATIONS);
 
-        setupListeners(user.uid, foundRole, user.email || '', profileData?.name || user.displayName || 'App User');
-        setLoadingAuth(false);
-      } else {
-        // Check local storage custom session fallback
-        const customSessionStr = localStorage.getItem('campusride_custom_session');
-        if (customSessionStr) {
-          try {
-            const session = JSON.parse(customSessionStr);
-            setupListeners(session.uid, session.role, session.email, session.name);
-          } catch (e) {
-            console.error("Failed to parse custom session", e);
-            setCurrentUser(null);
-            setSelectedSchoolId(null);
-            setActiveRide(null);
-          }
-        } else {
-          setCurrentUser(null);
-          setSelectedSchoolId(null);
-          setActiveRide(null);
-        }
-        setLoadingAuth(false);
+        const storedTxns = localStorage.getItem(`campusride_transactions_${uid}`);
+        setTransactions(storedTxns ? JSON.parse(storedTxns) : INITIAL_TRANSACTIONS);
+
+        const storedRide = localStorage.getItem(`campusride_active_ride_${uid}`);
+        setActiveRide(storedRide ? JSON.parse(storedRide) : null);
+
+        const schoolId = localStorage.getItem(`campusride_selected_school_${uid}`);
+        setSelectedSchoolId(schoolId);
+
+      } catch (e) {
+        console.error("Failed to parse custom session", e);
+        localStorage.removeItem('campusride_custom_session');
       }
-    });
-
-    return () => {
-      unsubscribeAuth();
-      unsubActiveListeners();
-    };
+    }
+    setLoadingAuth(false);
   }, []);
 
   // Authentication Callbacks
@@ -192,67 +145,43 @@ export default function App() {
     if (!password) {
       throw new Error("Password is required.");
     }
-    try {
-      // First, try standard Firebase Auth
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      const userRef = doc(db, role === 'student' ? "users" : "drivers", user.uid);
-      const snap = await getDoc(userRef);
-      if (!snap.exists()) {
-        const defaultName = email.split('@')[0];
-        const formattedName = defaultName.charAt(0).toUpperCase() + defaultName.slice(1);
-        if (role === 'student') {
-          await setDoc(userRef, {
-            ...INITIAL_STUDENT_PROFILE,
-            email,
-            name: formattedName,
-            role,
-            idNumber: 'RUN/2022/10432',
-            walletBalance: 25.00,
-            createdAt: new Date().toISOString()
-          });
-        } else if (role === 'driver') {
-          await setDoc(userRef, {
-            ...INITIAL_DRIVER_PROFILE,
-            email,
-            name: formattedName,
-            role,
-            vehicle: 'Toyota Camry (Silver) • 4P-928X',
-            todayEarnings: 0,
-            completedTripsCount: 0,
-            status: 'Idle',
-            createdAt: new Date().toISOString()
-          });
-        }
-      }
-    } catch (error: any) {
-      console.warn("Login Standard Auth Failed, attempting custom fallback:", error);
-      if (error.code === 'auth/operation-not-allowed' || error.message?.includes('operation-not-allowed') || error.message?.includes('disabled')) {
-        // Query Firestore custom_auth
-        const customAuthSnap = await getDoc(doc(db, "custom_auth", email.toLowerCase().trim()));
-        if (customAuthSnap.exists()) {
-          const authData = customAuthSnap.data();
-          if (authData.password === password) {
-            // Correct password! Store custom session
-            localStorage.setItem('campusride_custom_session', JSON.stringify({
-              email: authData.email,
-              uid: authData.uid,
-              role: authData.role,
-              name: authData.name
-            }));
-            
-            setCurrentUser({ email: authData.email, name: authData.name, uid: authData.uid });
-            setCurrentRole(authData.role);
-          } else {
-            throw new Error("Incorrect password for this user.");
-          }
-        } else {
-          throw new Error("No account found with this email in custom database mode. Please sign up first.");
-        }
+    
+    const emailKey = email.toLowerCase().trim();
+    const storedAuthStr = localStorage.getItem('campusride_auth');
+    const authData = storedAuthStr ? JSON.parse(storedAuthStr) : {};
+
+    // Auto-seed admin if it matches and isn't present
+    if (emailKey === 'admin@campusride.edu' && !authData[emailKey]) {
+      authData[emailKey] = {
+        email: 'admin@campusride.edu',
+        password: password, // Accept inputted password or Admin123!
+        uid: 'admin-uid-101',
+        role: 'admin',
+        name: 'Sarah Jenkins'
+      };
+      localStorage.setItem('campusride_auth', JSON.stringify(authData));
+    }
+
+    const userEntry = authData[emailKey];
+    if (userEntry) {
+      if (userEntry.password === password) {
+        const session = {
+          email: userEntry.email,
+          uid: userEntry.uid,
+          role: role, // Log in with selected role role
+          name: userEntry.name
+        };
+        localStorage.setItem('campusride_custom_session', JSON.stringify(session));
+        setCurrentUser({ email: session.email, name: session.name, uid: session.uid });
+        setCurrentRole(role);
+        
+        // Load data
+        loadUserSpecificData(session.uid, role);
       } else {
-        throw error;
+        throw new Error("Incorrect password for this user.");
       }
+    } else {
+      throw new Error("No account found with this email. Please sign up first.");
     }
   };
 
@@ -267,188 +196,129 @@ export default function App() {
     if (!password) {
       throw new Error("Password is required for registration.");
     }
-    try {
-      // First, try standard Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+    
+    const emailKey = email.toLowerCase().trim();
+    const storedAuthStr = localStorage.getItem('campusride_auth');
+    const authData = storedAuthStr ? JSON.parse(storedAuthStr) : {};
 
-      const profileData: any = {
-        email,
-        name,
-        role,
-        createdAt: new Date().toISOString()
-      };
-
-      if (role === 'student') {
-        const merged = {
-          ...INITIAL_STUDENT_PROFILE,
-          ...profileData,
-          idNumber: idNumber || 'RUN/2022/10432',
-          walletBalance: 25.00, // starting balance gift
-          tripsThisWeek: 0,
-          carpoolRides: 0,
-          savedThisMonth: 0,
-        };
-        await setDoc(doc(db, "users", user.uid), merged);
-      } else if (role === 'driver') {
-        const vehicleDetails = driverInfo 
-          ? `${driverInfo.carBrand} (${driverInfo.carType.toUpperCase()}) • ${driverInfo.plateNumber}${driverInfo.vehicleId ? ` [ID: ${driverInfo.vehicleId}]` : ''}` 
-          : 'Toyota Camry (Silver) • 4P-928X';
-
-        const merged = {
-          ...INITIAL_DRIVER_PROFILE,
-          ...profileData,
-          vehicle: vehicleDetails,
-          todayEarnings: 0,
-          completedTripsCount: 0,
-          status: 'Idle',
-        };
-        await setDoc(doc(db, "drivers", user.uid), merged);
-      }
-
-      // Create a welcome notification in Firestore
-      const welcomeNotif = {
-        userId: user.uid,
-        id: `m-notif-${Date.now()}`,
-        title: 'Welcome to CampusRide!',
-        message: 'Your account has been successfully created and linked to the registrar directory.',
-        date: 'Jun 19, 2026',
-        time: '11:15 AM',
-        isRead: false,
-        type: 'success',
-        createdAt: new Date().toISOString()
-      };
-      await addDoc(collection(db, "notifications"), welcomeNotif);
-
-    } catch (error: any) {
-      console.warn("SignUp Standard Auth Failed, attempting custom fallback:", error);
-      if (error.code === 'auth/operation-not-allowed' || error.message?.includes('operation-not-allowed') || error.message?.includes('disabled')) {
-        const customUid = `cust-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Save to custom credentials collection in Firestore
-        const customAuthRef = doc(db, "custom_auth", email.toLowerCase().trim());
-        await setDoc(customAuthRef, {
-          email: email.toLowerCase().trim(),
-          password: password,
-          uid: customUid,
-          role,
-          name,
-          createdAt: new Date().toISOString()
-        });
-
-        const profileData: any = {
-          email,
-          name,
-          role,
-          createdAt: new Date().toISOString()
-        };
-
-        if (role === 'student') {
-          const merged = {
-            ...INITIAL_STUDENT_PROFILE,
-            ...profileData,
-            idNumber: idNumber || 'RUN/2022/10432',
-            walletBalance: 25.00, // starting balance gift
-            tripsThisWeek: 0,
-            carpoolRides: 0,
-            savedThisMonth: 0,
-          };
-          await setDoc(doc(db, "users", customUid), merged);
-        } else if (role === 'driver') {
-          const vehicleDetails = driverInfo 
-            ? `${driverInfo.carBrand} (${driverInfo.carType.toUpperCase()}) • ${driverInfo.plateNumber}${driverInfo.vehicleId ? ` [ID: ${driverInfo.vehicleId}]` : ''}` 
-            : 'Toyota Camry (Silver) • 4P-928X';
-
-          const merged = {
-            ...INITIAL_DRIVER_PROFILE,
-            ...profileData,
-            vehicle: vehicleDetails,
-            todayEarnings: 0,
-            completedTripsCount: 0,
-            status: 'Idle',
-          };
-          await setDoc(doc(db, "drivers", customUid), merged);
-        }
-
-        const welcomeNotif = {
-          userId: customUid,
-          id: `m-notif-${Date.now()}`,
-          title: 'Welcome to CampusRide (Local Database Mode)!',
-          message: 'Your account has been successfully created and linked to the registrar directory using our secure database fallback.',
-          date: 'Jun 19, 2026',
-          time: '11:15 AM',
-          isRead: false,
-          type: 'success',
-          createdAt: new Date().toISOString()
-        };
-        await addDoc(collection(db, "notifications"), welcomeNotif);
-
-        // Store custom session
-        localStorage.setItem('campusride_custom_session', JSON.stringify({
-          email: email.toLowerCase().trim(),
-          uid: customUid,
-          role,
-          name
-        }));
-
-        // Manually trigger local login UI change
-        setCurrentUser({ email, name, uid: customUid });
-        setCurrentRole(role);
-      } else {
-        throw error;
-      }
+    if (authData[emailKey]) {
+      throw new Error("An account with this email already exists.");
     }
+
+    const newUid = `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    // Save authentication details locally
+    authData[emailKey] = {
+      email: emailKey,
+      password: password,
+      uid: newUid,
+      role: role,
+      name: name
+    };
+    localStorage.setItem('campusride_auth', JSON.stringify(authData));
+
+    // Save profile details locally
+    const profileData: any = {
+      id: newUid,
+      email,
+      name,
+      role,
+      createdAt: new Date().toISOString()
+    };
+
+    if (role === 'student') {
+      const studentProfile = {
+        ...INITIAL_STUDENT_PROFILE,
+        ...profileData,
+        idNumber: idNumber || 'RUN/2022/10432',
+        walletBalance: 2500, // starting balance gift ₦2500
+        tripsThisWeek: 0,
+        carpoolRides: 0,
+        savedThisMonth: 0,
+      };
+      localStorage.setItem(`campusride_user_profile_${newUid}`, JSON.stringify(studentProfile));
+      setUserProfile(studentProfile);
+    } else if (role === 'driver') {
+      const vehicleDetails = driverInfo 
+        ? `${driverInfo.carBrand} (${driverInfo.carType.toUpperCase()}) • ${driverInfo.plateNumber}${driverInfo.vehicleId ? ` [ID: ${driverInfo.vehicleId}]` : ''}` 
+        : 'Toyota Camry (Silver) • 4P-928X';
+
+      const dProfile = {
+        ...INITIAL_DRIVER_PROFILE,
+        ...profileData,
+        vehicle: vehicleDetails,
+        todayEarnings: 0,
+        completedTripsCount: 0,
+        status: 'Idle',
+      };
+      localStorage.setItem(`campusride_driver_profile_${newUid}`, JSON.stringify(dProfile));
+      setDriverProfile(dProfile);
+    }
+
+    // Add Welcome notification
+    const welcomeNotif: AppNotification = {
+      id: `m-notif-${Date.now()}`,
+      title: 'Welcome to CampusRide!',
+      message: 'Your account has been successfully created and linked to the registrar directory.',
+      date: 'Today',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isRead: false,
+      type: 'success',
+    };
+    const notifs = [welcomeNotif];
+    localStorage.setItem(`campusride_notifications_${newUid}`, JSON.stringify(notifs));
+    setNotifications(notifs);
+
+    // Initial Empty Transactions
+    localStorage.setItem(`campusride_transactions_${newUid}`, JSON.stringify([]));
+    setTransactions([]);
+
+    // Store custom session
+    const session = {
+      email: emailKey,
+      uid: newUid,
+      role,
+      name
+    };
+    localStorage.setItem('campusride_custom_session', JSON.stringify(session));
+    setCurrentUser({ email, name, uid: newUid });
+    setCurrentRole(role);
   };
 
   const handleLogout = async () => {
     localStorage.removeItem('campusride_custom_session');
-    await signOut(auth);
     setCurrentUser(null);
     setSelectedSchoolId(null);
     setActiveRide(null);
   };
 
   const handleDeleteAccount = async () => {
-    const customSessionStr = localStorage.getItem('campusride_custom_session');
-    if (customSessionStr) {
-      try {
-        const session = JSON.parse(customSessionStr);
-        if (currentRole === 'student') {
-          await deleteDoc(doc(db, "users", session.uid));
-        } else if (currentRole === 'driver') {
-          await deleteDoc(doc(db, "drivers", session.uid));
-        }
-        await deleteDoc(doc(db, "custom_auth", session.email));
-        localStorage.removeItem('campusride_custom_session');
-        setCurrentUser(null);
-        setSelectedSchoolId(null);
-        setActiveRide(null);
-        alert('Your student transit account has been successfully deleted. Thank you for using CampusRide.');
-      } catch (error: any) {
-        console.error("Delete account error:", error);
-        alert(`Could not delete account: ${error.message}`);
-      }
-    } else {
-      const user = auth.currentUser;
-      if (user) {
-        try {
-          if (currentRole === 'student') {
-            await deleteDoc(doc(db, "users", user.uid));
-          } else if (currentRole === 'driver') {
-            await deleteDoc(doc(db, "drivers", user.uid));
-          }
-          await deleteUser(user);
-          alert('Your student transit account has been successfully deleted. Thank you for using CampusRide.');
-        } catch (error: any) {
-          console.error("Delete account error:", error);
-          if (error.code === 'auth/requires-recent-login') {
-            alert('Please re-authenticate and log in again to delete your account.');
-            await signOut(auth);
-          } else {
-            alert(`Could not delete account: ${error.message}`);
-          }
+    const uid = getActiveUid();
+    if (uid) {
+      // Find and remove auth entry
+      const emailKey = currentUser?.email.toLowerCase().trim();
+      if (emailKey) {
+        const storedAuthStr = localStorage.getItem('campusride_auth');
+        if (storedAuthStr) {
+          const authData = JSON.parse(storedAuthStr);
+          delete authData[emailKey];
+          localStorage.setItem('campusride_auth', JSON.stringify(authData));
         }
       }
+
+      // Remove specific data
+      localStorage.removeItem(`campusride_user_profile_${uid}`);
+      localStorage.removeItem(`campusride_driver_profile_${uid}`);
+      localStorage.removeItem(`campusride_notifications_${uid}`);
+      localStorage.removeItem(`campusride_transactions_${uid}`);
+      localStorage.removeItem(`campusride_active_ride_${uid}`);
+      localStorage.removeItem(`campusride_selected_school_${uid}`);
+      
+      localStorage.removeItem('campusride_custom_session');
+      setCurrentUser(null);
+      setSelectedSchoolId(null);
+      setActiveRide(null);
+      alert('Your student transit account has been successfully deleted. Thank you for using CampusRide.');
     }
   };
 
@@ -456,75 +326,100 @@ export default function App() {
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
     const uid = getActiveUid();
     if (uid) {
-      await updateDoc(doc(db, "users", uid), updates as any);
+      const newProfile = { ...userProfile, ...updates };
+      setUserProfile(newProfile);
+      localStorage.setItem(`campusride_user_profile_${uid}`, JSON.stringify(newProfile));
     }
   };
 
   const handleUpdateDriverProfile = async (updates: Partial<DriverState>) => {
     const uid = getActiveUid();
     if (uid) {
-      await updateDoc(doc(db, "drivers", uid), updates as any);
+      const newProfile = { ...driverProfile, ...updates };
+      setDriverProfile(newProfile as DriverState);
+      localStorage.setItem(`campusride_driver_profile_${uid}`, JSON.stringify(newProfile));
     }
   };
 
   const handleAddTransaction = async (txn: Transaction) => {
     const uid = getActiveUid();
     if (uid) {
-      await addDoc(collection(db, "transactions"), {
-        ...txn,
-        userId: uid,
-        createdAt: new Date().toISOString()
-      });
+      const list = [txn, ...transactions];
+      setTransactions(list);
+      localStorage.setItem(`campusride_transactions_${uid}`, JSON.stringify(list));
     }
   };
 
   const handleAddNotification = async (notif: AppNotification) => {
     const uid = getActiveUid();
     if (uid) {
-      await addDoc(collection(db, "notifications"), {
-        ...notif,
-        userId: uid,
-        createdAt: new Date().toISOString()
-      });
+      const list = [notif, ...notifications];
+      setNotifications(list);
+      localStorage.setItem(`campusride_notifications_${uid}`, JSON.stringify(list));
     }
   };
 
   const handleUpdateRide = async (ride: RideRequest | null) => {
-    if (ride) {
-      await setDoc(doc(db, "rides", ride.id), {
-        ...ride,
-        selectedSchoolId: selectedSchoolId,
-        createdAt: new Date().toISOString()
-      });
-    } else if (activeRide) {
-      await updateDoc(doc(db, "rides", activeRide.id), { status: 'completed' });
+    const uid = getActiveUid();
+    if (uid) {
+      if (ride) {
+        setActiveRide(ride);
+        localStorage.setItem(`campusride_active_ride_${uid}`, JSON.stringify(ride));
+        localStorage.setItem('campusride_global_active_ride', JSON.stringify(ride));
+      } else {
+        setActiveRide(null);
+        localStorage.removeItem(`campusride_active_ride_${uid}`);
+        localStorage.removeItem('campusride_global_active_ride');
+      }
+    } else {
+      if (ride) {
+        setActiveRide(ride);
+        localStorage.setItem('campusride_global_active_ride', JSON.stringify(ride));
+      } else {
+        setActiveRide(null);
+        localStorage.removeItem('campusride_global_active_ride');
+      }
     }
   };
 
   const handleMarkNotificationsRead = async () => {
     const uid = getActiveUid();
     if (uid) {
-      const q = query(collection(db, "notifications"), where("userId", "==", uid), where("isRead", "==", false));
-      const snap = await getDocs(q);
-      const batch = writeBatch(db);
-      snap.forEach((d) => {
-        batch.update(doc(db, "notifications", d.id), { isRead: true });
-      });
-      await batch.commit();
+      const updated = notifications.map(n => ({ ...n, isRead: true }));
+      setNotifications(updated);
+      localStorage.setItem(`campusride_notifications_${uid}`, JSON.stringify(updated));
+    }
+  };
+
+  const handleSelectSchool = (schoolId: string | null) => {
+    setSelectedSchoolId(schoolId);
+    const uid = getActiveUid();
+    if (uid && schoolId) {
+      localStorage.setItem(`campusride_selected_school_${uid}`, schoolId);
     }
   };
 
   const handleChangeRole = (role: UserRole) => {
     setCurrentRole(role);
+    const uid = getActiveUid();
+    if (uid) {
+      const customSessionStr = localStorage.getItem('campusride_custom_session');
+      if (customSessionStr) {
+        const session = JSON.parse(customSessionStr);
+        session.role = role;
+        localStorage.setItem('campusride_custom_session', JSON.stringify(session));
+      }
+      loadUserSpecificData(uid, role);
+    }
   };
 
-  // 1. If checking Firebase auth cache, show a loader
+  // 1. If checking cached auth, show loader
   if (loadingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff]">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm font-semibold text-gray-500 animate-pulse">Syncing CampusRide with Firebase...</p>
+          <div className="w-12 h-12 border-4 border-[#175D39] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm font-semibold text-gray-500 animate-pulse">Syncing CampusRide locally...</p>
         </div>
       </div>
     );
@@ -537,7 +432,7 @@ export default function App() {
 
   // School Selection Screen after login
   if (!selectedSchoolId) {
-    return <SchoolSelection onSelectSchool={setSelectedSchoolId} onBack={handleLogout} />;
+    return <SchoolSelection onSelectSchool={handleSelectSchool} onBack={handleLogout} />;
   }
 
   // Determine which visual details are supplied to sidebar
@@ -551,7 +446,7 @@ export default function App() {
   };
 
   return (
-    <div id="application-layout-context" className="flex flex-col md:flex-row min-h-screen bg-[#f8f9ff] text-[#0b1c30] font-sans antialiased overflow-hidden">
+    <div id="application-layout-context" className="flex flex-col md:flex-row min-h-screen bg-[#F2F2F2] text-[#175D39] font-sans antialiased overflow-hidden">
       
       {/* Sidebar Navigation */}
       <Sidebar 

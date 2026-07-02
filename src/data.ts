@@ -84,10 +84,10 @@ export const ADVERT_CARDS = [
 ];
 
 export const SYSTEM_KPIS = {
-  activeRides: 142,
-  idleDrivers: 18,
-  revenueToday: 4280,
-  reportedIncidents: 2,
+  activeRides: 0,
+  idleDrivers: 0,
+  revenueToday: 0,
+  reportedIncidents: 0,
 };
 
 export const HOTLINK_MAP_STUDENT = 'https://lh3.googleusercontent.com/aida-public/AB6AXuBFf8Ynl_a5V5MjIUSy7jPFq6l93wbIfzj-exNibt_LXLUh8GWNuh6KFAFWDpEXHOfiQF7pQanp0nvupSTAhFyJbZ6E9MZSPYwROimnSHmxAWlwq42FLTHUZSvCOvDwYSwowjvtr3yw86A2A_Zf5oQWW54K32vb3_6DoBUtR7nySxsmx9iwMwY9IHWFatEpt86iaCiizyjVEAKliRZJVanLhGSvehnH_F0s9lbkiokfvqH0LL8iXGwZUA2F_u3Brjb9erGTOXcGyVA';
