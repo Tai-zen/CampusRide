@@ -42,7 +42,7 @@ export interface RideRequest {
   dropoff: string;
   status: RideStatus;
   vehicleType: 'Car' | 'Keke' | 'Shuttle';
-  verifyPeer?: boolean;
+  verifyPeer: boolean;
   driverId?: string;
   driverName?: string;
   driverAvatar?: string;
@@ -52,10 +52,6 @@ export interface RideRequest {
   etaMinutes: number;
   date: string;
   time: string;
-  createdAt?: number;
-  paymentMethod?: 'cash' | 'transfer';
-  paymentConfirmedByRider?: boolean;
-  paymentValidatedByDriver?: boolean;
 }
 
 export type TransactionType = 'charge' | 'reload';

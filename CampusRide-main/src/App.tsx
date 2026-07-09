@@ -18,7 +18,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<{ email: string; name: string; uid?: string } | null>(null);
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState<UserRole>('student');
-  const [activeView, setActiveView] = useState<string>('dashboard');
+  const [activeView, setActiveView] = useState<string>('booking');
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
   
   // High fidelity application databases in memory
@@ -115,13 +115,9 @@ export default function App() {
         if (role === 'student') {
           const stored = localStorage.getItem(`campusride_user_profile_${uid}`);
           setUserProfile(stored ? JSON.parse(stored) : { ...INITIAL_STUDENT_PROFILE, id: uid, walletBalance: 2500, name: session.name, email: session.email });
-          setActiveView('dashboard');
         } else if (role === 'driver') {
           const stored = localStorage.getItem(`campusride_driver_profile_${uid}`);
           setDriverProfile(stored ? JSON.parse(stored) : { ...INITIAL_DRIVER_PROFILE, id: uid, name: session.name, vehicle: 'Toyota Corolla (Silver) • RUN-918-LA' });
-          setActiveView('driver_dashboard');
-        } else if (role === 'admin') {
-          setActiveView('admin_operations');
         }
         
         const storedNotifs = localStorage.getItem(`campusride_notifications_${uid}`);
@@ -145,114 +141,47 @@ export default function App() {
   }, []);
 
   // Authentication Callbacks
-  const handleLogin = async (role: UserRole, loginId: string, password?: string) => {
+  const handleLogin = async (role: UserRole, email: string, password?: string) => {
     if (!password) {
       throw new Error("Password is required.");
     }
     
-    const idKey = loginId.toLowerCase().trim();
+    const emailKey = email.toLowerCase().trim();
     const storedAuthStr = localStorage.getItem('campusride_auth');
     const authData = storedAuthStr ? JSON.parse(storedAuthStr) : {};
 
     // Auto-seed admin if it matches and isn't present
-    if ((idKey === 'admin@campusride.edu' || idKey === 'adm-2026-0001') && !authData['admin@campusride.edu']) {
-      authData['admin@campusride.edu'] = {
+    if (emailKey === 'admin@campusride.edu' && !authData[emailKey]) {
+      authData[emailKey] = {
         email: 'admin@campusride.edu',
         password: password, // Accept inputted password or Admin123!
         uid: 'admin-uid-101',
         role: 'admin',
-        name: 'Sarah Jenkins',
-        idNumber: 'ADM-2026-0001'
+        name: 'Sarah Jenkins'
       };
       localStorage.setItem('campusride_auth', JSON.stringify(authData));
     }
 
-    // Search for user entry either directly by email or by looking up matching ID numbers
-    let userEntry = authData[idKey];
-    if (!userEntry) {
-      const foundEntry = Object.entries(authData).find(([email, entry]: [string, any]) => {
-        if (entry.idNumber && entry.idNumber.toLowerCase().trim() === idKey) {
-          return true;
-        }
-        if (entry.vehicleId && entry.vehicleId.toLowerCase().trim() === idKey) {
-          return true;
-        }
-        
-        const uid = entry.uid;
-        const studentProfileStr = localStorage.getItem(`campusride_user_profile_${uid}`);
-        if (studentProfileStr) {
-          const profile = JSON.parse(studentProfileStr);
-          if (profile.idNumber && profile.idNumber.toLowerCase().trim() === idKey) {
-            return true;
-          }
-        }
-        const driverProfileStr = localStorage.getItem(`campusride_driver_profile_${uid}`);
-        if (driverProfileStr) {
-          const profile = JSON.parse(driverProfileStr);
-          if (profile.idNumber && profile.idNumber.toLowerCase().trim() === idKey) {
-            return true;
-          }
-          if (profile.vehicle && profile.vehicle.toLowerCase().includes(idKey)) {
-            return true;
-          }
-          const plate = profile.vehicle ? (profile.vehicle.includes(' • ') ? profile.vehicle.split(' • ')[1] : '') : '';
-          if (plate && plate.toLowerCase().trim() === idKey) {
-            return true;
-          }
-        }
-        return false;
-      });
-
-      if (foundEntry) {
-        userEntry = foundEntry[1];
-      }
-    }
-
+    const userEntry = authData[emailKey];
     if (userEntry) {
       if (userEntry.password === password) {
-        // Enforce role check: users must select appropriate role before logging in.
-        // Admins can log in using either selection (student or driver).
-        let targetRole = role;
-        if (userEntry.role === 'admin') {
-          targetRole = 'admin';
-        } else if (userEntry.role === 'student') {
-          if (role !== 'student') {
-            throw new Error("This account is registered as a Rider. Please select the Rider (Student) role to log in.");
-          }
-        } else if (userEntry.role === 'driver') {
-          if (role !== 'driver') {
-            throw new Error("This account is registered as a Driver. Please select the Driver role to log in.");
-          }
-          if (userEntry.isApproved === false) {
-            throw new Error("Your driver profile is currently pending administrative verification and approval. Once verified, you will receive an email confirmation and can log in.");
-          }
-        }
-
         const session = {
           email: userEntry.email,
           uid: userEntry.uid,
-          role: targetRole, // Log in with validated role
+          role: role, // Log in with selected role role
           name: userEntry.name
         };
         localStorage.setItem('campusride_custom_session', JSON.stringify(session));
         setCurrentUser({ email: session.email, name: session.name, uid: session.uid });
-        setCurrentRole(targetRole);
-        
-        if (targetRole === 'student') {
-          setActiveView('dashboard');
-        } else if (targetRole === 'driver') {
-          setActiveView('driver_dashboard');
-        } else {
-          setActiveView('admin_operations');
-        }
+        setCurrentRole(role);
         
         // Load data
-        loadUserSpecificData(session.uid, targetRole);
+        loadUserSpecificData(session.uid, role);
       } else {
         throw new Error("Incorrect password for this user.");
       }
     } else {
-      throw new Error(`No account found with this ID Number / Email: "${loginId}". Please sign up first.`);
+      throw new Error("No account found with this email. Please sign up first.");
     }
   };
 
@@ -284,9 +213,7 @@ export default function App() {
       password: password,
       uid: newUid,
       role: role,
-      name: name,
-      idNumber: role === 'student' ? (idNumber || 'RUN/2022/10432') : (driverInfo?.vehicleId || driverInfo?.plateNumber || 'DRV-2024-8839'),
-      isApproved: role === 'driver' ? false : true
+      name: name
     };
     localStorage.setItem('campusride_auth', JSON.stringify(authData));
 
@@ -322,39 +249,17 @@ export default function App() {
         vehicle: vehicleDetails,
         todayEarnings: 0,
         completedTripsCount: 0,
-        status: 'Offline',
-        isApproved: false,
-        carBrand: driverInfo?.carBrand || 'Toyota Camry',
-        plateNumber: driverInfo?.plateNumber || '4P-928X',
-        carType: driverInfo?.carType || 'car',
-        vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
+        status: 'Idle',
       };
       localStorage.setItem(`campusride_driver_profile_${newUid}`, JSON.stringify(dProfile));
       setDriverProfile(dProfile);
-
-      // Save to pending review list
-      const pendingDriversStr = localStorage.getItem('campusride_pending_drivers');
-      const pendingDrivers = pendingDriversStr ? JSON.parse(pendingDriversStr) : [];
-      pendingDrivers.push({
-        id: newUid,
-        name,
-        email,
-        carBrand: driverInfo?.carBrand || 'Toyota Camry',
-        carType: driverInfo?.carType || 'car',
-        plateNumber: driverInfo?.plateNumber || '4P-928X',
-        vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
-        createdAt: new Date().toISOString()
-      });
-      localStorage.setItem('campusride_pending_drivers', JSON.stringify(pendingDrivers));
     }
 
     // Add Welcome notification
     const welcomeNotif: AppNotification = {
       id: `m-notif-${Date.now()}`,
       title: 'Welcome to CampusRide!',
-      message: role === 'driver' 
-        ? 'Your registration is pending administrator approval. An email will be sent once active.'
-        : 'Your account has been successfully created and linked to the registrar directory.',
+      message: 'Your account has been successfully created and linked to the registrar directory.',
       date: 'Today',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
@@ -362,21 +267,11 @@ export default function App() {
     };
     const notifs = [welcomeNotif];
     localStorage.setItem(`campusride_notifications_${newUid}`, JSON.stringify(notifs));
-    
-    if (role !== 'driver') {
-      setNotifications(notifs);
-    }
+    setNotifications(notifs);
 
     // Initial Empty Transactions
     localStorage.setItem(`campusride_transactions_${newUid}`, JSON.stringify([]));
-    if (role !== 'driver') {
-      setTransactions([]);
-    }
-
-    if (role === 'driver') {
-      // Driver accounts require admin activation; do not auto-login
-      throw new Error("SUCCESS: Your driver registration was successful! Your credentials have been submitted to the university administrator for verification and approval under 'Reviews'. Once approved, you will receive an email notification and can log in.");
-    }
+    setTransactions([]);
 
     // Store custom session
     const session = {
@@ -388,12 +283,6 @@ export default function App() {
     localStorage.setItem('campusride_custom_session', JSON.stringify(session));
     setCurrentUser({ email, name, uid: newUid });
     setCurrentRole(role);
-
-    if (role === 'student') {
-      setActiveView('dashboard');
-    } else {
-      setActiveView('admin_operations');
-    }
   };
 
   const handleLogout = async () => {
@@ -529,7 +418,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-[#00875A] border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-12 h-12 border-4 border-[#175D39] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-semibold text-gray-500 animate-pulse">Syncing CampusRide locally...</p>
         </div>
       </div>
@@ -557,7 +446,7 @@ export default function App() {
   };
 
   return (
-    <div id="application-layout-context" className={`flex flex-col md:flex-row min-h-screen bg-[#F9FAFB] ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'} font-sans antialiased`}>
+    <div id="application-layout-context" className="flex flex-col md:flex-row min-h-screen bg-[#F2F2F2] text-[#175D39] font-sans antialiased overflow-hidden">
       
       {/* Sidebar Navigation */}
       <Sidebar 
@@ -572,7 +461,7 @@ export default function App() {
       />
 
       {/* Main Viewport Content block */}
-      <main id="main-viewport-body" className="flex-1 flex flex-col relative min-w-0 pb-20 md:pb-0">
+      <main id="main-viewport-body" className="flex-1 flex flex-col relative overflow-hidden min-w-0">
         
         {/* Render portal based on Active Switching Role context */}
         {currentRole === 'student' && (
@@ -605,7 +494,6 @@ export default function App() {
             onAddNotification={handleAddNotification}
             onAddTransaction={handleAddTransaction}
             selectedSchoolId={selectedSchoolId}
-            onNavigate={setActiveView}
           />
         )}
 

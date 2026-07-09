@@ -3,10 +3,20 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-primary: #175D39;
-  --color-primary-container: #175D39;
-  --color-surface: #F2F2F2;
-  --color-on-surface: #175D39;
+  --color-primary: #00875A;
+  --color-primary-container: #00A36C;
+  --color-surface: #F9FAFB;
+  --color-on-surface: #00875A;
+  --color-sage-dark: #00875A;
+  --color-sage-medium: #00A36C;
+  --color-sage-light: #D2F4E3;
+  --color-sage-bg: #F9FAFB;
+  --color-orange-50: #FFF7ED;
+  --color-orange-100: #FFEDD5;
+  --color-orange-200: #FED7AA;
+  --color-orange-500: #BE5912;
+  --color-orange-600: #BE5912;
+  --color-orange-700: #9E460B;
 }
 
 /* Custom CSS transitions for map line dash animations */

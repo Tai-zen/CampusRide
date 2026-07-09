@@ -18,8 +18,7 @@ import {
   X,
   RefreshCw,
   Gauge,
-  Compass,
-  Calendar
+  Compass
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -54,18 +53,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const getPendingReviewCount = () => {
-    try {
-      const stored = localStorage.getItem('campusride_pending_drivers');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed.length : 0;
-      }
-    } catch (e) {}
-    return 0;
-  };
-  const pendingReviewsCount = getPendingReviewCount();
-
   const navigateTo = (view: string) => {
     onNavigate(view);
     setIsOpen(false);
@@ -79,43 +66,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'browse_pools', label: 'Browse Active Pools', icon: Compass, badge: null },
         { id: 'dashboard', label: 'Activity Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'notifications', label: 'Notifications Inbox', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
+        { id: 'payments', label: 'Wallet & Payments', icon: Wallet, badge: null },
         { id: 'profile', label: 'Student Profile', icon: User, badge: null },
         { id: 'settings', label: 'App Settings', icon: Settings, badge: null },
       ];
     } else if (currentRole === 'driver') {
       return [
         { id: 'driver_dashboard', label: 'Shift Dashboard', icon: Gauge, badge: null },
-        { id: 'driver_scheduled', label: 'Scheduled Rides', icon: Calendar, badge: null },
+        { id: 'driver_earnings', label: 'Earnings Ledger', icon: Wallet, badge: null },
         { id: 'driver_settings', label: 'Driver Settings', icon: Settings, badge: null },
       ];
     } else {
       return [
         { id: 'admin_operations', label: 'Operations Command', icon: ShieldAlert, badge: 'Live' },
         { id: 'admin_analytics', label: 'Performance Hub', icon: LineChart, badge: null },
-        { id: 'admin_reviews', label: 'Reviews', icon: Grid, badge: pendingReviewsCount > 0 ? `${pendingReviewsCount} New` : null },
       ];
     }
   };
 
   const navItems = getNavItems();
-
-  const getMobileLabel = (id: string, label: string) => {
-    switch (id) {
-      case 'booking': return 'Request';
-      case 'browse_pools': return 'Pools';
-      case 'dashboard': return 'Activity';
-      case 'notifications': return 'Alerts';
-      case 'profile': return 'Profile';
-      case 'settings': return 'Settings';
-      case 'driver_dashboard': return 'Dashboard';
-      case 'driver_scheduled': return 'Scheduled';
-      case 'driver_settings': return 'Settings';
-      case 'admin_operations': return 'Ops';
-      case 'admin_analytics': return 'Analytics';
-      case 'admin_reviews': return 'Reviews';
-      default: return label.split(' ')[0];
-    }
-  };
 
   return (
     <>
@@ -131,59 +100,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
           <div>
-            <span className="font-extrabold tracking-tight text-[#00875A] text-xs leading-tight block">{selectedSchool.name}</span>
+            <span className="font-extrabold tracking-tight text-[#175D39] text-xs leading-tight block">{selectedSchool.name}</span>
             <span className="text-[9px] text-primary font-bold uppercase tracking-wider font-mono">CampusRide Portal</span>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-3">
           {/* Quick toggle mobile indicator */}
-          <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full font-mono bg-[#F9FAFB] ${currentRole === 'student' ? 'text-[#00875A]' : currentRole === 'driver' ? 'text-orange-600' : 'text-amber-700'}`}>
+          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${currentRole === 'student' ? 'bg-[#F2F2F2] text-primary' : currentRole === 'driver' ? 'bg-[#F2F2F2] text-[#175D39]' : 'bg-[#F2F2F2] text-[#175D39]'}`}>
             {currentRole}
           </span>
           <button 
-            onClick={onLogout}
-            title="Log Out"
-            className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary rounded-lg"
           >
-            <LogOut className="w-4 h-4" />
+            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
       </header>
 
-      {/* Mobile Fixed Bottom Navbar */}
-      <nav id="mobile-bottom-navbar" className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-150 z-50 flex items-center justify-around px-1 pb-safe shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-        {navItems.map((item) => {
-          const IconComponent = item.icon;
-          const isActive = activeView === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => navigateTo(item.id)}
-              className={`flex flex-col items-center justify-center flex-1 py-1.5 relative transition-all cursor-pointer ${
-                isActive ? (currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]') : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <div className="relative">
-                <IconComponent className={`w-5 h-5 transition-transform duration-200 ${isActive ? `scale-110 ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}` : 'text-gray-400'}`} />
-                {item.badge !== null && (
-                  <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[8px] font-black h-3.5 min-w-[14px] px-1 rounded-full flex items-center justify-center border border-white animate-pulse">
-                    {item.badge}
-                  </span>
-                )}
-              </div>
-              <span className={`text-[9px] mt-1 tracking-tight text-center truncate max-w-[64px] ${isActive ? `font-bold ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}` : 'font-medium text-gray-500'}`}>
-                {getMobileLabel(item.id, item.label)}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+      {/* Mobile Sidebar Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-[#175D39]/40 z-40 md:hidden backdrop-blur-xs" 
+          onClick={() => setIsOpen(false)}
+        />
+      )}
 
-      {/* Side Rail Navigation (Container) - Desktop Only */}
+      {/* Side Rail Navigation (Container) */}
       <aside 
         id="side-rail-navigation"
-        className="hidden md:flex md:flex-col w-72 bg-white border-r border-gray-100 h-screen shrink-0 justify-between static"
+        className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-gray-100 flex flex-col justify-between transform transition-transform duration-300 md:translate-x-0 md:static md:h-screen shrink-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         
         {/* Upper Branding Section */}
@@ -198,7 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </div>
             <div>
-              <span className="font-extrabold tracking-tight text-sm text-[#00875A] leading-tight block">
+              <span className="font-extrabold tracking-tight text-sm text-[#175D39] leading-tight block">
                 {selectedSchool.name}
               </span>
               <span className="text-[9px] uppercase tracking-wider text-[#737686] font-bold block mt-0.5">CampusRide Transit</span>
@@ -206,7 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* User Status Profile Card */}
-          <div className="bg-[#F9FAFB] p-3 rounded-xl border border-gray-100 flex items-center space-x-3">
+          <div className="bg-[#F2F2F2] p-3 rounded-xl border border-gray-100 flex items-center space-x-3">
             <img 
               referrerPolicy="no-referrer"
               src={userProfile.avatar} 
@@ -214,9 +161,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-10 h-10 rounded-full object-cover border border-[#c3c6d7] shadow-sm shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <h4 className={`text-sm font-bold truncate ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>{userProfile.name}</h4>
+              <h4 className="text-sm font-bold text-[#175D39] truncate">{userProfile.name}</h4>
               <div className="flex flex-col space-y-0.5">
-                <span className={`text-[10px] font-extrabold uppercase font-mono tracking-wider ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>
+                <span className="text-[10px] font-extrabold text-[#175D39] uppercase font-mono tracking-wider">
                   {currentRole === 'student' ? 'Rider' : currentRole === 'driver' ? 'Driver' : 'Admin'}
                 </span>
                 <span className="text-[11px] text-gray-500 font-mono tracking-wide truncate">
@@ -244,10 +191,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => navigateTo(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group ${
                   isActive 
-                    ? `${currentRole === 'driver' ? 'bg-orange-600 shadow-orange-500/20' : 'bg-primary shadow-sage-medium/20'} text-white shadow-md` 
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-[#F9FAFB]'
+                    ? 'bg-primary text-white shadow-md shadow-emerald-100' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-[#F2F2F2]'
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -258,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 {item.badge !== null && (
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] ${
-                    isActive ? 'bg-white/20 text-white' : `${currentRole === 'driver' ? 'bg-orange-50 text-orange-600' : 'bg-primary-container text-[#00875A]'}`
+                    isActive ? 'bg-white/20 text-white' : 'bg-primary-container text-[#175D39]'
                   }`}>
                     {item.badge}
                   </span>
@@ -273,11 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Log Out Button */}
           <button
             onClick={onLogout}
-            className={`w-full h-11 border rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition bg-white cursor-pointer ${
-              currentRole === 'driver' 
-                ? 'border-gray-200 hover:border-orange-500/20 hover:bg-orange-50 text-orange-600' 
-                : 'border-gray-200 hover:border-[#00875A]/20 hover:bg-[#00875A]/10 text-[#00875A]'
-            }`}
+            className="w-full h-11 border border-gray-200 hover:border-[#175D39]/20 hover:bg-[#175D39]/10 text-[#175D39] rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition bg-white"
           >
             <LogOut className="w-4 h-4" />
             <span>Log Out</span>

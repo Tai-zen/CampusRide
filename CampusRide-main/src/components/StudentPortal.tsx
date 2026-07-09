@@ -7,14 +7,12 @@ import {
   RideStatus
 } from '../types';
 import { UNIVERSITIES } from './SchoolSelection';
-import { CampusMap } from './CampusMap';
 import { 
   Car, 
   MapPin, 
   ShieldCheck, 
   AlertTriangle, 
   Clock, 
-  Lock, 
   Users, 
   Wallet, 
   ArrowRightLeft, 
@@ -60,7 +58,7 @@ export interface ActivePool {
   pickupId: string;
   dropoffId: string;
   vehicleType: 'Car' | 'Keke' | 'Shuttle';
-  currentRiders: { name: string; avatar: string; major: string; rating: number; gender: string; confirmedStart?: boolean }[];
+  currentRiders: { name: string; avatar: string; major: string; rating: number; gender: string }[];
   maxRiders: number;
   baseFare: number;
   status: 'active' | 'closed' | 'transit';
@@ -93,7 +91,6 @@ interface PoolMember {
   major: string;
   gender: string;
   rating: number;
-  confirmedStart?: boolean;
 }
 
 export const StudentPortal: React.FC<StudentPortalProps> = ({
@@ -121,24 +118,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [pickup, setPickup] = useState<string>('');
   const [dropoff, setDropoff] = useState<string>('');
   const [vehicleType, setVehicleType] = useState<'Car' | 'Keke' | 'Shuttle'>('Car');
-  const [selectedVehicleId, setSelectedVehicleId] = useState<'Corolla' | 'Sienna' | 'Shuttle' | 'Keke'>('Corolla');
-
-  const VEHICLES = [
-    { id: 'Corolla', name: 'Car (Corolla)', type: 'Car', capacity: 6, soloPrice: 600, poolPrice: 150, description: 'Corolla Sedan with AC', icon: 'Car' },
-    { id: 'Sienna', name: 'Car (Sienna)', type: 'Car', capacity: 6, soloPrice: 600, poolPrice: 150, description: 'Sienna Minivan with AC', icon: 'Car' },
-    { id: 'Shuttle', name: 'Shuttle', type: 'Shuttle', capacity: 10, soloPrice: 600, poolPrice: 150, description: 'Campus Coaster Shuttle', icon: 'Users' },
-    { id: 'Keke', name: 'Keke', type: 'Keke', capacity: 3, soloPrice: 400, poolPrice: 150, description: 'Direct campus tricycle', icon: 'Zap' },
-  ] as const;
-
-  const activeVehicleConfig = VEHICLES.find(v => v.id === selectedVehicleId) || VEHICLES[0];
-
-  useEffect(() => {
-    const config = VEHICLES.find(v => v.id === selectedVehicleId);
-    if (config) {
-      setVehicleType(config.type);
-    }
-  }, [selectedVehicleId]);
-
   const [verifyPeer, setVerifyPeer] = useState<boolean>(true);
   const [bookingMode, setBookingMode] = useState<'now' | 'schedule'>('now');
   const [scheduledDate, setScheduledDate] = useState<string>('');
@@ -191,55 +170,41 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     }
   }, [selectedSchoolId, campusStops]);
 
-  // Load scheduled rides on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('campusride_global_scheduled_rides');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as any[];
-        const myRides = parsed.filter(r => r.passengerId === userProfile.id);
-        setScheduledRides(myRides);
-      } catch (e) {
-        console.error("Error parsing stored scheduled rides", e);
-      }
-    }
-  }, [userProfile.id]);
-
   // Set default currency symbol
   const currencySymbol = "₦";
 
   // Ride Pricing Multipliers & Tiers
-  // Dynamic prices based on active vehicle config
-  const basePrice = rideMode === 'solo' ? activeVehicleConfig.soloPrice : activeVehicleConfig.poolPrice;
-  const priceTiers: Record<string, number> = {
-    tier1: activeVehicleConfig.poolPrice,
-    tier2: activeVehicleConfig.poolPrice,
-    tier3: activeVehicleConfig.poolPrice,
-    tier4: activeVehicleConfig.poolPrice,
-    tier5: activeVehicleConfig.poolPrice,
-    tier6: activeVehicleConfig.poolPrice,
-    tier7: activeVehicleConfig.poolPrice,
-    tier8: activeVehicleConfig.poolPrice,
-    tier9: activeVehicleConfig.poolPrice,
-    tier10: activeVehicleConfig.poolPrice,
+  // Standard prices based on vehicle type
+  const getBasePrice = () => {
+    if (vehicleType === 'Car') return 350;
+    if (vehicleType === 'Keke') return 200;
+    return 100; // Shuttle Bus
+  };
+
+  const basePrice = getBasePrice();
+  const priceTiers = {
+    tier1: basePrice, // 1 rider
+    tier2: Math.round(basePrice * 0.5), // 2 riders
+    tier3: Math.round(basePrice * 0.33), // 3 riders
+    tier4: Math.round(basePrice * 0.25), // 4 riders (full)
   };
 
   // Local state for interactive ride flow
   const [poolingState, setPoolingState] = useState<'idle' | 'forming' | 'matched' | 'transit' | 'arrived' | 'rated'>('idle');
-  const [isMatchingDriver, setIsMatchingDriver] = useState<boolean>(false);
-  const [searchFailed, setSearchFailed] = useState<boolean>(false);
   const [lobbyMembers, setLobbyMembers] = useState<PoolMember[]>([
     {
       name: userProfile.name || 'Temi Adeyemi',
       avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-      major: userProfile.major || 'Software Eng',
+      major: 'Software Eng',
       gender: 'Female',
       rating: 4.8
     }
   ]);
 
   // Chat room state
-  const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string; isUser: boolean; senderId?: string }[]>([]);
+  const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string; isUser: boolean }[]>([
+    { sender: 'System', text: 'You created a live pool. Seating occupancy: 1/4. Pricing tier: ' + currencySymbol + priceTiers.tier1 + '/seat.', time: '11:15 AM', isUser: false },
+  ]);
   const [chatInput, setChatInput] = useState<string>('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -250,7 +215,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [verificationCode] = useState<string>(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [sosActivated, setSosActivated] = useState<boolean>(false);
-  const [ratingScore, setRatingScore] = useState<number>(0);
+  const [ratingScore, setRatingScore] = useState<number>(5);
   const [reviewText, setReviewText] = useState<string>('');
   const [tripCompleted, setTripCompleted] = useState<boolean>(false);
 
@@ -269,132 +234,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [sameGenderOnly, setSameGenderOnly] = useState<boolean>(false);
   const [lowBalanceAlert, setLowBalanceAlert] = useState<boolean>(true);
 
-  // Trust-based payment states for riders
-  const [showPaymentSelection, setShowPaymentSelection] = useState<boolean>(false);
-  const [paymentStep, setPaymentStep] = useState<'select' | 'transfer_details'>('select');
-  const [isSimulatingRedirect, setIsSimulatingRedirect] = useState<boolean>(false);
-  const [rideTransferCopied, setRideTransferCopied] = useState<boolean>(false);
-
-  // Trigger payment method popup when ride gets accepted (matched)
-  useEffect(() => {
-    if (poolingState === 'matched' && activeRide && !activeRide.paymentMethod) {
-      setShowPaymentSelection(true);
-      setPaymentStep('select');
-    }
-  }, [poolingState, activeRide?.id, activeRide?.paymentMethod]);
-
-  const getDriverBankDetails = () => {
-    if (activeRide?.driverId) {
-      const stored = localStorage.getItem(`campusride_driver_profile_${activeRide.driverId}`);
-      if (stored) {
-        try {
-          const profile = JSON.parse(stored);
-          if (profile.bankAccountNumber) {
-            return {
-              bankName: profile.bankName || 'Access Bank Nigeria',
-              accountNumber: profile.bankAccountNumber || '2088392102',
-              accountName: profile.bankAccountName || profile.name || 'David Alao'
-            };
-          }
-        } catch (e) {}
-      }
-    }
-    return {
-      bankName: 'Access Bank Nigeria',
-      accountNumber: '2088392102',
-      accountName: activeRide?.driverName || 'David Alao'
-    };
-  };
-
-  const handleSelectCashPayment = () => {
-    if (!activeRide) return;
-    const updatedRide: RideRequest = {
-      ...activeRide,
-      paymentMethod: 'cash',
-      paymentConfirmedByRider: true,
-      paymentValidatedByDriver: false
-    };
-    onUpdateRide(updatedRide);
-    setShowPaymentSelection(false);
-    
-    // Add chat message indicating payment method selection
-    const chatId = joinedPoolId || activeRide.id;
-    if (chatId) {
-      const msg = {
-        sender: 'System',
-        text: `${userProfile.name || 'Rider'} has selected Cash Payment for this ride (₦${activeRide.cost}). Please pay the driver physically upon arrival.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isUser: false
-      };
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      const msgs = stored ? JSON.parse(stored) : [];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, msg]));
-    }
-
-    onAddNotification({
-      id: `notif-${Date.now()}`,
-      title: 'Cash Payment Selected',
-      message: `You selected Cash Payment for your ride. Please hand ₦${activeRide.cost} to your driver upon arrival.`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      date: 'Today',
-      isRead: false,
-      type: 'success'
-    });
-  };
-
-  const handleConfirmTransferPayment = () => {
-    if (!activeRide) return;
-    const updatedRide: RideRequest = {
-      ...activeRide,
-      paymentMethod: 'transfer',
-      paymentConfirmedByRider: true,
-      paymentValidatedByDriver: false
-    };
-    onUpdateRide(updatedRide);
-    setShowPaymentSelection(false);
-
-    // Add chat message indicating payment method selection
-    const chatId = joinedPoolId || activeRide.id;
-    if (chatId) {
-      const msg = {
-        sender: 'System',
-        text: `${userProfile.name || 'Rider'} has completed the bank transfer of ₦${activeRide.cost} and is waiting for driver validation.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isUser: false
-      };
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      const msgs = stored ? JSON.parse(stored) : [];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, msg]));
-    }
-
-    onAddNotification({
-      id: `notif-${Date.now()}`,
-      title: 'Transfer Payment Confirmed',
-      message: `Your transfer of ₦${activeRide.cost} has been submitted for validation. The driver will confirm receipt on their device.`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      date: 'Today',
-      isRead: false,
-      type: 'success'
-    });
-  };
-
-  const handleCopyDetailsAndRedirect = () => {
-    const details = getDriverBankDetails();
-    navigator.clipboard.writeText(details.accountNumber).then(() => {
-      setRideTransferCopied(true);
-      setTimeout(() => setRideTransferCopied(false), 2000);
-      
-      // Simulate redirection to external app
-      setIsSimulatingRedirect(true);
-      setTimeout(() => {
-        setIsSimulatingRedirect(false);
-        alert(`Account Number (${details.accountNumber}) copied to clipboard! Opening banking app portal...`);
-      }, 1200);
-    }).catch(err => {
-      console.error('Failed to copy: ', err);
-    });
-  };
-
   // Helper to resolve stop name from ID
   const getStopName = (stopId: string) => {
     const stop = campusStops.find(s => s.id === stopId);
@@ -404,168 +243,150 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // Scroll to bottom of chat
   useEffect(() => {
     if (chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, poolingState]);
 
-  // Synchronize active pools & lobby members & active driver states across tabs/sessions
+  // Simulated live driver pool forming action loop
   useEffect(() => {
-    const syncPools = () => {
-      const stored = localStorage.getItem('campusride_active_pools');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as ActivePool[];
-          setActivePools(parsed);
-          
-          if (joinedPoolId) {
-            const myPool = parsed.find(p => p.id === joinedPoolId);
-            if (myPool) {
-              setLobbyMembers(myPool.currentRiders.map(r => ({
-                name: r.name,
-                avatar: r.avatar,
-                major: r.major,
-                gender: r.gender,
-                rating: r.rating,
-                confirmedStart: r.confirmedStart
-              })));
+    let timer: NodeJS.Timeout;
+    if (poolingState === 'forming') {
+      const simulatedRiders: PoolMember[] = [
+        { name: 'Adeola S.', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80', major: 'Microbiology', gender: 'Female', rating: 4.7 },
+        { name: 'Chinedu O.', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80', major: 'Economics', gender: 'Male', rating: 4.9 },
+        { name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80', major: 'Mass Comm', gender: 'Female', rating: 4.6 }
+      ];
 
-              // If pool has been accepted by a driver, transition matching states
-              if (myPool.driverAccepted && myPool.status === 'closed' && poolingState === 'forming') {
-                setPoolingState('matched');
-                setIsMatchingDriver(false);
-              }
-            } else {
-              // Pool cancel or deleted
-              setJoinedPoolId(null);
-              setPoolingState('idle');
-              setIsMatchingDriver(false);
-            }
-          }
-        } catch (e) {
-          console.error("Error parsing stored active pools", e);
+      // Step-by-step pool members joining
+      timer = setTimeout(() => {
+        if (lobbyMembers.length === 1) {
+          // Add first rider
+          const rider = simulatedRiders[0];
+          setLobbyMembers(prev => [...prev, rider]);
+          setChatMessages(prev => [...prev, 
+            { sender: rider.name, text: 'Hey guys! Super glad I found this pool.', time: '11:16 AM', isUser: false },
+            { sender: 'System', text: `${rider.name} joined. Seating: 2/4. Price dropped to ${currencySymbol}${priceTiers.tier2}/seat.`, time: '11:16 AM', isUser: false }
+          ]);
+          onAddNotification({
+            id: `notif-${Date.now()}`,
+            title: 'Pool Expansion',
+            message: `${rider.name} joined your ride pool to ${getStopName(dropoff)}. Fair split initialized!`,
+            time: '11:16 AM',
+            date: 'Today',
+            isRead: false,
+            type: 'info'
+          });
+          setSimStep(1);
+        } else if (lobbyMembers.length === 2) {
+          // Add second rider
+          const rider = simulatedRiders[1];
+          setLobbyMembers(prev => [...prev, rider]);
+          setChatMessages(prev => [...prev, 
+            { sender: rider.name, text: 'Heading to classes? Mind if I hop in?', time: '11:17 AM', isUser: false },
+            { sender: 'System', text: `${rider.name} joined. Seating: 3/4. Price dropped to ${currencySymbol}${priceTiers.tier3}/seat.`, time: '11:17 AM', isUser: false }
+          ]);
+          setSimStep(2);
+        } else if (lobbyMembers.length === 3) {
+          // Add third rider (full!)
+          const rider = simulatedRiders[2];
+          setLobbyMembers(prev => [...prev, rider]);
+          setChatMessages(prev => [...prev, 
+            { sender: rider.name, text: 'Awesome, last seat is mine! Let’s request driver.', time: '11:18 AM', isUser: false },
+            { sender: 'System', text: `Pool is FULL (4/4). Price dropped to ${currencySymbol}${priceTiers.tier4}/seat! Match initialized.`, time: '11:18 AM', isUser: false }
+          ]);
+          setSimStep(3);
+
+          // Transition to matched with driver in 4 seconds
+          setTimeout(() => {
+            setPoolingState('matched');
+            setChatMessages(prev => [...prev, {
+              sender: 'David Alao (Driver)',
+              text: 'Hello everyone! I am driving the silver Toyota Corolla. Arriving in 2 minutes.',
+              time: '11:19 AM',
+              isUser: false
+            }]);
+            onAddNotification({
+              id: `notif-${Date.now()}`,
+              title: 'Driver Matched!',
+              message: 'David Alao (4.9★) has accepted your pool request. Use Verification PIN to board.',
+              time: '11:19 AM',
+              date: 'Today',
+              isRead: false,
+              type: 'success'
+            });
+          }, 3500);
         }
-      }
-    };
-
-    syncPools();
-    window.addEventListener('storage', syncPools);
-    const interval = setInterval(syncPools, 1500);
-    return () => {
-      window.removeEventListener('storage', syncPools);
-      clearInterval(interval);
-    };
-  }, [joinedPoolId, poolingState]);
-
-  // Synchronize real-time chat messages from localStorage
-  useEffect(() => {
-    const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
-    if (!chatId) {
-      setChatMessages([]);
-      return;
+      }, 5000);
     }
+    return () => clearTimeout(timer);
+  }, [poolingState, lobbyMembers]);
 
-    const loadChat = () => {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      if (stored) {
-        try {
-          const msgs = JSON.parse(stored);
-          setChatMessages(msgs);
-        } catch (e) {
-          console.error("Error parsing chat messages", e);
-        }
-      } else {
-        // If empty, set a system message welcome
-        const welcomeMsg = [
-          { sender: 'System', text: `Welcome to the active transit chat room! Discuss route details safely with your companions and driver.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
-        ];
-        localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(welcomeMsg));
-        setChatMessages(welcomeMsg);
-      }
-    };
-
-    loadChat();
-    window.addEventListener('storage', loadChat);
-    const interval = setInterval(loadChat, 1500);
-    return () => {
-      window.removeEventListener('storage', loadChat);
-      clearInterval(interval);
-    };
-  }, [joinedPoolId, activeRide?.id]);
-
-  // Precise 1-minute countdown timer linked to actual requested/created timestamp
+  // Master countdown timer effect (runs every 1 second)
   useEffect(() => {
     let interval: NodeJS.Timeout;
-
-    const handleTick = () => {
-      const req = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
-      
-      // Look up global active ride if we are the host of a requested ride
-      const globalRideStr = localStorage.getItem('campusride_global_active_ride');
-      let globalRide: RideRequest | null = null;
-      if (globalRideStr) {
-        try {
-          globalRide = JSON.parse(globalRideStr) as RideRequest;
-        } catch (e) {}
-      }
-
-      const activeReq = (globalRide && globalRide.passengerId === userProfile.id) ? globalRide : activeRide;
-
-      // Sync driver's trip updates in real-time when matched or in transit
-      if (poolingState === 'matched' && globalRide && globalRide.passengerId === userProfile.id) {
-        if (globalRide.status === 'in_transit') {
-          setPoolingState('transit');
-          onUpdateRide(globalRide);
-        } else if (activeRide && activeRide.status !== globalRide.status) {
-          onUpdateRide(globalRide);
-        }
-      }
-
-      // If the global ride was concluded (driver clicked Conclude Ride which deletes/clears it)
-      if ((poolingState === 'matched' || poolingState === 'transit') && !globalRide && activeRide) {
-        setPoolingState('arrived');
-        onUpdateRide(null);
-      }
-
-      if (poolingState === 'forming' && isMatchingDriver && activeReq) {
-        if (activeReq.status === 'accepted' || activeReq.status === 'arriving' || activeReq.status === 'in_transit') {
-          setPoolingState('matched');
-          setIsMatchingDriver(false);
-          setDriverTimer(60);
-          onUpdateRide(activeReq);
-          return;
+    
+    // We run the interval if the user is in forming lobby, confirming checkout, or if there are active pools
+    if (poolingState === 'forming' || checkoutPool || activePools.some(p => p.status === 'active')) {
+      interval = setInterval(() => {
+        // 1. Tick driver timer for active user in lobby
+        if (poolingState === 'forming') {
+          setDriverTimer(prev => {
+            if (prev <= 1) {
+              // Timer expired before match! Cancel pool.
+              setTimeout(() => {
+                handleResetPool();
+                alert("Match Request Expired: No driver accepted your ride pool within the 60-second window. The pool request has been automatically cancelled.");
+              }, 0);
+              return 60;
+            }
+            return prev - 1;
+          });
         }
 
-        const createdAt = activeReq.createdAt || Date.now();
-        const elapsed = Math.floor((Date.now() - createdAt) / 1000);
-        const remaining = Math.max(0, 60 - elapsed);
-        setDriverTimer(remaining);
-
-        if (remaining <= 0) {
-          // Timeout occurred! Set searchFailed to true to offer retry
-          setSearchFailed(true);
-          onUpdateRide(null);
-          setIsMatchingDriver(false);
+        // 2. Tick checkout timer for confirmation modal
+        if (checkoutPool) {
+          setCheckoutTimer(prev => {
+            if (prev <= 1) {
+              setCheckoutPool(null);
+              alert("Seat join reservation window expired! Please try joining again.");
+              return 30;
+            }
+            return prev - 1;
+          });
         }
-      } else {
-        setDriverTimer(60);
-      }
 
-      // Check seat checkout countdown timer if modal open
-      if (checkoutPool) {
-        setCheckoutTimer(prev => {
-          if (prev <= 1) {
-            setCheckoutPool(null);
-            alert("Seat join reservation window expired! Please try joining again.");
-            return 30;
+        // 3. Tick down driverAcceptCountdown for ALL active pools in background
+        setActivePools(prevPools => {
+          let hasChange = false;
+          const updated = prevPools.map(pool => {
+            if (pool.status === 'active') {
+              const currentCountdown = pool.driverAcceptCountdown !== undefined ? pool.driverAcceptCountdown : 60;
+              if (currentCountdown <= 1) {
+                hasChange = true;
+                return { ...pool, status: 'closed' as const, driverAcceptCountdown: 0 };
+              }
+              hasChange = true;
+              return { ...pool, driverAcceptCountdown: currentCountdown - 1 };
+            }
+            return pool;
+          }).filter(pool => pool.status === 'active' && (pool.driverAcceptCountdown === undefined || pool.driverAcceptCountdown > 0));
+
+          if (hasChange) {
+            localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
           }
-          return prev - 1;
+          return updated;
         });
-      }
-    };
-
-    interval = setInterval(handleTick, 1000);
+      }, 1000);
+    }
     return () => clearInterval(interval);
-  }, [poolingState, isMatchingDriver, activeRide, activePools, joinedPoolId, checkoutPool]);
+  }, [poolingState, checkoutPool, activePools.length]);
+
+  // Reset driver timer to 60 when starting a new forming lobby
+  useEffect(() => {
+    if (poolingState === 'forming') {
+      setDriverTimer(60);
+    }
+  }, [poolingState]);
 
   // Live path/trip progress simulation
   useEffect(() => {
@@ -625,6 +446,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       return;
     }
 
+    const calculatedFare = priceTiers.tier1; // starting fare
+    if (userProfile.walletBalance < calculatedFare) {
+      alert(`Insufficient funds. This ride starts at ${currencySymbol}${calculatedFare}. Please top up your wallet.`);
+      onNavigate('payments');
+      return;
+    }
+
     if (bookingMode === 'schedule') {
       if (!scheduledDate || !scheduledTime) {
         alert('Please specify both scheduled date and time.');
@@ -640,19 +468,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         time: scheduledTime,
         vehicleType,
         fare: rideMode === 'solo' ? basePrice : priceTiers.tier4,
-        passengerId: userProfile.id,
-        passengerName: userProfile.name,
-        passengerAvatar: userProfile.avatar,
-        passengerRating: userProfile.rating || 4.8
       };
 
-      // Get current global scheduled rides, append new one, and save
-      const stored = localStorage.getItem('campusride_global_scheduled_rides');
-      const allRides = stored ? JSON.parse(stored) : [];
-      const updatedRides = [newSchedule, ...allRides];
-      localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updatedRides));
-
-      setScheduledRides(updatedRides.filter(r => r.passengerId === userProfile.id));
+      setScheduledRides(prev => [newSchedule, ...prev]);
       onAddNotification({
         id: `notif-${Date.now()}`,
         title: 'Ride Scheduled Successfully!',
@@ -672,55 +490,39 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     // Book now flow
     if (rideMode === 'solo') {
       // Direct solo booking - skip pool lobby forming
-      const reqId = `REQ-${Math.floor(100000 + Math.random() * 900000)}`;
-      const newRequest: RideRequest = {
-        id: reqId,
-        passengerId: userProfile.id || 'std-123',
-        passengerName: userProfile.name || 'Temi Adeyemi',
-        passengerAvatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-        passengerRating: 4.8,
-        passengerType: 'Student',
-        pickup: getStopName(pickup),
-        dropoff: getStopName(dropoff),
-        status: 'requested',
-        vehicleType: vehicleType,
-        verifyPeer: verifyPeer,
-        cost: priceTiers.tier1,
-        etaMinutes: 4,
-        date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        createdAt: Date.now()
-      };
-
       setLobbyMembers([
         {
           name: userProfile.name || 'Temi Adeyemi',
           avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-          major: userProfile.major || 'Software Eng',
+          major: 'Software Eng',
           gender: 'Female',
-          rating: 4.8,
-          confirmedStart: true
+          rating: 4.8
         }
       ]);
-      const initialMsgs = [
-        { sender: 'System', text: `Solo booking initiated. Route: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}. Matching with active drivers on campus... 60-second acceptance window initialized.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
-      ];
-      localStorage.setItem(`campusride_chat_${reqId}`, JSON.stringify(initialMsgs));
-      setChatMessages(initialMsgs);
-      
-      onUpdateRide(newRequest);
+      setChatMessages([
+        { sender: 'System', text: `Solo booking initiated. Route: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}. Matching you with a driver directly...`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+      ]);
       setPoolingState('forming');
-      setIsMatchingDriver(true);
-
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'Searching for Driver',
-        message: `Your Solo ride request is live! Active campus drivers have 60 seconds to accept.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        date: 'Today',
-        isRead: false,
-        type: 'info'
-      });
+      
+      // Instantly match after 1.5 seconds since it's solo!
+      setTimeout(() => {
+        setPoolingState('matched');
+        setChatMessages(prev => [...prev, {
+          sender: 'David Alao (Driver)',
+          text: 'Hello! I accepted your Solo Ride request. Heading to your pickup location now. ETA: 2 minutes.',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isUser: false
+        }]);
+        onAddNotification({
+          id: `notif-${Date.now()}`,
+          title: 'Solo Driver Matched!',
+          message: 'David Alao (4.9★) has accepted your solo request. Boarding PIN is ready.',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: 'Today',
+          isRead: false,
+          type: 'success'
+        });
+      }, 1500);
     } else {
       // Create pool flow (standard pool lobby search)
       const newPoolId = `POOL-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -733,19 +535,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         hostGender: 'Female',
         pickupId: pickup,
         dropoffId: dropoff,
-        vehicleType: activeVehicleConfig.id as any, // Preserve exact model (Corolla, Sienna, Shuttle, Keke)
+        vehicleType: vehicleType,
         currentRiders: [
           {
             name: userProfile.name || 'Temi Adeyemi',
             avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
             major: userProfile.major || 'Software Eng',
             rating: 4.8,
-            gender: 'Female',
-            confirmedStart: true
+            gender: 'Female'
           }
         ],
-        maxRiders: activeVehicleConfig.capacity,
-        baseFare: activeVehicleConfig.poolPrice,
+        maxRiders: 4,
+        baseFare: basePrice,
         status: 'active',
         driverAcceptCountdown: 60,
         driverAccepted: false
@@ -756,22 +557,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       localStorage.setItem('campusride_active_pools', JSON.stringify(updatedPools));
       setJoinedPoolId(newPoolId);
 
-      setLobbyMembers(newPool.currentRiders.map(r => ({
-        name: r.name,
-        avatar: r.avatar,
-        major: r.major,
-        gender: r.gender,
-        rating: r.rating,
-        confirmedStart: r.confirmedStart
-      })));
-      
-      const initialMsgs = [
+      setLobbyMembers(newPool.currentRiders);
+      setChatMessages([
         { sender: 'System', text: `You initiated a live pool. Route: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}. Looking for companions...`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
-      ];
-      localStorage.setItem(`campusride_chat_${newPoolId}`, JSON.stringify(initialMsgs));
-      setChatMessages(initialMsgs);
+      ]);
       setPoolingState('forming');
-      setIsMatchingDriver(false);
     }
   };
 
@@ -780,85 +570,34 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     e.preventDefault();
     if (!chatInput.trim()) return;
 
-    const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
-    const newMsg = {
+    setChatMessages(prev => [...prev, {
       sender: userProfile.name || 'Me',
       text: chatInput,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: true,
-      senderId: userProfile.id
-    };
-
-    if (chatId) {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      let msgs = [];
-      if (stored) {
-        try {
-          msgs = JSON.parse(stored);
-        } catch (err) {}
-      }
-      const updated = [...msgs, newMsg];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-      setChatMessages(updated);
-    } else {
-      setChatMessages(prev => [...prev, newMsg]);
-    }
+      isUser: true
+    }]);
     setChatInput('');
   };
 
   // Quick reply messages
   const sendQuickReply = (text: string) => {
-    const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
-    const newMsg = {
+    setChatMessages(prev => [...prev, {
       sender: userProfile.name || 'Me',
       text: text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: true,
-      senderId: userProfile.id
-    };
-
-    if (chatId) {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      let msgs = [];
-      if (stored) {
-        try {
-          msgs = JSON.parse(stored);
-        } catch (err) {}
-      }
-      const updated = [...msgs, newMsg];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-      setChatMessages(updated);
-    } else {
-      setChatMessages(prev => [...prev, newMsg]);
-    }
+      isUser: true
+    }]);
   };
 
   // Trigger driver transit start
   const handleStartTransit = () => {
     setPoolingState('matched');
-    const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
-    const newMsg = {
+    setChatMessages(prev => [...prev, {
       sender: 'David Alao (Driver)',
       text: 'Hello everyone! I accepted your pool request. Heading to your pickup location now. ETA: 2 minutes.',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isUser: false
-    };
-
-    if (chatId) {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      let msgs = [];
-      if (stored) {
-        try {
-          msgs = JSON.parse(stored);
-        } catch (err) {}
-      }
-      const updated = [...msgs, newMsg];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-      setChatMessages(updated);
-    } else {
-      setChatMessages(prev => [...prev, newMsg]);
-    }
-
+    }]);
     onAddNotification({
       id: `notif-${Date.now()}`,
       title: 'Driver Matched!',
@@ -896,6 +635,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   // Delete a pool created by the user
   const handleDeletePool = (poolId: string) => {
+    if (!confirm('Are you sure you want to delete this ride pool you created? This will cancel the lobby for all joined members.')) {
+      return;
+    }
+    
     const updated = activePools.filter(p => p.id !== poolId);
     setActivePools(updated);
     localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
@@ -905,8 +648,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       setPoolingState('idle');
       setLobbyMembers([]);
       setLiveDistance(0);
-      setIsMatchingDriver(false);
-      onUpdateRide(null);
     }
 
     onAddNotification({
@@ -918,10 +659,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       isRead: false,
       type: 'warning'
     });
+
+    alert('Ride pool deleted successfully.');
   };
 
   // Leave a pool joined by the user
   const handleLeavePool = (poolId: string) => {
+    if (!confirm('Are you sure you want to leave this ride pool?')) {
+      return;
+    }
+
     const updated = activePools.map(pool => {
       if (pool.id === poolId) {
         const filteredRiders = pool.currentRiders.filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
@@ -942,8 +689,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       setPoolingState('idle');
       setLobbyMembers([]);
       setLiveDistance(0);
-      setIsMatchingDriver(false);
-      onUpdateRide(null);
     }
 
     onAddNotification({
@@ -955,10 +700,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       isRead: false,
       type: 'info'
     });
+
+    alert('You have successfully left the ride pool.');
   };
 
   // Cancel an active ride (solo or pool)
   const handleCancelRide = () => {
+    if (!confirm('Are you sure you want to cancel your active ride?')) {
+      return;
+    }
+
     if (joinedPoolId) {
       const updated = activePools.map(pool => {
         if (pool.id === joinedPoolId) {
@@ -980,8 +731,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     setPoolingState('idle');
     setLobbyMembers([]);
     setLiveDistance(0);
-    setIsMatchingDriver(false);
-    onUpdateRide(null);
 
     onAddNotification({
       id: `notif-${Date.now()}`,
@@ -992,6 +741,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       isRead: false,
       type: 'warning'
     });
+
+    alert('Your ride has been successfully cancelled.');
   };
 
   // Join existing pool handler
@@ -1021,13 +772,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
     const finalJoinFare = Math.round(baseF * tierPriceMultiplier);
 
+    if (userProfile.walletBalance < finalJoinFare) {
+      alert(`Insufficient balance. Joining this pool requires at least ${currencySymbol}${finalJoinFare}. Please fund your wallet first.`);
+      onNavigate('payments');
+      return;
+    }
+
     const newUserRider = {
       name: userProfile.name || 'Temi Adeyemi',
       avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
       major: userProfile.major || 'Software Eng',
       rating: 4.8,
-      gender: 'Female',
-      confirmedStart: false
+      gender: 'Female'
     };
 
     const updatedRiders = [...pool.currentRiders, newUserRider];
@@ -1052,23 +808,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     setDropoff(pool.dropoffId);
     setVehicleType(pool.vehicleType);
     setLobbyMembers(updatedRiders);
-    
-    const storedChat = localStorage.getItem(`campusride_chat_${pool.id}`);
-    let msgs = [];
-    if (storedChat) {
-      try {
-        msgs = JSON.parse(storedChat);
-      } catch (err) {}
-    }
-    const joinMsg = { 
-      sender: 'System', 
-      text: `You joined ${pool.hostName}'s pool! Route: ${getStopName(pool.pickupId)} ➔ ${getStopName(pool.dropoffId)}. Currently sharing with ${updatedRiders.length} companions. Current Split Fare: ${currencySymbol}${finalJoinFare}/seat.`, 
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
-      isUser: false 
-    };
-    const updatedMsgs = [...msgs, joinMsg];
-    localStorage.setItem(`campusride_chat_${pool.id}`, JSON.stringify(updatedMsgs));
-    setChatMessages(updatedMsgs);
+    setChatMessages([
+      { sender: 'System', text: `You joined ${pool.hostName}'s pool! Route: ${getStopName(pool.pickupId)} ➔ ${getStopName(pool.dropoffId)}. Currently sharing with ${updatedRiders.length} companions. Current Split Fare: ${currencySymbol}${finalJoinFare}/seat.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+    ]);
     setPoolingState('forming');
 
     onAddNotification({
@@ -1083,97 +825,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
     alert(`Successfully joined ${pool.hostName}'s pool! Redirecting to the Live forming lobby...`);
     onNavigate('booking');
-  };
-
-  // Confirm rider is ready to start the ride pool
-  const handleConfirmStartRide = () => {
-    if (!joinedPoolId) return;
-    const updated = activePools.map(pool => {
-      if (pool.id === joinedPoolId) {
-        const updatedRiders = pool.currentRiders.map(r => {
-          if (r.name === (userProfile.name || 'Temi Adeyemi')) {
-            return { ...r, confirmedStart: true };
-          }
-          return r;
-        });
-        return { ...pool, currentRiders: updatedRiders };
-      }
-      return pool;
-    });
-    setActivePools(updated);
-    localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
-    alert("You have confirmed that you are ready to start the ride! Waiting for the host to match a driver.");
-  };
-
-  // Host initiates the driver match request (1 minute countdown starts)
-  const handleInitiateDriverMatch = () => {
-    const finalFare = Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1']);
-
-    const newRequest: RideRequest = {
-      id: joinedPoolId || `REQ-${Math.floor(100000 + Math.random() * 900000)}`,
-      passengerId: userProfile.id || 'std-123',
-      passengerName: userProfile.name || 'Temi Adeyemi',
-      passengerAvatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-      passengerRating: 4.8,
-      passengerType: 'Student',
-      pickup: getStopName(pickup),
-      dropoff: getStopName(dropoff),
-      status: 'requested',
-      vehicleType: vehicleType,
-      verifyPeer: verifyPeer,
-      cost: finalFare,
-      etaMinutes: 4,
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      createdAt: Date.now()
-    };
-
-    if (joinedPoolId) {
-      const updated = activePools.map(p => {
-        if (p.id === joinedPoolId) {
-          return { ...p, driverAcceptCountdown: 60 };
-        }
-        return p;
-      });
-      setActivePools(updated);
-      localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
-    }
-
-    onUpdateRide(newRequest);
-    setIsMatchingDriver(true);
-
-    const matchMsg = {
-      sender: 'System',
-      text: `Matching with active drivers on campus... 60-second acceptance window initialized.`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: false
-    };
-
-    const chatId = joinedPoolId || newRequest.id;
-    if (chatId) {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      let msgs = [];
-      if (stored) {
-        try {
-          msgs = JSON.parse(stored);
-        } catch (err) {}
-      }
-      const updated = [...msgs, matchMsg];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-      setChatMessages(updated);
-    } else {
-      setChatMessages(prev => [...prev, matchMsg]);
-    }
-
-    onAddNotification({
-      id: `notif-${Date.now()}`,
-      title: 'Searching for Driver',
-      message: `Your ride pool match request is live! Active campus drivers have 60 seconds to accept.`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      date: 'Today',
-      isRead: false,
-      type: 'info'
-    });
   };
 
   // Complete Rating
@@ -1222,7 +873,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 text-slate-800">
+    <div className="flex-1 flex flex-col h-full bg-slate-50 text-white overflow-y-auto">
       <AnimatePresence mode="wait">
         
         {/* 1. VIEW CONTEXT: RIDE BOOKING / LOBBY / TRANSIT (ACTIVE VIEW = BOOKING) */}
@@ -1232,66 +883,48 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 sm:p-6 lg:p-8"
           >
           
           {/* LEFT SIDE OR MAIN BOOKING SECTION (7 COLS ON LARGE) */}
           <div className="lg:col-span-7 flex flex-col space-y-6">
-            <CampusMap
-              schoolId={selectedSchool.id}
-              pickupId={pickup}
-              dropoffId={dropoff}
-              poolingState={poolingState}
-              isMatchingDriver={isMatchingDriver}
-              liveDistance={liveDistance}
-              onSelectPickup={(stopId) => setPickup(stopId)}
-              onSelectDropoff={(stopId) => setDropoff(stopId)}
-            />
+            
+
 
             {/* IF IDLE, RENDER BOOKING FORM */}
             {poolingState === 'idle' && (
               <>
                 {/* Main Form Booking details */}
-                <div className="bg-white p-6 rounded-3xl shadow-xs space-y-6">
+                <div className="bg-white p-6 rounded-3xl border border-slate-150 shadow-xs space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                    <h2 className="text-lg font-black tracking-tight text-[#00875A]">
-                      BOOK OR SCHEDULE A RIDE
+                    <h2 className="text-lg font-black tracking-tight text-[#175D39] flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-[#175D39]" /> BOOK OR SCHEDULE A RIDE
                     </h2>
                     
                     {/* Schedule vs Now Selector */}
-                    <div className="relative flex bg-slate-100 p-1 rounded-xl z-0 overflow-hidden">
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
                       <button
                         type="button"
                         onClick={() => setBookingMode('now')}
-                        className="relative px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer z-10"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingMode === 'now'
+                            ? 'bg-[#175D39] text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
                       >
-                        {bookingMode === 'now' && (
-                          <motion.div 
-                            layoutId="activeBookingModeBg"
-                            className="absolute inset-0 bg-[#00875A] rounded-lg shadow-sm -z-10"
-                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                          />
-                        )}
-                        <span className={`transition-colors duration-200 ${bookingMode === 'now' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}>
-                          Book Now
-                        </span>
+                        Book Now
                       </button>
                       <button
                         type="button"
                         onClick={() => setBookingMode('schedule')}
-                        className="relative px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer z-10"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingMode === 'schedule'
+                            ? 'bg-[#175D39] text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
                       >
-                        {bookingMode === 'schedule' && (
-                          <motion.div 
-                            layoutId="activeBookingModeBg"
-                            className="absolute inset-0 bg-[#00875A] rounded-lg shadow-sm -z-10"
-                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                          />
-                        )}
-                        <span className={`transition-colors duration-200 ${bookingMode === 'schedule' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}>
-                          Schedule Ride
-                        </span>
+                        Schedule Ride
                       </button>
                     </div>
                   </div>
@@ -1303,11 +936,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Pickup Spot</label>
                         <div className="relative">
-                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#00875A]" />
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#175D39]" />
                           <select
                             value={pickup}
                             onChange={(e) => setPickup(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#00875A] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#00875A]/50 appearance-none cursor-pointer"
+                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#175D39] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#175D39]/50 appearance-none cursor-pointer"
                           >
                             {campusStops.map((stop) => (
                               <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
@@ -1327,7 +960,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             setPickup(dropoff);
                             setDropoff(temp);
                           }}
-                          className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-md hover:border-[#00875A] text-[#00875A] flex items-center justify-center cursor-pointer transition-colors"
+                          className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-md hover:border-[#175D39] text-[#175D39] flex items-center justify-center cursor-pointer transition-colors"
                           title="Swap Route"
                         >
                           <ArrowRightLeft className="w-4 h-4" />
@@ -1338,11 +971,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Destination Stop</label>
                         <div className="relative">
-                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#00875A]" />
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#175D39]" />
                           <select
                             value={dropoff}
                             onChange={(e) => setDropoff(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#00875A] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#00875A]/50 appearance-none cursor-pointer"
+                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#175D39] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#175D39]/50 appearance-none cursor-pointer"
                           >
                             {campusStops.map((stop) => (
                               <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
@@ -1356,30 +989,30 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                     {/* Schedule Date & Time inputs if bookingMode is schedule */}
                     {bookingMode === 'schedule' && (
-                      <div className="grid grid-cols-2 gap-3 p-4 bg-[#F9FAFB] rounded-2xl border border-slate-200 animate-fadeIn">
+                      <div className="grid grid-cols-2 gap-3 p-4 bg-[#F2F2F2] rounded-2xl border border-slate-200 animate-fadeIn">
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Select Date</label>
                           <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00875A]" />
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#175D39]" />
                             <input
                               type="date"
                               required
                               value={scheduledDate}
                               onChange={(e) => setScheduledDate(e.target.value)}
-                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
                             />
                           </div>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Select Time</label>
                           <div className="relative">
-                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00875A]" />
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#175D39]" />
                             <input
                               type="time"
                               required
                               value={scheduledTime}
                               onChange={(e) => setScheduledTime(e.target.value)}
-                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
                             />
                           </div>
                         </div>
@@ -1389,41 +1022,31 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Choose Mode tab selection: Create a Pool vs Go Solo */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Ride Mode Choice</label>
-                      <div className="relative grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl z-0 overflow-hidden">
+                      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
                         <button
                           type="button"
                           onClick={() => setRideMode('create')}
-                          className="relative py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer z-10"
+                          className={`py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
+                            rideMode === 'create'
+                              ? 'bg-[#175D39] text-white shadow-md'
+                              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'
+                          }`}
                         >
-                          {rideMode === 'create' && (
-                            <motion.div 
-                              layoutId="activeRideModeBg"
-                              className="absolute inset-0 bg-[#00875A] rounded-xl shadow-md -z-10"
-                              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                            />
-                          )}
-                          <Users className={`w-4 h-4 transition-colors duration-200 ${rideMode === 'create' ? 'text-white' : 'text-slate-400'}`} />
-                          <span className={`transition-colors duration-200 ${rideMode === 'create' ? 'text-white' : 'text-slate-600 hover:text-slate-800'}`}>
-                            Create Pool
-                          </span>
+                          <Users className="w-4 h-4" />
+                          <span>Create Pool</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setRideMode('solo')}
-                          className="relative py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer z-10"
+                          className={`py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
+                            rideMode === 'solo'
+                              ? 'bg-[#175D39] text-white shadow-md'
+                              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'
+                          }`}
                         >
-                          {rideMode === 'solo' && (
-                            <motion.div 
-                              layoutId="activeRideModeBg"
-                              className="absolute inset-0 bg-[#00875A] rounded-xl shadow-md -z-10"
-                              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                            />
-                          )}
-                          <Car className={`w-4 h-4 transition-colors duration-200 ${rideMode === 'solo' ? 'text-white' : 'text-slate-400'}`} />
-                          <span className={`transition-colors duration-200 ${rideMode === 'solo' ? 'text-white' : 'text-slate-600 hover:text-slate-800'}`}>
-                            Go Solo
-                          </span>
+                          <Car className="w-4 h-4" />
+                          <span>Go Solo</span>
                         </button>
                       </div>
                     </div>
@@ -1434,56 +1057,75 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         {/* Vehicle Type Select */}
                         <div className="space-y-2">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Choose Transit Vibe</label>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {VEHICLES.map((v) => {
-                              const isSelected = selectedVehicleId === v.id;
-                              return (
-                                <button
-                                  key={v.id}
-                                  type="button"
-                                  onClick={() => setSelectedVehicleId(v.id)}
-                                  className={`p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-slate-100 border-[#00875A] text-[#00875A] shadow-sm font-bold' 
-                                      : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
-                                  }`}
-                                >
-                                  {v.id === 'Keke' ? (
-                                    <Zap className="w-5 h-5 stroke-[2]" />
-                                  ) : v.id === 'Shuttle' ? (
-                                    <Users className="w-5 h-5 stroke-[2]" />
-                                  ) : (
-                                    <Car className="w-5 h-5 stroke-[2]" />
-                                  )}
-                                  <span className="text-[11px] font-bold truncate max-w-full text-center leading-tight">{v.name}</span>
-                                  <span className="text-[9px] text-slate-400 font-semibold">Cap: {v.capacity}</span>
-                                  <span className="text-[10px] font-mono font-black text-[#00875A] bg-[#00875A]/5 px-1.5 py-0.5 rounded-md">{currencySymbol}{v.poolPrice}/seat</span>
-                                </button>
-                              );
-                            })}
+                          <div className="grid grid-cols-3 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Car')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Car' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Car className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Car (Fast)</span>
+                              <span className="text-[10px] font-mono text-slate-500">From {currencySymbol}350</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Keke')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Keke' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Zap className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Keke (Vibe)</span>
+                              <span className="text-[10px] font-mono text-slate-500">From {currencySymbol}200</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Shuttle')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Shuttle' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Users className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Shuttle Bus</span>
+                              <span className="text-[10px] font-mono text-slate-500">From {currencySymbol}100</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* Dynamic Pooling Info display */}
+                        {/* Advanced Pooling Tiers display */}
                         <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
                           <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                             <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Dynamic Pooling Tiers</span>
-                            <span className="text-[10px] font-mono text-[#00875A] font-bold">FLAT RATE FOR ALL COMMUTERS</span>
+                            <span className="text-[10px] font-mono text-slate-500">SPLIT COST AS OTHERS JOIN</span>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-center">
-                            <div className="bg-slate-100/40 p-2.5 rounded-xl border border-slate-200 text-left flex justify-between items-center">
-                              <div>
-                                <span className="text-[10px] text-slate-500 font-bold block">Flat Rate Per Seat</span>
-                                <span className="text-xs text-slate-400">Paid by each commuter</span>
-                              </div>
-                              <span className="text-base font-mono font-black text-[#00875A] bg-[#00875A]/10 px-2 py-0.5 rounded-lg">{currencySymbol}{activeVehicleConfig.poolPrice}</span>
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div className="bg-slate-100/40 p-2 rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-500 font-bold block mb-0.5">1 Rider</span>
+                              <span className="text-sm font-mono font-black text-slate-800">{currencySymbol}{priceTiers.tier1}</span>
                             </div>
-                            <div className="bg-[#00875A]/5 p-2.5 rounded-xl border border-[#00875A]/20 text-left flex justify-between items-center">
-                              <div>
-                                <span className="text-[10px] text-[#00875A] font-extrabold block">Lobby Capacity</span>
-                                <span className="text-xs text-slate-500">Max seats available</span>
-                              </div>
-                              <span className="text-base font-mono font-black text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-lg">{activeVehicleConfig.capacity} Seats</span>
+                            <div className="bg-slate-100/40 p-2 rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-500 font-bold block mb-0.5">2 Riders</span>
+                              <span className="text-sm font-mono font-black text-slate-800">{currencySymbol}{priceTiers.tier2}</span>
+                            </div>
+                            <div className="bg-slate-100/40 p-2 rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-500 font-bold block mb-0.5">3 Riders</span>
+                              <span className="text-sm font-mono font-black text-slate-800">{currencySymbol}{priceTiers.tier3}</span>
+                            </div>
+                            <div className="bg-[#175D39]/10 p-2 rounded-xl border border-[#175D39]/40 ring-1 ring-[#175D39]/20">
+                              <span className="text-[10px] text-[#175D39] font-extrabold block mb-0.5 flex items-center justify-center gap-0.5">
+                                4 Full <span className="w-1.5 h-1.5 rounded-full bg-[#175D39] animate-pulse"></span>
+                              </span>
+                              <span className="text-sm font-mono font-black text-[#175D39]">{currencySymbol}{priceTiers.tier4}</span>
                             </div>
                           </div>
                         </div>
@@ -1491,8 +1133,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         {/* Toggle safety companions option */}
                         <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                           <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-lg bg-[#00875A]/15 flex items-center justify-center border border-[#00875A]/30">
-                              <ShieldCheck className="w-5 h-5 text-[#00875A]" />
+                            <div className="w-8 h-8 rounded-lg bg-[#175D39]/15 flex items-center justify-center border border-[#175D39]/30">
+                              <ShieldCheck className="w-5 h-5 text-[#175D39]" />
                             </div>
                             <div>
                               <span className="text-xs font-bold block text-slate-800">Safe Student Peer Matching</span>
@@ -1506,14 +1148,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               onChange={() => setVerifyPeer(!verifyPeer)} 
                               className="sr-only peer" 
                             />
-                            <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                            <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
                           </label>
                         </div>
 
                         {/* CTA button */}
                         <button
                           type="submit"
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                          className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                         >
                           <Users className="w-5 h-5" />
                           {bookingMode === 'schedule' ? 'Schedule Pool Ride' : 'Form Live Ride Pool'}
@@ -1524,8 +1166,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Option 2: FIND POOL VIEW DETAILS */}
                     {rideMode === 'find' && (
                       <div className="space-y-4 animate-fadeIn text-left">
-                        <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-slate-200">
-                          <p className="text-xs font-bold text-[#00875A] uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                        <div className="bg-[#F2F2F2] p-4 rounded-2xl border border-slate-200">
+                          <p className="text-xs font-bold text-[#175D39] uppercase tracking-wide flex items-center gap-1.5 mb-1">
                             <Search className="w-4 h-4" /> Available Pools Headed Your Way
                           </p>
                           <p className="text-[10px] text-slate-500">Join an existing campus ride pool to instantly slash your travel expenses today.</p>
@@ -1548,7 +1190,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                 <div>
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-xs font-black text-slate-800">{simPool.host}</span>
-                                    <span className="text-[9px] bg-[#00875A]/10 text-[#00875A] px-1.5 py-0.5 rounded-md font-bold">★ {simPool.rating}</span>
+                                    <span className="text-[9px] bg-[#175D39]/10 text-[#175D39] px-1.5 py-0.5 rounded-md font-bold">★ {simPool.rating}</span>
                                   </div>
                                   <p className="text-[10px] text-slate-500 font-medium font-sans">{simPool.major} • heading to {simPool.dropoff}</p>
                                   <p className="text-[10px] text-slate-500 font-bold font-mono uppercase mt-0.5 text-slate-600">{simPool.vehicleType} Vehicle</p>
@@ -1558,12 +1200,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
                                 <div className="text-right">
                                   <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Est. Cost</span>
-                                  <span className="text-sm font-mono font-black text-[#00875A]">{currencySymbol}{simPool.fare}/seat</span>
+                                  <span className="text-sm font-mono font-black text-[#175D39]">{currencySymbol}{simPool.fare}/seat</span>
                                 </div>
 
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    if (userProfile.walletBalance < simPool.fare) {
+                                      alert(`Insufficient funds. You need ${currencySymbol}${simPool.fare} to join this pool.`);
+                                      onNavigate('payments');
+                                      return;
+                                    }
+                                    
                                     const poolObj: ActivePool = {
                                       id: simPool.id,
                                       hostName: simPool.host,
@@ -1592,7 +1240,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                     setCheckoutPool(poolObj);
                                     setCheckoutTimer(30);
                                   }}
-                                  className="bg-[#00875A] hover:bg-[#00875A]/95 text-white text-xs font-black py-2.5 px-4 rounded-xl cursor-pointer shadow-sm transition-colors"
+                                  className="bg-[#175D39] hover:bg-[#175D39]/95 text-white text-xs font-black py-2.5 px-4 rounded-xl cursor-pointer shadow-sm transition-colors"
                                 >
                                   Join Pool
                                 </button>
@@ -1609,33 +1257,48 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         {/* Vehicle Type Select */}
                         <div className="space-y-2">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Choose Solo Transit</label>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {VEHICLES.map((v) => {
-                              const isSelected = selectedVehicleId === v.id;
-                              return (
-                                <button
-                                  key={v.id}
-                                  type="button"
-                                  onClick={() => setSelectedVehicleId(v.id)}
-                                  className={`p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-slate-100 border-[#00875A] text-[#00875A] shadow-sm font-bold' 
-                                      : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
-                                  }`}
-                                >
-                                  {v.id === 'Keke' ? (
-                                    <Zap className="w-5 h-5 stroke-[2]" />
-                                  ) : v.id === 'Shuttle' ? (
-                                    <Users className="w-5 h-5 stroke-[2]" />
-                                  ) : (
-                                    <Car className="w-5 h-5 stroke-[2]" />
-                                  )}
-                                  <span className="text-[11px] font-bold truncate max-w-full text-center leading-tight">{v.name}</span>
-                                  <span className="text-[9px] text-slate-400 font-semibold">Cap: {v.capacity}</span>
-                                  <span className="text-[10px] font-mono font-black text-[#00875A] bg-[#00875A]/5 px-1.5 py-0.5 rounded-md">{currencySymbol}{v.soloPrice}</span>
-                                </button>
-                              );
-                            })}
+                          <div className="grid grid-cols-3 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Car')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Car' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Car className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Solo Car</span>
+                              <span className="text-[10px] font-mono text-slate-500">{currencySymbol}{basePrice}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Keke')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Keke' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Zap className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Solo Keke</span>
+                              <span className="text-[10px] font-mono text-slate-500">{currencySymbol}{basePrice}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setVehicleType('Shuttle')}
+                              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                                vehicleType === 'Shuttle' 
+                                  ? 'bg-slate-100 border-[#175D39] text-[#175D39] shadow-sm font-bold' 
+                                  : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                              }`}
+                            >
+                              <Users className="w-6 h-6 stroke-[2]" />
+                              <span className="text-xs font-bold">Solo Shuttle</span>
+                              <span className="text-[10px] font-mono text-slate-500">{currencySymbol}{basePrice}</span>
+                            </button>
                           </div>
                         </div>
 
@@ -1643,15 +1306,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
                           <div>
                             <span className="text-xs font-bold text-slate-600 uppercase block tracking-wider">Direct Solo Fare</span>
-                            <span className="text-[10px] text-slate-500">No companions, straight direct delivery in {activeVehicleConfig.name}.</span>
+                            <span className="text-[10px] text-slate-500">No companions, straight direct delivery.</span>
                           </div>
-                          <span className="text-lg font-mono font-black text-slate-800">{currencySymbol}{activeVehicleConfig.soloPrice}</span>
+                          <span className="text-lg font-mono font-black text-slate-800">{currencySymbol}{basePrice}</span>
                         </div>
 
                         {/* Solo CTA Button */}
                         <button
                           type="submit"
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                          className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                         >
                           <Car className="w-5 h-5" />
                           {bookingMode === 'schedule' ? 'Schedule Solo Ride' : 'Book Direct Solo Ride'}
@@ -1664,7 +1327,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Scheduled rides section if any exist */}
                 {scheduledRides.length > 0 && (
                   <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-xs space-y-4 animate-fadeIn text-left">
-                    <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider flex items-center gap-1.5">
                       <Calendar className="w-4.5 h-4.5" /> Your Scheduled Rides ({scheduledRides.length})
                     </h3>
 
@@ -1680,24 +1343,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             </div>
                             <p className="text-xs text-slate-700 font-medium">{getStopName(ride.pickup)} ➔ {getStopName(ride.dropoff)}</p>
                             <p className="text-[10px] text-slate-500 font-semibold font-mono flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-[#00875A]" /> {ride.date} • <Clock className="w-3 h-3 text-[#00875A]" /> {ride.time}
+                              <Calendar className="w-3 h-3 text-[#175D39]" /> {ride.date} • <Clock className="w-3 h-3 text-[#175D39]" /> {ride.time}
                             </p>
                           </div>
 
                           <div className="text-right flex flex-col items-end gap-2">
-                            <span className="text-xs font-mono font-black text-[#00875A]">{currencySymbol}{ride.fare}</span>
-                             <button
+                            <span className="text-xs font-mono font-black text-[#175D39]">{currencySymbol}{ride.fare}</span>
+                            <button
                               type="button"
                               onClick={() => {
                                 if (confirm('Are you sure you want to cancel this scheduled ride?')) {
-                                  const stored = localStorage.getItem('campusride_global_scheduled_rides');
-                                  if (stored) {
-                                    try {
-                                      const allRides = JSON.parse(stored) as any[];
-                                      const updated = allRides.filter(r => r.id !== ride.id);
-                                      localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updated));
-                                    } catch (e) {}
-                                  }
                                   setScheduledRides(prev => prev.filter(r => r.id !== ride.id));
                                   alert('Scheduled ride cancelled.');
                                 }
@@ -1720,126 +1375,53 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6 flex-1 flex flex-col justify-between">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="bg-[#00875A]/15 text-[#00875A] text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
-                      {isMatchingDriver ? 'MATCHING WITH DRIVER' : 'POOL FORMING LOBBY'}
+                    <span className="bg-[#175D39]/15 text-[#175D39] text-xs font-bold border border-[#175D39]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                      POOL FORMING LOBBY
                     </span>
                     <span className="text-xs font-mono text-slate-500">Route: {getStopName(pickup)} ➔ {getStopName(dropoff)}</span>
                   </div>
 
                   {/* Ticking Driver Accept Countdown Bar */}
-                  {isMatchingDriver && (
-                    <div className="bg-amber-50 border border-amber-150 p-4 rounded-2xl flex items-center justify-between shadow-xs animate-fadeIn">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-5 h-5 text-amber-600 animate-spin" style={{ animationDuration: '4s' }} />
-                        <div>
-                          <span className="text-xs font-black text-amber-800 block uppercase tracking-wide">Waiting for Driver to Accept</span>
-                          <span className="text-[10px] text-amber-700 block font-semibold">Driver has 1 minute to accept before timeout</span>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-xl font-mono font-black text-[#00875A] bg-[#00875A]/10 px-2 py-0.5 rounded-md">
-                          {driverTimer}s
-                        </span>
+                  <div className="bg-amber-50 border border-amber-150 p-4 rounded-2xl flex items-center justify-between shadow-xs animate-fadeIn">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-5 h-5 text-amber-600 animate-spin" style={{ animationDuration: '4s' }} />
+                      <div>
+                        <span className="text-xs font-black text-amber-800 block uppercase tracking-wide">Waiting for Driver to Accept</span>
+                        <span className="text-[10px] text-amber-700 block font-semibold">Ride cancels automatically if no driver accepts</span>
                       </div>
                     </div>
-                  )}
-
-                  {/* Search Failed Retry State */}
-                  {searchFailed && (
-                    <div className="bg-rose-50 border border-rose-200 p-5 rounded-2xl flex flex-col space-y-4 shadow-sm animate-fadeIn">
-                      <div className="flex items-start space-x-3">
-                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5 animate-bounce" />
-                        <div>
-                          <span className="text-xs font-black text-rose-800 block uppercase tracking-wide">No Drivers Accepted</span>
-                          <span className="text-[11px] text-rose-700 block font-semibold mt-1 leading-normal">
-                            We couldn't connect you with an active driver on campus within the 60-second window. Would you like to retry the matchmaking search or return to the lobby?
-                          </span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <button
-                          onClick={() => {
-                            setSearchFailed(false);
-                            handleInitiateDriverMatch();
-                          }}
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold py-2.5 px-4 rounded-xl text-[11px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '6s' }} />
-                          Retry Search
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSearchFailed(false);
-                            if (!joinedPoolId) {
-                              setPoolingState('idle');
-                            }
-                          }}
-                          className="w-full bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold py-2.5 px-4 rounded-xl text-[11px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center shadow-sm"
-                        >
-                          {!joinedPoolId ? 'Cancel Request' : 'Return to Lobby'}
-                        </button>
-                      </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xl font-mono font-black text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded-md">
+                        {driverTimer}s
+                      </span>
                     </div>
-                  )}
+                  </div>
 
-                  {!isMatchingDriver && !searchFailed && (
-                    <div className="text-center py-6">
-                      <h3 className="text-2xl font-black text-[#00875A] tracking-tight">Searching for Companions...</h3>
-                      <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Connecting campus commuters traveling in your direction to minimize your transport fares live.</p>
-                    </div>
-                  )}
-
-                  {/* Non-host confirmation button */}
-                  {(() => {
-                    const pool = activePools.find(p => p.id === joinedPoolId);
-                    const isHost = pool ? pool.hostName === (userProfile.name || 'Temi Adeyemi') : true;
-                    const myMemberObj = lobbyMembers.find(m => m.name === (userProfile.name || 'Temi Adeyemi'));
-                    if (joinedPoolId && !isHost && myMemberObj && !myMemberObj.confirmedStart) {
-                      return (
-                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex flex-col items-center text-center gap-2 mb-4 animate-fadeIn">
-                          <span className="text-xs font-bold text-amber-800">Ready to start the ride?</span>
-                          <p className="text-[10px] text-amber-600">The pool host is waiting for all members to confirm before requesting a driver.</p>
-                          <button
-                            onClick={handleConfirmStartRide}
-                            className="bg-[#00875A] hover:bg-[#00875A]/90 text-white font-extrabold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-transform transform active:scale-95 shadow-md cursor-pointer"
-                          >
-                            Confirm Start Ride
-                          </button>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                  <div className="text-center py-6">
+                    <h3 className="text-2xl font-black text-[#175D39] tracking-tight">Searching for Companions...</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Connecting campus commuters traveling in your direction to minimize your transport fares live.</p>
+                  </div>
 
                   {/* Occupancy Seating Tracker progress bar (just like user's wireframe) */}
                   <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Seating Capacity Filled</span>
-                      <span className="text-sm font-mono font-black text-[#00875A]">{lobbyMembers.length}/{activeVehicleConfig.capacity} SEATS</span>
+                      <span className="text-sm font-mono font-black text-[#175D39]">{lobbyMembers.length}/4 SEATS</span>
                     </div>
 
                     {/* Seating progress bar indicators */}
-                    <div className="grid gap-2.5 h-3" style={{ gridTemplateColumns: `repeat(${activeVehicleConfig.capacity}, minmax(0, 1fr))` }}>
-                      {Array.from({ length: activeVehicleConfig.capacity }).map((_, idx) => {
-                        const seatNum = idx + 1;
-                        const isFilled = lobbyMembers.length >= seatNum;
-                        const isNextWaiting = lobbyMembers.length === idx;
-                        return (
-                          <div 
-                            key={idx}
-                            className={`rounded-full transition-all duration-300 ${
-                              isFilled ? 'bg-[#00875A]' : 'bg-slate-200'
-                            } ${isNextWaiting ? 'animate-pulse bg-slate-300' : ''}`}
-                          ></div>
-                        );
-                      })}
+                    <div className="grid grid-cols-4 gap-2.5 h-3">
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 1 ? 'bg-[#175D39]' : 'bg-slate-200'}`}></div>
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 2 ? 'bg-[#175D39]' : 'bg-slate-200'} ${lobbyMembers.length === 1 ? 'animate-pulse bg-gray-750' : ''}`}></div>
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 3 ? 'bg-[#175D39]' : 'bg-slate-200'} ${lobbyMembers.length === 2 ? 'animate-pulse bg-gray-750' : ''}`}></div>
+                      <div className={`rounded-full transition-all duration-300 ${lobbyMembers.length >= 4 ? 'bg-[#175D39]' : 'bg-slate-200'} ${lobbyMembers.length === 3 ? 'animate-pulse bg-gray-750' : ''}`}></div>
                     </div>
 
                     {/* Pricing ticker based on joined members */}
                     <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-xs">
                       <span className="text-slate-500">Current Cost per Seat:</span>
-                      <span className="font-mono font-black text-lg text-[#00875A] flex items-center gap-1">
-                        {currencySymbol}{activeVehicleConfig.poolPrice}
+                      <span className="font-mono font-black text-lg text-[#175D39] flex items-center gap-1">
+                        {currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}
                         <span className="text-[10px] text-gray-500 font-medium font-sans">/seat</span>
                       </span>
                     </div>
@@ -1849,45 +1431,25 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Joined Commuters</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {lobbyMembers.map((member, idx) => {
-                        const pool = activePools.find(p => p.id === joinedPoolId);
-                        const isHost = pool ? pool.hostName === member.name : idx === 0;
-                        const isConfirmed = member.confirmedStart || isHost;
-                        return (
-                          <div key={idx} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex items-center justify-between gap-3">
-                            <div className="flex items-center space-x-3 min-w-0">
-                              <img 
-                                referrerPolicy="no-referrer"
-                                src={member.avatar} 
-                                alt={member.name} 
-                                className="w-10 h-10 rounded-full object-cover border border-slate-150 shadow-xs shadow-sm shrink-0"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <span className="text-xs font-bold block text-slate-800 truncate">{member.name}</span>
-                                <span className="text-[10px] text-gray-500 font-mono tracking-wide uppercase truncate block">{member.major} • {member.gender}</span>
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-1 shrink-0">
-                              <span className="text-[10px] font-mono text-amber-500 bg-[#00875A]/5 border border-amber-500/10 px-1.5 py-0.5 rounded-lg">
-                                ★ {member.rating}
-                              </span>
-                              {isHost ? (
-                                <span className="text-[9px] bg-sage-light/30 text-sage-dark px-1.5 py-0.5 rounded-md font-bold uppercase">Host</span>
-                              ) : isConfirmed ? (
-                                <span className="text-[9px] bg-sage-light/30 text-sage-dark px-1.5 py-0.5 rounded-md font-bold uppercase flex items-center gap-0.5">
-                                  ✓ Ready
-                                </span>
-                              ) : (
-                                <span className="text-[9px] bg-slate-150 text-slate-500 px-1.5 py-0.5 rounded-md font-bold uppercase animate-pulse">
-                                  Pending
-                                </span>
-                              )}
-                            </div>
+                      {lobbyMembers.map((member, idx) => (
+                        <div key={idx} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex items-center space-x-3">
+                          <img 
+                            referrerPolicy="no-referrer"
+                            src={member.avatar} 
+                            alt={member.name} 
+                            className="w-10 h-10 rounded-full object-cover border border-slate-150 shadow-xs shadow-sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold block text-slate-800 truncate">{member.name}</span>
+                            <span className="text-[10px] text-gray-500 font-mono tracking-wide uppercase truncate block">{member.major} • {member.gender}</span>
                           </div>
-                        );
-                      })}
+                          <span className="text-[10px] font-mono text-amber-400 bg-[#175D39]/10 border border-amber-500/20 px-1.5 py-0.5 rounded-lg shrink-0">
+                            ★ {member.rating}
+                          </span>
+                        </div>
+                      ))}
                       {/* Placeholder spots */}
-                      {Array.from({ length: Math.max(0, activeVehicleConfig.capacity - lobbyMembers.length) }).map((_, idx) => (
+                      {Array.from({ length: 4 - lobbyMembers.length }).map((_, idx) => (
                         <div key={idx} className="bg-slate-50 border border-dashed border-slate-200 p-3 rounded-2xl flex items-center space-x-3 opacity-40">
                           <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-black text-gray-600">
                             ?
@@ -1913,9 +1475,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     </button>
                   ) : activePools.find(p => p.id === joinedPoolId)?.hostName === (userProfile.name || 'Temi Adeyemi') ? (
                     <button
-                      onClick={() => {
-                        handleDeletePool(joinedPoolId);
-                      }}
+                      onClick={() => handleDeletePool(joinedPoolId)}
                       className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1930,51 +1490,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       Leave Pool
                     </button>
                   )}
-
-                  {(() => {
-                    const pool = activePools.find(p => p.id === joinedPoolId);
-                    const isHost = pool ? pool.hostName === (userProfile.name || 'Temi Adeyemi') : true;
-                    const allOthersConfirmed = lobbyMembers.slice(1).every(m => m.confirmedStart);
-                    const canMatch = !joinedPoolId || isHost;
-                    const matchEnabled = lobbyMembers.length === 1 || allOthersConfirmed;
-
-                    if (!canMatch) {
-                      return (
-                        <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-center text-[10px] text-gray-500 font-bold flex items-center justify-center">
-                          Waiting for host to start ride
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <button
-                        onClick={handleInitiateDriverMatch}
-                        disabled={!matchEnabled || isMatchingDriver || searchFailed}
-                        className={`w-full font-black py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                          isMatchingDriver
-                            ? 'bg-amber-100 border border-amber-200 text-amber-800 font-mono animate-pulse'
-                            : searchFailed
-                              ? 'bg-rose-100 border border-rose-200 text-rose-800 font-mono cursor-not-allowed'
-                              : matchEnabled
-                                ? 'bg-[#00875A] text-white hover:bg-[#00875A]/90'
-                                : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                        }`}
-                      >
-                        {isMatchingDriver ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin text-amber-600" />
-                            <span>Searching ({driverTimer}s)</span>
-                          </>
-                        ) : searchFailed ? (
-                          'Search Expired'
-                        ) : matchEnabled ? (
-                          'Match Driver Now'
-                        ) : (
-                          'Waiting for Riders'
-                        )}
-                      </button>
-                    );
-                  })()}
+                  <button
+                    onClick={handleStartTransit}
+                    className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3.5 px-4 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    Match Driver Now
+                  </button>
                 </div>
               </div>
             )}
@@ -1983,7 +1504,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {poolingState === 'matched' && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
                 <div className="flex justify-between items-center">
-                  <span className="bg-[#00875A]/15 text-[#00875A] text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                  <span className="bg-[#175D39]/15 text-[#175D39] text-xs font-bold border border-[#175D39]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
                     DRIVER ARRIVING
                   </span>
                   <span className="text-xs font-mono text-slate-500">ETA: 2 Minutes</span>
@@ -1999,9 +1520,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       className="w-14 h-14 rounded-2xl object-cover border border-slate-150 shadow-xs shadow-md"
                     />
                     <div>
-                      <h3 className="text-base font-black text-[#00875A] flex items-center gap-1.5">
+                      <h3 className="text-base font-black text-[#175D39] flex items-center gap-1.5">
                         David Alao 
-                        <span className="text-xs font-mono text-amber-400 bg-[#00875A]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        <span className="text-xs font-mono text-amber-400 bg-[#175D39]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
                           ★ 4.9
                         </span>
                       </h3>
@@ -2013,68 +1534,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   {/* Security PIN code to unlock ride */}
                   <div className="bg-white border border-slate-150 shadow-xs px-4 py-3 rounded-2xl text-center shrink-0">
                     <span className="text-[10px] text-gray-500 font-bold block uppercase tracking-wider">BOARDING PIN</span>
-                    <span className="text-lg font-mono font-black tracking-widest text-[#00875A]">{verificationCode}</span>
-                  </div>
-                </div>
-
-                {/* Trust Payment Method Card */}
-                <div className="p-4 bg-[#00875A]/5 rounded-2xl border border-[#00875A]/15 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
-                      activeRide?.paymentMethod === 'transfer' 
-                        ? 'bg-blue-100 text-blue-600' 
-                        : 'bg-amber-100 text-amber-600'
-                    }`}>
-                      {activeRide?.paymentMethod === 'transfer' ? <ArrowRightLeft className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">PAYMENT METHOD</span>
-                      <span className="text-xs font-extrabold text-slate-700">
-                        {activeRide?.paymentMethod === 'transfer' 
-                          ? 'Bank Transfer' 
-                          : activeRide?.paymentMethod === 'cash' 
-                            ? 'Handover Cash'
-                            : 'Not Selected'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    {activeRide?.paymentMethod === 'transfer' ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold ${
-                          activeRide?.paymentValidatedByDriver 
-                            ? 'bg-emerald-100 text-emerald-700 font-bold' 
-                            : 'bg-amber-100 text-amber-700 font-bold animate-pulse'
-                        }`}>
-                          {activeRide?.paymentValidatedByDriver ? 'Payment Validated' : 'Pending Verification'}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setPaymentStep('transfer_details');
-                            setShowPaymentSelection(true);
-                          }}
-                          className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer animate-pulse"
-                        >
-                          View Bank Details
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-extrabold">
-                          {activeRide?.paymentMethod === 'cash' ? 'Cash on Arrival' : 'Required'}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setPaymentStep('select');
-                            setShowPaymentSelection(true);
-                          }}
-                          className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer"
-                        >
-                          {activeRide?.paymentMethod ? 'Change Method' : 'Choose Method'}
-                        </button>
-                      </div>
-                    )}
+                    <span className="text-lg font-mono font-black tracking-widest text-[#175D39]">{verificationCode}</span>
                   </div>
                 </div>
 
@@ -2107,7 +1567,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   </button>
                   <button
                     onClick={() => setPoolingState('transit')}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
+                    className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <UserCheck className="w-4 h-4" />
                     Board Vehicle
@@ -2120,7 +1580,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {poolingState === 'transit' && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
                 <div className="flex justify-between items-center">
-                  <span className="bg-[#00875A]/15 text-blue-400 text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                  <span className="bg-[#175D39]/15 text-blue-400 text-xs font-bold border border-[#175D39]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
                     <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
                     RIDE IN TRANSIT
                   </span>
@@ -2149,8 +1609,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     }}
                     className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 border cursor-pointer ${
                       sosActivated 
-                        ? 'bg-[#00875A] text-white border-[#00875A] animate-pulse' 
-                        : 'bg-transparent text-[#00875A] border-[#00875A]/30 hover:bg-[#00875A]/10'
+                        ? 'bg-[#175D39] text-white border-[#175D39] animate-pulse' 
+                        : 'bg-transparent text-[#175D39] border-[#175D39]/30 hover:bg-[#175D39]/10'
                     }`}
                   >
                     {sosActivated ? 'SOS ON' : 'Trigger SOS'}
@@ -2160,7 +1620,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <div className="pt-4 border-t border-slate-200">
                   <button
                     onClick={() => setPoolingState('arrived')}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
+                    className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <CheckCircle className="w-4 h-4" />
                     Simulate Arrival
@@ -2172,12 +1632,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {/* IF ARRIVED / TRIP FINISHED - RENDER RATING & REVIEW SCREEN */}
             {(poolingState === 'arrived' || poolingState === 'rated') && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6 text-center">
-                <div className="w-16 h-16 bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <div className="w-16 h-16 bg-[#175D39]/10 border border-[#175D39]/20 text-[#175D39] rounded-full flex items-center justify-center mx-auto shadow-inner">
                   <CheckCircle className="w-8 h-8" />
                 </div>
                 
                 <div className="space-y-1.5">
-                  <h3 className="text-2xl font-black text-[#00875A] tracking-tight">Trip Completed!</h3>
+                  <h3 className="text-2xl font-black text-[#175D39] tracking-tight">Trip Completed!</h3>
                   <p className="text-xs text-slate-500">You arrived safely at {getStopName(dropoff)}.</p>
                 </div>
 
@@ -2190,12 +1650,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-500">Split Occupancy Fare ({lobbyMembers.length}/4 joined):</span>
-                    <span className="font-mono text-[#00875A] font-black">{currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
+                    <span className="font-mono text-[#175D39] font-black">{currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
                   </div>
                   <div className="h-px bg-gray-850"></div>
-                  <div className="flex justify-between text-xs bg-sage-dark/10 p-2 rounded-lg border border-sage-light/30">
-                    <span className="text-sage-medium font-bold">Total Cash Saved:</span>
-                    <span className="font-mono text-sage-medium font-black">+{currencySymbol}{basePrice - Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
+                  <div className="flex justify-between text-xs bg-emerald-950/20 p-2 rounded-lg border border-emerald-900/30">
+                    <span className="text-emerald-400 font-bold">Total Cash Saved:</span>
+                    <span className="font-mono text-emerald-400 font-black">+{currencySymbol}{basePrice - Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
                   </div>
                 </div>
 
@@ -2226,7 +1686,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                   <button
                     onClick={handleRateSubmit}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A] text-slate-950 font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    className="w-full bg-[#175D39] hover:bg-[#175D39] text-slate-950 font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                   >
                     Finish & Close Trip
                   </button>
@@ -2243,16 +1703,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             <div className="bg-white rounded-3xl border border-slate-200 flex flex-col h-[350px] lg:h-[450px] overflow-hidden">
               <div className="p-4 border-b border-slate-200 bg-slate-100/50 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#00875A]/15 flex items-center justify-center text-[#00875A]">
+                  <div className="w-8 h-8 rounded-lg bg-[#175D39]/15 flex items-center justify-center text-[#175D39]">
                     <MessageSquare className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider block">Transit Pool Chat</h3>
+                    <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider block">Transit Pool Chat</h3>
                     <span className="text-[10px] text-gray-500 block font-mono">ID: CHAT-POOL-8832</span>
                   </div>
                 </div>
                 {poolingState === 'forming' || poolingState === 'matched' || poolingState === 'transit' ? (
-                  <span className="text-[10px] bg-[#00875A]/10 text-[#00875A] px-2 py-0.5 rounded-md font-mono font-bold animate-pulse">
+                  <span className="text-[10px] bg-[#175D39]/10 text-[#175D39] px-2 py-0.5 rounded-md font-mono font-bold animate-pulse">
                     ● ACTIVE
                   </span>
                 ) : (
@@ -2262,58 +1722,46 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 )}
               </div>
 
-              {poolingState === 'idle' ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-slate-50/50">
-                  <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 animate-pulse">
-                    <Lock className="w-5 h-5" />
+              {/* Chat Messages Scrolling Body */}
+              <div className="flex-1 p-4 overflow-y-auto space-y-3.5 flex flex-col">
+                {chatMessages.map((msg, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`max-w-[85%] flex flex-col ${
+                      msg.isUser ? 'self-end items-end' : 'self-start items-start'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 mb-1 text-[10px]">
+                      <span className="font-extrabold text-slate-500">{msg.sender}</span>
+                      <span className="text-gray-600 font-mono">{msg.time}</span>
+                    </div>
+                    <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                      msg.sender === 'System' 
+                        ? 'bg-slate-100/50 text-slate-600 border border-slate-200 italic text-center w-full font-mono'
+                        : msg.isUser 
+                          ? 'bg-[#175D39] text-white rounded-tr-none' 
+                          : 'bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-none'
+                    }`}>
+                      {msg.text}
+                    </div>
                   </div>
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Chat Restricted</h4>
-                  <p className="text-[11px] text-slate-500 max-w-[210px] leading-relaxed">
-                    Only active commuters who successfully join the ride pool can access this real-time transit chat room.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Chat Messages Scrolling Body */}
-                  <div className="flex-1 p-4 overflow-y-auto space-y-3.5 flex flex-col">
-                    {chatMessages.map((msg, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`max-w-[85%] flex flex-col ${
-                          msg.isUser ? 'self-end items-end' : 'self-start items-start'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-1.5 mb-1 text-[10px]">
-                          <span className="font-extrabold text-slate-500">{msg.sender}</span>
-                          <span className="text-gray-600 font-mono">{msg.time}</span>
-                        </div>
-                        <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                          msg.sender === 'System' 
-                            ? 'bg-slate-100/50 text-slate-600 border border-slate-200 italic text-center w-full font-mono'
-                            : msg.isUser 
-                              ? 'bg-[#00875A] text-white rounded-tr-none' 
-                              : 'bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-none'
-                        }`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={chatBottomRef}></div>
-                  </div>
+                ))}
+                <div ref={chatBottomRef}></div>
+              </div>
 
-                  {/* Quick Replies row */}
-                  <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth">
-                    {['On my way!', 'I am at the stop', 'Wait for me', 'Awesome split!'].map((phrase, index) => (
-                      <button
-                        key={index}
-                        onClick={() => sendQuickReply(phrase)}
-                        className="px-3 py-1 bg-slate-100 hover:bg-gray-850 text-slate-500 hover:text-white border border-slate-150 shadow-xs rounded-lg text-[10px] font-bold transition-all shrink-0 cursor-pointer"
-                      >
-                        {phrase}
-                      </button>
-                    ))}
-                  </div>
-                </>
+              {/* Quick Replies row */}
+              {poolingState !== 'idle' && (
+                <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth">
+                  {['On my way!', 'I am at the stop', 'Wait for me', 'Awesome split!'].map((phrase, index) => (
+                    <button
+                      key={index}
+                      onClick={() => sendQuickReply(phrase)}
+                      className="px-3 py-1 bg-slate-100 hover:bg-gray-850 text-slate-500 hover:text-white border border-slate-150 shadow-xs rounded-lg text-[10px] font-bold transition-all shrink-0 cursor-pointer"
+                    >
+                      {phrase}
+                    </button>
+                  ))}
+                </div>
               )}
 
               {/* Message Submit Footer Form */}
@@ -2324,12 +1772,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   disabled={poolingState === 'idle'}
-                  className="flex-1 bg-slate-50 border border-slate-150 shadow-xs rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#00875A]/30 disabled:opacity-50"
+                  className="flex-1 bg-slate-50 border border-slate-150 shadow-xs rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#175D39]/30 disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={poolingState === 'idle' || !chatInput.trim()}
-                  className="p-2.5 bg-[#00875A] hover:bg-[#00875A] disabled:bg-gray-850 text-white rounded-xl transition duration-150 cursor-pointer"
+                  className="p-2.5 bg-[#175D39] hover:bg-[#175D39] disabled:bg-gray-850 text-white rounded-xl transition duration-150 cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -2349,13 +1797,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-black text-[#00875A] tracking-tight uppercase">Browse Active Pools</h1>
+              <h1 className="text-2xl font-black text-[#175D39] tracking-tight uppercase">Browse Active Pools</h1>
               <p className="text-xs text-slate-500">
                 Join matching commutes created by fellow students to split fares and ride safely.
               </p>
@@ -2365,7 +1813,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 setRideMode('create');
                 onNavigate('booking');
               }}
-              className="px-5 py-3 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#00875A]/10"
+              className="px-5 py-3 bg-[#175D39] hover:bg-[#175D39]/90 text-white font-bold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#175D39]/10"
             >
               <Plus className="w-4.5 h-4.5" />
               <span>Start New Pool</span>
@@ -2375,7 +1823,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           {/* Filters Widget Panel */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center space-x-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
-              <Search className="w-4 h-4 text-[#00875A]" />
+              <Search className="w-4 h-4 text-[#175D39]" />
               <span>Search Filters</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2385,7 +1833,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <select
                   value={browseFilterPickup}
                   onChange={(e) => setBrowseFilterPickup(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
                 >
                   <option value="all">All Pickup Stops</option>
                   {campusStops.map((stop) => (
@@ -2400,7 +1848,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <select
                   value={browseFilterDropoff}
                   onChange={(e) => setBrowseFilterDropoff(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
                 >
                   <option value="all">All Destinations</option>
                   {campusStops.map((stop) => (
@@ -2415,7 +1863,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <select
                   value={browseFilterVehicle}
                   onChange={(e) => setBrowseFilterVehicle(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#175D39]"
                 >
                   <option value="all">All Vehicles (Any)</option>
                   <option value="Car">Car (Cozy Comfort)</option>
@@ -2434,7 +1882,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     setBrowseFilterDropoff('all');
                     setBrowseFilterVehicle('all');
                   }}
-                  className="text-[10px] font-bold text-[#00875A] hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-[10px] font-bold text-[#175D39] hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <RefreshCw className="w-3 h-3 animate-spin" /> Clear Filters
                 </button>
@@ -2503,7 +1951,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Route Line */}
                     <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl space-y-2">
                       <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-[#00875A] shrink-0" />
+                        <MapPin className="w-4 h-4 text-[#175D39] shrink-0" />
                         <div>
                           <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Pickup</span>
                           <span className="text-xs font-bold text-slate-800 truncate block">{getStopName(pool.pickupId)}</span>
@@ -2523,7 +1971,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                         <span>Lobby Capacity</span>
-                        <span className={isFull ? 'text-red-500' : 'text-[#00875A]'}>
+                        <span className={isFull ? 'text-red-500' : 'text-[#175D39]'}>
                           {pool.currentRiders.length}/{pool.maxRiders} Seats Filled
                         </span>
                       </div>
@@ -2533,7 +1981,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <div
                             key={idx}
                             className={`rounded-full h-full ${
-                              idx < pool.currentRiders.length ? 'bg-[#00875A]' : 'bg-slate-150'
+                              idx < pool.currentRiders.length ? 'bg-[#175D39]' : 'bg-slate-150'
                             }`}
                           ></div>
                         ))}
@@ -2561,7 +2009,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       {/* Vehicle Category Badge */}
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono ${
                         pool.vehicleType === 'Car' 
-                          ? 'bg-sage-bg/30 border border-sage-light text-[#00875A]'
+                          ? 'bg-emerald-50 border border-emerald-200 text-[#175D39]'
                           : pool.vehicleType === 'Keke'
                             ? 'bg-amber-50 border border-amber-200 text-amber-600'
                             : 'bg-blue-50 border border-blue-200 text-blue-600'
@@ -2575,7 +2023,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div>
                         <span className="text-[9px] text-slate-500 block uppercase tracking-wide">Dynamic split fare</span>
                         <div className="flex items-baseline space-x-1.5 mt-0.5">
-                          <span className="text-base font-extrabold text-[#00875A] font-mono">
+                          <span className="text-base font-extrabold text-[#175D39] font-mono">
                             {currencySymbol}{splitFareMax}
                           </span>
                           <span className="text-[9px] text-slate-400 line-through font-mono">
@@ -2584,7 +2032,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className="text-[9px] text-sage-medium font-bold block bg-sage-bg/30 px-2 py-0.5 rounded-md uppercase tracking-wider border border-sage-light/40 font-sans">
+                        <span className="text-[9px] text-emerald-600 font-bold block bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-wider border border-emerald-100 font-sans">
                           Save up to {Math.round((1 - (splitFareMax / baseF)) * 100)}%
                         </span>
                       </div>
@@ -2617,7 +2065,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         className={`w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                           isFull
                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                            : 'bg-[#00875A] hover:bg-[#00875A]/95 text-white shadow-md shadow-sage-medium/10'
+                            : 'bg-[#175D39] hover:bg-[#175D39]/95 text-white shadow-md shadow-emerald-50'
                         }`}
                       >
                         {isFull ? (
@@ -2636,7 +2084,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
           ) : (
             <div className="bg-white p-12 rounded-3xl border border-slate-200 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-150 flex items-center justify-center text-[#00875A]">
+              <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-150 flex items-center justify-center text-[#175D39]">
                 <Compass className="w-8 h-8" />
               </div>
               <div className="space-y-1 max-w-sm">
@@ -2662,7 +2110,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     if (browseFilterDropoff !== 'all') setDropoff(browseFilterDropoff);
                     onNavigate('booking');
                   }}
-                  className="px-4 py-2.5 bg-[#00875A] hover:bg-[#00875A]/95 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+                  className="px-4 py-2.5 bg-[#175D39] hover:bg-[#175D39]/95 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
                 >
                   Start New Pool
                 </button>
@@ -2679,17 +2127,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">RIDER PORTAL SUMMARY</h1>
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">RIDER PORTAL SUMMARY</h1>
           
           {/* Quick Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Available balance</span>
+              <div className="text-2xl font-black text-[#175D39] font-mono mt-1">{currencySymbol}{userProfile.walletBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Ready for instant pool fares</p>
+            </div>
+
             <div className="bg-white p-5 rounded-2xl border border-slate-200">
               <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Pooling savings (Month)</span>
               <div className="text-2xl font-black text-slate-800 font-mono mt-1">+{currencySymbol}{userProfile.savedThisMonth.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
-              <p className="text-[10px] text-sage-medium mt-0.5">Saved split cost by sharing rides</p>
+              <p className="text-[10px] text-emerald-400 mt-0.5">Saved split cost by sharing rides</p>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200">
@@ -2703,7 +2157,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider">Weekly Transit Outlay</h3>
+                <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider">Weekly Transit Outlay</h3>
                 <p className="text-xs text-gray-500">Breakdown of transport expenses on campus (split vs. solo)</p>
               </div>
               <span className="text-xs bg-slate-100 border border-slate-150 shadow-xs px-3 py-1 rounded-xl font-mono">Last 7 Days</span>
@@ -2728,7 +2182,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div key={idx} className="flex flex-col items-center flex-1 group relative">
                     {/* Tooltip */}
                     <div className="absolute bottom-full mb-2 bg-gray-950 text-white text-[10px] p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all border border-slate-200 flex flex-col pointer-events-none z-10 whitespace-nowrap shadow-xl">
-                      <span className="font-extrabold text-[#00875A]">Split: {currencySymbol}{data.split}</span>
+                      <span className="font-extrabold text-[#175D39]">Split: {currencySymbol}{data.split}</span>
                       <span className="text-slate-500 line-through">Solo: {currencySymbol}{data.solo}</span>
                     </div>
 
@@ -2740,7 +2194,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       ></div>
                       {/* Active Pool Split Bar */}
                       <div 
-                        className="w-3.5 bg-gradient-to-t from-[#00875A] to-[#00875A] rounded-t-sm transition-all duration-300"
+                        className="w-3.5 bg-gradient-to-t from-[#175D39] to-[#175D39] rounded-t-sm transition-all duration-300"
                         style={{ height: `${splitHeight}px` }}
                       ></div>
                     </div>
@@ -2752,7 +2206,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
             <div className="flex justify-center items-center gap-6 pt-4 border-t border-slate-200 text-xs text-gray-500">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 bg-gradient-to-r from-[#00875A] to-[#00875A] rounded-xs"></span>
+                <span className="w-3 h-3 bg-gradient-to-r from-[#175D39] to-[#175D39] rounded-xs"></span>
                 <span>Active Split Ride Outlay</span>
               </div>
               <div className="flex items-center gap-2">
@@ -2764,7 +2218,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
           {/* Historic Trips Log List */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
-            <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider">Past Completed Rides</h3>
+            <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider">Past Completed Rides</h3>
             {transactions.length > 0 ? (
               <div className="space-y-3">
                 {transactions.map((txn, index) => (
@@ -2780,7 +2234,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     </div>
                     <div className="text-right">
                       <span className="text-xs font-mono font-black text-white block">-{currencySymbol}{txn.amount}</span>
-                      <span className="text-[9px] bg-[#00875A]/10 text-sage-medium px-2 py-0.5 rounded-full uppercase font-mono tracking-wide">Paid</span>
+                      <span className="text-[9px] bg-[#175D39]/10 text-emerald-400 px-2 py-0.5 rounded-full uppercase font-mono tracking-wide">Paid</span>
                     </div>
                   </div>
                 ))}
@@ -2801,17 +2255,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-black text-[#00875A] tracking-tight">NOTIFICATIONS INBOX</h1>
+            <h1 className="text-2xl font-black text-[#175D39] tracking-tight">NOTIFICATIONS INBOX</h1>
             <button
               onClick={() => {
                 onMarkNotificationsRead();
                 alert('All messages marked as read.');
               }}
-              className="text-xs text-[#00875A] hover:underline font-bold cursor-pointer"
+              className="text-xs text-[#175D39] hover:underline font-bold cursor-pointer"
             >
               Mark all as read
             </button>
@@ -2831,15 +2285,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div className="flex items-start space-x-3.5">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                       notif.type === 'success' 
-                        ? 'bg-[#00875A]/10 text-sage-medium' 
+                        ? 'bg-[#175D39]/10 text-emerald-400' 
                         : notif.type === 'receipt' 
-                          ? 'bg-[#00875A]/10 text-blue-450' 
+                          ? 'bg-[#175D39]/10 text-blue-450' 
                           : 'bg-slate-200 text-slate-500'
                     }`}>
                       <BellRing className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">{notif.title}</h3>
+                      <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider">{notif.title}</h3>
                       <p className="text-xs text-slate-500 mt-1 leading-relaxed">{notif.message}</p>
                     </div>
                   </div>
@@ -2852,16 +2306,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       )}
 
         {/* 4. VIEW CONTEXT: WALLET & PAYMENTS SCREEN */}
-        {false && activeView === 'payments' && (
+        {activeView === 'payments' && (
           <motion.div
             key="payments"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">WALLET & PAYMENTS</h1>
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">WALLET & PAYMENTS</h1>
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
@@ -2869,22 +2323,22 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             <div className="lg:col-span-7 space-y-6">
               
               {/* Sleek Virtual Debit Card Mockup */}
-              <div className="bg-gradient-to-br from-[#F9FAFB] via-[#00875A] to-black rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-xs relative overflow-hidden shadow-xl ring-1 ring-[#00875A]/10 min-h-[220px] flex flex-col justify-between">
-                <div className="absolute top-0 right-0 w-[40%] h-[40%] rounded-full bg-[#00875A]/5 blur-3xl pointer-events-none"></div>
+              <div className="bg-gradient-to-br from-[#F2F2F2] via-[#175D39] to-black rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-xs relative overflow-hidden shadow-xl ring-1 ring-[#175D39]/10 min-h-[220px] flex flex-col justify-between">
+                <div className="absolute top-0 right-0 w-[40%] h-[40%] rounded-full bg-[#175D39]/5 blur-3xl pointer-events-none"></div>
                 
                 <div className="flex justify-between items-start relative z-10">
                   <div className="space-y-1">
                     <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest font-mono">CAMPUS TRANSIT PASS</span>
                     <h3 className="text-lg font-black text-white">{userProfile.name || 'Temi Adeyemi'}</h3>
                   </div>
-                  <span className="bg-[#00875A]/10 text-[#00875A] text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border border-[#00875A]/20 uppercase">
+                  <span className="bg-[#175D39]/10 text-[#175D39] text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border border-[#175D39]/20 uppercase">
                     STUDENT COMMUTER
                   </span>
                 </div>
 
                 <div className="my-6 relative z-10">
                   <span className="text-[10px] text-gray-500 font-bold uppercase block tracking-wider font-mono">DIGITAL BALANCE</span>
-                  <div className="text-3xl sm:text-4xl font-black text-[#00875A] font-mono mt-0.5 tracking-tight">
+                  <div className="text-3xl sm:text-4xl font-black text-[#175D39] font-mono mt-0.5 tracking-tight">
                     {currencySymbol}{userProfile.walletBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}
                   </div>
                 </div>
@@ -2897,8 +2351,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               {/* Instant Fund Wallet Form */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
-                <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider flex items-center gap-1.5">
-                  <CreditCard className="w-4.5 h-4.5 text-[#00875A]" /> Reload Comm commuter wallet
+                <h3 className="text-sm font-black text-[#175D39] uppercase tracking-wider flex items-center gap-1.5">
+                  <CreditCard className="w-4.5 h-4.5 text-[#175D39]" /> Reload Comm commuter wallet
                 </h3>
                 
                 <form onSubmit={(e) => { e.preventDefault(); setShowPaystackPopup(true); }} className="space-y-4">
@@ -2910,7 +2364,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         onClick={() => { setFundAmount(amount); setCustomFundAmount(''); }}
                         className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all cursor-pointer ${
                           fundAmount === amount && !customFundAmount
-                            ? 'bg-gradient-to-b from-gray-900 to-slate-950 border-[#00875A] text-[#00875A]' 
+                            ? 'bg-gradient-to-b from-gray-900 to-slate-950 border-[#175D39] text-[#175D39]' 
                             : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-white hover:bg-slate-100'
                         }`}
                       >
@@ -2935,7 +2389,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full bg-[#00875A] hover:bg-[#00875A] text-slate-800 font-black py-4 px-6 rounded-2xl shadow-lg transition-all text-xs uppercase tracking-wider cursor-pointer"
+                    className="w-full bg-[#175D39] hover:bg-[#175D39] text-slate-800 font-black py-4 px-6 rounded-2xl shadow-lg transition-all text-xs uppercase tracking-wider cursor-pointer"
                   >
                     REFOUND WALLET WITH PAYSTACK CO
                   </button>
@@ -2950,8 +2404,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               {/* Virtual Account Details for Instant Bank Deposits */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
                 <div className="flex items-center space-x-2">
-                  <ArrowRightLeft className="w-5 h-5 text-[#00875A]" />
-                  <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider block">Instant Bank Transfer Channel</h3>
+                  <ArrowRightLeft className="w-5 h-5 text-[#175D39]" />
+                  <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider block">Instant Bank Transfer Channel</h3>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Make an online bank transfer to your customized virtual account below. Refills reflect instantly via automated credit tracking.
@@ -2965,7 +2419,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Account Number:</span>
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-[#00875A] font-black tracking-widest">9283748291</span>
+                      <span className="text-[#175D39] font-black tracking-widest">9283748291</span>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText('9283748291');
@@ -2994,7 +2448,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               {/* Past Transactions Ledger list */}
               <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
-                <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">Payments Transactions Ledger</h3>
+                <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider">Payments Transactions Ledger</h3>
                 {transactions.length > 0 ? (
                   <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                     {transactions.map((txn, index) => (
@@ -3003,7 +2457,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <span className="text-xs font-bold block text-slate-800 truncate max-w-[150px]">{txn.description}</span>
                           <span className="text-[9px] text-gray-500 block font-mono">{txn.time} • {txn.method}</span>
                         </div>
-                        <span className={`text-xs font-mono font-black ${txn.type === 'reload' ? 'text-[#00875A]' : 'text-[#00875A]'}`}>
+                        <span className={`text-xs font-mono font-black ${txn.type === 'reload' ? 'text-[#175D39]' : 'text-[#175D39]'}`}>
                           {txn.type === 'reload' ? '+' : '-'}{currencySymbol}{txn.amount}
                         </span>
                       </div>
@@ -3031,7 +2485,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   className="bg-white text-slate-900 max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl border border-gray-200"
                 >
                   {/* Paystack Styled header */}
-                  <div className="p-6 bg-gradient-to-r from-teal-500 to-[#00875A] text-white flex justify-between items-center">
+                  <div className="p-6 bg-gradient-to-r from-teal-500 to-[#175D39] text-white flex justify-between items-center">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-bold tracking-widest block uppercase opacity-75">Paystack Secure Checkout</span>
                       <h4 className="text-base font-black">Refill {currencySymbol}{(Number(customFundAmount) || fundAmount).toLocaleString()}</h4>
@@ -3098,189 +2552,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     </div>
 
                     <div className="bg-gray-50 p-3 rounded-2xl flex items-center justify-center gap-1.5 border border-gray-100 text-[10px] text-gray-500">
-                      <ShieldCheck className="w-4 h-4 text-[#00875A]" /> SECURE ADVANCED 256-BIT SSL ENCRYPTION
+                      <ShieldCheck className="w-4 h-4 text-[#175D39]" /> SECURE ADVANCED 256-BIT SSL ENCRYPTION
                     </div>
 
                     <button
                       type="submit"
                       disabled={paystackLoading}
-                      className="w-full bg-[#00875A] hover:bg-[#00875A] text-slate-800 font-black py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer"
+                      className="w-full bg-[#175D39] hover:bg-[#175D39] text-slate-800 font-black py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer"
                     >
                       {paystackLoading ? 'Refilling Comm wallet...' : `PROCEED PAY ${currencySymbol}${(Number(customFundAmount) || fundAmount).toLocaleString()}`}
                     </button>
                   </form>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* TRUST-BASED RIDE PAYMENT SELECTION MODAL */}
-          <AnimatePresence>
-            {showPaymentSelection && activeRide && (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-md">
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white text-slate-800 max-w-md w-full rounded-3xl overflow-hidden shadow-2xl border border-slate-200"
-                >
-                  {/* Header */}
-                  <div className="p-6 bg-[#00875A] text-white flex justify-between items-center">
-                    <div className="space-y-0.5">
-                      <span className="text-[10px] font-bold tracking-widest block uppercase opacity-85">Campus Ride Trust Payment</span>
-                      <h4 className="text-lg font-black">Choose Payment Method</h4>
-                    </div>
-                    <button 
-                      onClick={() => setShowPaymentSelection(false)}
-                      className="p-1 hover:bg-white/10 rounded-lg text-white"
-                    >
-                      <XCircle className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  {/* Body Content */}
-                  <div className="p-6 space-y-6">
-                    {paymentStep === 'select' ? (
-                      <div className="space-y-4">
-                        <div className="text-center pb-2">
-                          <p className="text-sm text-slate-600">
-                            Your driver <span className="font-extrabold text-[#00875A]">{activeRide.driverName || 'David Alao'}</span> has accepted your request. How would you like to pay for this trip?
-                          </p>
-                          <div className="mt-3 inline-block bg-[#00875A]/10 border border-[#00875A]/20 px-4 py-1.5 rounded-full">
-                            <span className="text-xs text-slate-500 uppercase tracking-wider font-bold">Total Fare: </span>
-                            <span className="text-base font-black text-[#00875A]">{currencySymbol}{activeRide.cost}</span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3">
-                          {/* Cash Option */}
-                          <button
-                            type="button"
-                            onClick={handleSelectCashPayment}
-                            className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
-                          >
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
-                              <Wallet className="w-5 h-5" />
-                            </div>
-                            <div className="space-y-1">
-                              <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Pay physically with Cash</h5>
-                              <p className="text-xs text-slate-500 leading-relaxed">
-                                Hand over physical cash of {currencySymbol}{activeRide.cost} to the driver after you safely reach your destination.
-                              </p>
-                            </div>
-                          </button>
-
-                          {/* Transfer Option */}
-                          <button
-                            type="button"
-                            onClick={() => setPaymentStep('transfer_details')}
-                            className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
-                          >
-                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 flex items-center justify-center shrink-0">
-                              <ArrowRightLeft className="w-5 h-5" />
-                            </div>
-                            <div className="space-y-1">
-                              <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Instant Bank Transfer</h5>
-                              <p className="text-xs text-slate-500 leading-relaxed">
-                                Transfer to the driver's university account. You'll get the bank details and can launch your bank app with copied details.
-                              </p>
-                            </div>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      // Transfer Details Step
-                      <div className="space-y-5">
-                        <div className="bg-[#00875A]/5 border border-[#00875A]/15 p-4 rounded-2xl text-center">
-                          <span className="text-xs text-slate-500 font-bold block uppercase tracking-wider">Amount to Transfer</span>
-                          <span className="text-3xl font-black text-[#00875A] tracking-tight">{currencySymbol}{activeRide.cost}</span>
-                        </div>
-
-                        {/* Bank Details Display */}
-                        <div className="bg-slate-50 border border-slate-150 p-5 rounded-2xl space-y-4 text-slate-800">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block border-b border-slate-200 pb-1.5">Driver's Bank Account Details</span>
-                          
-                          {/* Bank Name */}
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-semibold">Bank Name:</span>
-                            <span className="font-extrabold text-slate-800">{getDriverBankDetails().bankName}</span>
-                          </div>
-
-                          {/* Account Number */}
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-semibold">Account Number:</span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-black text-[#00875A] text-sm tracking-wider">{getDriverBankDetails().accountNumber}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(getDriverBankDetails().accountNumber);
-                                  setRideTransferCopied(true);
-                                  setTimeout(() => setRideTransferCopied(false), 2000);
-                                }}
-                                className="p-1 hover:bg-[#00875A]/10 text-[#00875A] rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                                title="Copy account number"
-                              >
-                                {rideTransferCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Account Name */}
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-semibold">Account Name:</span>
-                            <span className="font-bold text-slate-800 uppercase">{getDriverBankDetails().accountName}</span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          {/* Copy & Redirect Button */}
-                          <button
-                            type="button"
-                            onClick={handleCopyDetailsAndRedirect}
-                            disabled={isSimulatingRedirect}
-                            className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                          >
-                            {isSimulatingRedirect ? (
-                              <>
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                <span>Launching Banking App...</span>
-                              </>
-                            ) : (
-                              <>
-                                <ArrowUpRight className="w-4 h-4" />
-                                <span>Copy details & pay with Bank App</span>
-                              </>
-                            )}
-                          </button>
-
-                          {/* Go back and choose cash */}
-                          <button
-                            type="button"
-                            onClick={() => setPaymentStep('select')}
-                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-4 rounded-xl text-[11px] uppercase tracking-wider transition-all cursor-pointer"
-                          >
-                            ← Back to payment methods
-                          </button>
-                        </div>
-
-                        {/* Confirmation Box (The Trust confirmation) */}
-                        <div className="pt-4 border-t border-slate-200 text-center space-y-3">
-                          <p className="text-[11px] text-slate-500 leading-relaxed italic">
-                            Transfer is trust-based on campus. Once you have sent the transfer, click the button below. The driver is required to validate that they received the payment on their screen.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleConfirmTransferPayment}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 px-4 rounded-2xl text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            I Have Made the Transfer
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </motion.div>
               </div>
             )}
@@ -3296,10 +2578,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">STUDENT PROFILE</h1>
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">STUDENT PROFILE</h1>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
@@ -3312,7 +2594,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               />
               <div className="text-center sm:text-left space-y-1">
                 <h3 className="text-lg font-black text-white">{userProfile.name}</h3>
-                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] inline-block font-mono tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-[#175D39]/10 border border-[#175D39]/20 text-[#175D39] inline-block font-mono tracking-wider">
                   Verified Commuter
                 </span>
                 <p className="text-xs text-gray-500 font-mono">Joined: June 2026</p>
@@ -3365,7 +2647,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               <button
                 type="submit"
-                className="bg-[#00875A] hover:bg-[#00875A] text-slate-950 font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                className="bg-[#175D39] hover:bg-[#175D39] text-slate-950 font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
               >
                 Save Profile Details
               </button>
@@ -3382,15 +2664,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">APP SETTINGS</h1>
+          <h1 className="text-2xl font-black text-[#175D39] tracking-tight">APP SETTINGS</h1>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
             <div className="space-y-4">
-              <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider border-b border-slate-200 pb-2">Transit Preferences</h3>
+              <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider border-b border-slate-200 pb-2">Transit Preferences</h3>
               
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
@@ -3404,7 +2686,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={() => setSafetySharing(!safetySharing)} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
                 </label>
               </div>
 
@@ -3420,7 +2702,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={() => setSameGenderOnly(!sameGenderOnly)} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
                 </label>
               </div>
 
@@ -3436,14 +2718,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={() => setLowBalanceAlert(!lowBalanceAlert)} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#175D39]"></div>
                 </label>
               </div>
             </div>
 
             {/* Account deletion */}
             <div className="space-y-4 pt-4 border-t border-slate-200">
-              <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider block">Danger Zone</h3>
+              <h3 className="text-xs font-black text-[#175D39] uppercase tracking-wider block">Danger Zone</h3>
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 Permanently delete your university commuter account. This clears your digital wallet balance, trips ledger, safety ratings, and registrar linkages completely. This action is irreversible.
               </p>
@@ -3454,7 +2736,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onDeleteAccount();
                   }
                 }}
-                className="bg-[#00875A]/10 hover:bg-red-100 text-[#00875A] border border-[#00875A]/20 font-black py-3 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
+                className="bg-[#175D39]/10 hover:bg-red-100 text-[#175D39] border border-[#175D39]/20 font-black py-3 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
               >
                 Delete Transit Account
               </button>
@@ -3488,7 +2770,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               {/* Title & Description */}
               <div className="text-center mb-6">
-                <h3 className="text-xl font-black text-[#00875A] tracking-tight">Confirm Seat Join</h3>
+                <h3 className="text-xl font-black text-[#175D39] tracking-tight">Confirm Seat Join</h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Complete your pool join before the driver matching window closes!
                 </p>
@@ -3513,7 +2795,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Route */}
                 <div className="space-y-1 text-xs text-slate-700">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#00875A]"></span>
+                    <span className="w-2 h-2 rounded-full bg-[#175D39]"></span>
                     <span className="font-semibold">Pickup: <span className="font-bold text-slate-800">{getStopName(checkoutPool.pickupId)}</span></span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -3526,7 +2808,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <div className="flex justify-between items-center pt-3 border-t border-slate-200/60">
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Est. Split Price</span>
-                    <span className="text-lg font-mono font-black text-[#00875A]">
+                    <span className="text-lg font-mono font-black text-[#175D39]">
                       {currencySymbol}{Math.round((checkoutPool.vehicleType === 'Car' ? 350 : checkoutPool.vehicleType === 'Keke' ? 200 : 100) / (checkoutPool.currentRiders.length + 1))}
                     </span>
                   </div>
@@ -3564,7 +2846,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     handleJoinPool(checkoutPool);
                     setCheckoutPool(null);
                   }}
-                  className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  className="w-full bg-[#175D39] hover:bg-[#175D39]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                 >
                   Confirm & Join
                 </button>

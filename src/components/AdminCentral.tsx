@@ -22,7 +22,11 @@ import {
   Info,
   ChevronRight,
   Sparkles,
-  Award
+  Award,
+  Mail,
+  Check,
+  X,
+  Send
 } from 'lucide-react';
 import { RideRequest, DriverState } from '../types';
 
@@ -34,7 +38,32 @@ interface AdminCentralProps {
 }
 
 // Initial mock driver roster list for admin control panels
-const INITIAL_DRIVERS_ROSTER: DriverState[] = [];
+const INITIAL_DRIVERS_ROSTER: DriverState[] = [
+  {
+    id: 'drv-car-1',
+    name: 'David Alao',
+    vehicle: 'Toyota Corolla (Silver) • 4P-928X',
+    rating: 4.9,
+    ratingsCount: 42,
+    todayEarnings: 12500,
+    completedTripsCount: 8,
+    hoursOnline: 6,
+    status: 'Idle',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
+  },
+  {
+    id: 'drv-keke-1',
+    name: 'Tunde (Keke)',
+    vehicle: 'Keke Tricycle (Yellow) • 5K-302B',
+    rating: 4.8,
+    ratingsCount: 31,
+    todayEarnings: 8200,
+    completedTripsCount: 6,
+    hoursOnline: 4,
+    status: 'On Trip',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
+  },
+];
 
 export const AdminCentral: React.FC<AdminCentralProps> = ({
   activeView,
@@ -47,8 +76,43 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
   const [driversRoster, setDriversRoster] = useState<DriverState[]>(() => {
     const stored = localStorage.getItem('campusride_all_drivers_roster');
-    return stored ? JSON.parse(stored) : [];
+    if (stored) return JSON.parse(stored);
+    localStorage.setItem('campusride_all_drivers_roster', JSON.stringify(INITIAL_DRIVERS_ROSTER));
+    return INITIAL_DRIVERS_ROSTER;
   });
+
+  const [pendingDrivers, setPendingDrivers] = useState<any[]>(() => {
+    const stored = localStorage.getItem('campusride_pending_drivers');
+    if (stored) return JSON.parse(stored);
+    
+    // Seed default pending drivers
+    const seed = [
+      {
+        id: 'drv-pending-1',
+        name: 'Chinedu Okoye',
+        email: 'chinedu.okoye@campusride.edu',
+        carBrand: 'Yellow Piaggio Ape',
+        carType: 'keke',
+        plateNumber: 'KK-882-LA',
+        vehicleId: 'VID-KEKE-772',
+        createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
+      },
+      {
+        id: 'drv-pending-2',
+        name: 'Fatima Bello',
+        email: 'fatima.b@campusride.edu',
+        carBrand: 'White Suzuki Everyday',
+        carType: 'shuttle',
+        plateNumber: 'SH-192-KD',
+        vehicleId: 'VID-SHUT-109',
+        createdAt: new Date(Date.now() - 3600000 * 24).toISOString(), // 1 day ago
+      }
+    ];
+    localStorage.setItem('campusride_pending_drivers', JSON.stringify(seed));
+    return seed;
+  });
+
+  const [approvedEmailDetails, setApprovedEmailDetails] = useState<any | null>(null);
   const [driverSearch, setDriverSearch] = useState<string>('');
   const [incidentsCount, setIncidentsCount] = useState<number>(0);
 
@@ -69,6 +133,105 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
     localStorage.setItem('campusride_all_drivers_roster', JSON.stringify(nextRoster));
   };
 
+  const handleApproveDriver = (driver: any) => {
+    // 1. Update campusride_auth to set isApproved: true
+    const authStr = localStorage.getItem('campusride_auth');
+    const authData = authStr ? JSON.parse(authStr) : {};
+    
+    const emailKey = driver.email.toLowerCase().trim();
+    if (!authData[emailKey]) {
+      // Seed credential for the driver so they can log in
+      authData[emailKey] = {
+        email: emailKey,
+        password: 'Driver123!', // default testing password
+        uid: driver.id,
+        role: 'driver',
+        name: driver.name,
+        idNumber: driver.vehicleId || driver.plateNumber || 'DRV-2024-8839',
+        isApproved: true
+      };
+    } else {
+      authData[emailKey].isApproved = true;
+    }
+    localStorage.setItem('campusride_auth', JSON.stringify(authData));
+
+    // 2. Update campusride_driver_profile_${driver.id} to set isApproved: true
+    const profileKey = `campusride_driver_profile_${driver.id}`;
+    const profileStr = localStorage.getItem(profileKey);
+    let dProfile = profileStr ? JSON.parse(profileStr) : null;
+    if (!dProfile) {
+      dProfile = {
+        id: driver.id,
+        name: driver.name,
+        email: driver.email,
+        role: 'driver',
+        vehicle: `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}${driver.vehicleId ? ` [ID: ${driver.vehicleId}]` : ''}`,
+        rating: 5.0,
+        ratingsCount: 0,
+        todayEarnings: 0,
+        completedTripsCount: 0,
+        hoursOnline: 0,
+        status: 'Offline',
+        avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
+        isApproved: true,
+        carBrand: driver.carBrand,
+        plateNumber: driver.plateNumber,
+        carType: driver.carType,
+        vehicleId: driver.vehicleId,
+      };
+    } else {
+      dProfile.isApproved = true;
+    }
+    localStorage.setItem(profileKey, JSON.stringify(dProfile));
+
+    // 3. Add to campusride_all_drivers_roster so they appear in live rosters
+    const rosterStr = localStorage.getItem('campusride_all_drivers_roster');
+    const roster: DriverState[] = rosterStr ? JSON.parse(rosterStr) : [];
+    if (!roster.some(d => d.id === driver.id)) {
+      roster.push({
+        id: driver.id,
+        name: driver.name,
+        vehicle: `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}`,
+        rating: 5.0,
+        ratingsCount: 0,
+        todayEarnings: 0,
+        completedTripsCount: 0,
+        hoursOnline: 0,
+        status: 'Offline',
+        avatar: dProfile.avatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
+      });
+      localStorage.setItem('campusride_all_drivers_roster', JSON.stringify(roster));
+      setDriversRoster(roster);
+    }
+
+    // 4. Remove from campusride_pending_drivers
+    const updatedPending = pendingDrivers.filter(d => d.id !== driver.id);
+    localStorage.setItem('campusride_pending_drivers', JSON.stringify(updatedPending));
+    setPendingDrivers(updatedPending);
+
+    // 5. Trigger the Simulated Email modal!
+    setApprovedEmailDetails({
+      to: driver.email,
+      name: driver.name,
+      vehicle: `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}`,
+      password: authData[emailKey]?.password || 'Driver123!',
+      dateSent: new Date().toLocaleString(),
+    });
+
+    // Notify sidebar count listener by dispatching storage event
+    window.dispatchEvent(new Event('storage'));
+  };
+
+  const handleDeclineDriver = (driverId: string, driverName: string) => {
+    if (window.confirm(`Are you sure you want to decline ${driverName}'s driver registration?`)) {
+      const updatedPending = pendingDrivers.filter(d => d.id !== driverId);
+      localStorage.setItem('campusride_pending_drivers', JSON.stringify(updatedPending));
+      setPendingDrivers(updatedPending);
+      alert(`Registration for ${driverName} has been declined.`);
+      window.dispatchEvent(new Event('storage'));
+    }
+  };
+
   // Filter roster drivers
   const filteredRoster = driversRoster.filter(drv => 
     drv.name.toLowerCase().includes(driverSearch.toLowerCase()) || 
@@ -76,24 +239,25 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
   );
 
   return (
-    <div id="admin-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#F2F2F2]">
+    <div id="admin-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#F9FAFB]">
       
       {/* Header operations central */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 border-b border-gray-100 pb-5">
         <div>
-          <span className="text-xs font-bold text-[#175D39] uppercase tracking-widest font-mono flex items-center">
+          <span className="text-xs font-bold text-[#00875A] uppercase tracking-widest font-mono flex items-center">
             <ShieldAlert className="w-4 h-4 text-primary mr-1 shrink-0 animate-bounce" />
             Operations Command Central
           </span>
-          <h1 className="text-2xl font-extrabold text-[#175D39] tracking-tight">
+          <h1 className="text-2xl font-extrabold text-[#00875A] tracking-tight">
             {activeView === 'admin_operations' && 'Live Despatch Operations'}
             {activeView === 'admin_analytics' && 'Ridership Performance Analytics'}
+            {activeView === 'admin_reviews' && 'Driver Verification Queue'}
           </h1>
         </div>
 
         <div className="mt-3 sm:mt-0 flex items-center space-x-2">
-          <span className="bg-[#175D39]/20 text-emerald-800 border border-emerald-200 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center">
-            <span className="w-2 h-2 rounded-full bg-[#175D39] mr-2 inline-block"></span>
+          <span className="bg-[#00875A]/20 text-sage-dark border border-sage-light px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center">
+            <span className="w-2 h-2 rounded-full bg-[#00875A] mr-2 inline-block"></span>
             Campus Transit Servers: ONLINE
           </span>
         </div>
@@ -107,7 +271,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            transition={{ duration: 0.05, ease: 'easeInOut' }}
             id="view-admin-operations"
             className="space-y-6"
           >
@@ -119,11 +283,11 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Active Campus Rides</span>
                 <span className="text-2xl font-extrabold text-primary block">{SYSTEM_KPIS.activeRides}</span>
-                <span className="text-[9px] text-[#175D39] font-bold bg-[#175D39]/10 px-2 rounded-full inline-block">
+                <span className="text-[9px] text-[#00875A] font-bold bg-[#00875A]/10 px-2 rounded-full inline-block">
                   Within nominal limit
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#F2F2F2] text-primary flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-primary flex items-center justify-center">
                 <Activity className="w-5 h-5 animate-pulse" />
               </div>
             </div>
@@ -131,12 +295,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Idle Peer Drivers</span>
-                <span className="text-2xl font-extrabold text-[#175D39] block">{SYSTEM_KPIS.idleDrivers}</span>
-                <span className="text-[9px] text-[#175D39] font-bold bg-[#F2F2F2]/35 px-2 rounded-full inline-block">
+                <span className="text-2xl font-extrabold text-[#00875A] block">{SYSTEM_KPIS.idleDrivers}</span>
+                <span className="text-[9px] text-[#00875A] font-bold bg-[#F9FAFB]/35 px-2 rounded-full inline-block">
                   Ready in queue
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#175D39]/10 text-[#175D39] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#00875A]/10 text-[#00875A] flex items-center justify-center">
                 <Users className="w-5 h-5" />
               </div>
             </div>
@@ -144,22 +308,22 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Revenue Today</span>
-                <span className="text-2xl font-extrabold text-[#175D39] block">₦{SYSTEM_KPIS.revenueToday}</span>
-                <span className="text-[9px] text-[#175D39] font-bold bg-[#175D39]/10 px-2 rounded-full inline-block">
+                <span className="text-2xl font-extrabold text-[#00875A] block">₦{SYSTEM_KPIS.revenueToday}</span>
+                <span className="text-[9px] text-[#00875A] font-bold bg-[#00875A]/10 px-2 rounded-full inline-block">
                   +14% vs weekday avg
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#175D39]/10 text-[#175D39] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#00875A]/10 text-[#00875A] flex items-center justify-center">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
 
             {/* Incidents KPI with dynamic trigger */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:bg-[#175D39]/10/20 transition group">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:bg-[#00875A]/10/20 transition group">
               <div>
                 <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider block font-mono">Reported Safety Flags</span>
-                <span className="text-2xl font-extrabold text-[#175D39] block">{incidentsCount}</span>
-                <span className="text-[9px] text-red-650 font-bold bg-[#175D39]/10 px-2 rounded-full inline-block group-hover:bg-red-100/50">
+                <span className="text-2xl font-extrabold text-[#00875A] block">{incidentsCount}</span>
+                <span className="text-[9px] text-red-650 font-bold bg-[#00875A]/10 px-2 rounded-full inline-block group-hover:bg-red-100/50">
                   Click to resolve one
                 </span>
               </div>
@@ -172,7 +336,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     alert('Congratulations! Zero outstanding active incident reports.');
                   }
                 }}
-                className="w-10 h-10 rounded-xl bg-[#175D39]/10 text-[#175D39] flex items-center justify-center hover:bg-red-100 transition"
+                className="w-10 h-10 rounded-xl bg-[#00875A]/10 text-[#00875A] flex items-center justify-center hover:bg-red-100 transition"
               >
                 <AlertTriangle className="w-5 h-5" />
               </button>
@@ -185,7 +349,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="lg:col-span-8 bg-white rounded-3xl p-5 border border-gray-100 shadow-sm overflow-hidden space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-extrabold text-[#175D39]">Live Operations Layout Map</h3>
+                  <h3 className="text-sm font-extrabold text-[#00875A]">Live Operations Layout Map</h3>
                   <p className="text-xs text-gray-400">Traces active peer vehicle coordinate coordinates on a real university campus base.</p>
                 </div>
                 <span className="bg-primary/10 text-primary text-[10px] font-bold px-2.5 py-1 rounded font-mono uppercase">
@@ -206,17 +370,17 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                 <div className="absolute top-[80px] left-[150px] bg-primary text-white p-1 rounded-full border border-white shrink-0 shadow animate-bounce">
                   <Activity className="w-3.5 h-3.5" />
                 </div>
-                <div className="absolute top-[160px] left-[380px] bg-[#175D39] text-white p-1 rounded-full border border-white shrink-0 shadow animate-pulse">
+                <div className="absolute top-[160px] left-[380px] bg-[#00875A] text-white p-1 rounded-full border border-white shrink-0 shadow animate-pulse">
                   <Users className="w-3.5 h-3.5" />
                 </div>
-                <div className="absolute top-[210px] left-[490px] bg-[#175D39] text-white p-1 rounded-full border border-white shrink-0 shadow">
+                <div className="absolute top-[210px] left-[490px] bg-[#00875A] text-white p-1 rounded-full border border-white shrink-0 shadow">
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </div>
 
-                <div className="absolute top-[50px] left-[162px] bg-[#175D39] text-[8px] text-white px-2 py-0.5 rounded shadow">
+                <div className="absolute top-[50px] left-[162px] bg-[#00875A] text-[8px] text-white px-2 py-0.5 rounded shadow">
                   David Moore Camry • On Route
                 </div>
-                <div className="absolute top-[130px] left-[392px] bg-[#175D39] text-[8px] text-white px-2 py-0.5 rounded shadow">
+                <div className="absolute top-[130px] left-[392px] bg-[#00875A] text-[8px] text-white px-2 py-0.5 rounded shadow">
                   Evelyn Carter Elantra • Pick Up
                 </div>
               </div>
@@ -225,7 +389,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             {/* Simulated Peak hours chart */}
             <div className="lg:col-span-4 bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
               <div>
-                <h3 className="text-sm font-extrabold text-[#175D39]">Peak Traffic Ride Hours</h3>
+                <h3 className="text-sm font-extrabold text-[#00875A]">Peak Traffic Ride Hours</h3>
                 <p className="text-xs text-gray-400">Relative demands across class blocks of time.</p>
               </div>
 
@@ -241,12 +405,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   <div key={id} className="space-y-1 text-xs">
                     <div className="flex items-center justify-between text-[10px]">
                       <span className="font-semibold text-gray-600">{item.range}</span>
-                      <span className={`font-bold font-mono ${item.ratio >= 90 ? 'text-[#175D39]' : 'text-gray-500'}`}>{item.label}</span>
+                      <span className={`font-bold font-mono ${item.ratio >= 90 ? 'text-[#00875A]' : 'text-gray-500'}`}>{item.label}</span>
                     </div>
                     {/* Progress tracking line */}
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div 
-                        className={`h-full rounded-full transition-all ${item.ratio >= 90 ? 'bg-[#175D39]' : item.ratio >= 80 ? 'bg-[#175D39]' : 'bg-primary'}`} 
+                        className={`h-full rounded-full transition-all ${item.ratio >= 90 ? 'bg-[#00875A]' : item.ratio >= 80 ? 'bg-[#00875A]' : 'bg-primary'}`} 
                         style={{ width: `${item.ratio}%` }}
                       ></div>
                     </div>
@@ -260,7 +424,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h3 className="text-base font-extrabold text-[#175D39]">Administrative Peer Roster</h3>
+                <h3 className="text-base font-extrabold text-[#00875A]">Administrative Peer Roster</h3>
                 <p className="text-xs text-gray-400">Review currently online vehicles and update active operational status.</p>
               </div>
 
@@ -274,7 +438,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   value={driverSearch}
                   onChange={(e) => setDriverSearch(e.target.value)}
                   placeholder="Query driver name, vehicle..."
-                  className="w-full pl-9 pr-3 py-2 bg-[#F2F2F2] border border-gray-150 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#175D39]"
+                  className="w-full pl-9 pr-3 py-2 bg-[#F9FAFB] border border-gray-150 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#00875A]"
                 />
               </div>
             </div>
@@ -304,7 +468,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           className="w-10 h-10 rounded-full object-cover border border-gray-200"
                         />
                         <div>
-                          <span className="font-bold text-[#175D39] block">{drv.name}</span>
+                          <span className="font-bold text-[#00875A] block">{drv.name}</span>
                           <span className="font-mono text-[9px] text-[#737686]">{drv.id}</span>
                         </div>
                       </td>
@@ -316,7 +480,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
                       {/* Rating column */}
                       <td className="py-3">
-                        <span className="font-mono font-bold text-[#175D39]">★ {drv.rating}</span>
+                        <span className="font-mono font-bold text-[#00875A]">★ {drv.rating}</span>
                         <span className="text-[10px] text-gray-400 block font-semibold">{drv.ratingsCount} reviews</span>
                       </td>
 
@@ -331,9 +495,9 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                         <button
                           onClick={() => handleDriverStatusToggle(drv.id, drv.status)}
                           className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase tracking-wide border ${
-                            drv.status === 'On Trip' ? 'bg-[#F2F2F2] text-[#175D39] border-[#175D39]/20' :
-                            drv.status === 'Idle' ? 'bg-[#175D39]/10 text-[#175D39] border-emerald-200' :
-                            drv.status === 'Break' ? 'bg-[#F2F2F2] text-[#175D39] border-[#175D39]/20' :
+                            drv.status === 'On Trip' ? 'bg-[#F9FAFB] text-[#00875A] border-[#00875A]/20' :
+                            drv.status === 'Idle' ? 'bg-[#00875A]/10 text-[#00875A] border-sage-light' :
+                            drv.status === 'Break' ? 'bg-[#F9FAFB] text-[#00875A] border-[#00875A]/20' :
                             'bg-gray-100 text-gray-500 border-gray-300'
                           }`}
                         >
@@ -351,7 +515,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                               alert(`Pinged driver ${drv.name} on transit radio. Current channel logs synced.`);
                             }
                           }}
-                          className="text-xs font-bold text-[#175D39] hover:underline"
+                          className="text-xs font-bold text-[#00875A] hover:underline"
                         >
                           Send Radio Dispatch
                         </button>
@@ -372,7 +536,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            transition={{ duration: 0.05, ease: 'easeInOut' }}
             id="view-admin-analytics"
             className="space-y-6"
           >
@@ -380,13 +544,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
               <div>
-                <h3 className="text-lg font-extrabold text-[#175D39]">System Ridership Analytics</h3>
+                <h3 className="text-lg font-extrabold text-[#00875A]">System Ridership Analytics</h3>
                 <p className="text-xs text-gray-400">Aggregated digital data metrics synced from registrar logs.</p>
               </div>
 
               <button
                 onClick={() => alert('PDF audit logs downloaded successfully.')}
-                className="px-4 py-2 bg-[#175D39] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
+                className="px-4 py-2 bg-[#00875A] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
               >
                 Export Audit Itinerary
               </button>
@@ -396,13 +560,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest font-mono">Total Trips Logged</span>
-                <span className="text-3xl font-extrabold text-[#175D39] block">{totalTripsLogged.toLocaleString()}</span>
+                <span className="text-3xl font-extrabold text-[#00875A] block">{totalTripsLogged.toLocaleString()}</span>
                 <p className="text-[10px] text-gray-500 font-medium">Accumulating since September term.</p>
               </div>
 
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest font-mono">Keke & Shuttle Ratio</span>
-                <span className="text-3xl font-extrabold text-[#175D39] block">{kekeShuttleRatio}</span>
+                <span className="text-3xl font-extrabold text-[#00875A] block">{kekeShuttleRatio}</span>
                 <p className="text-[10px] text-gray-500 font-medium">Riders ordering Keke or Shuttle categories.</p>
               </div>
 
@@ -415,6 +579,232 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
           </div>
         </motion.div>
       )}
+
+        {/* RENDER VIEW: REVIEWS */}
+        {activeView === 'admin_reviews' && (
+          <motion.div
+            key="admin_reviews"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            id="view-admin-reviews"
+            className="space-y-6"
+          >
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4 gap-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-[#00875A]">Driver Verification Queue</h3>
+                  <p className="text-xs text-gray-400">
+                    Review and approve submitted credentials for new peer drivers to activate their transit authorization.
+                  </p>
+                </div>
+                <div className="bg-orange-50 text-orange-700 border border-orange-100 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center shrink-0">
+                  <Clock className="w-4 h-4 mr-1.5 text-orange-600 animate-spin" style={{ animationDuration: '3s' }} />
+                  {pendingDrivers.length} Pending Application{pendingDrivers.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+
+              {pendingDrivers.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                    <CheckCircle className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800">All Drivers Verified!</h4>
+                    <p className="text-xs text-gray-400 max-w-sm mt-1">
+                      No new driver applications are currently awaiting administrative review. Approved drivers can now log in and accept ride requests.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {pendingDrivers.map((driver) => (
+                    <div 
+                      key={driver.id} 
+                      className="bg-[#F9FAFB] rounded-2xl p-5 border border-gray-200 shadow-xs hover:border-[#00875A]/20 transition flex flex-col justify-between"
+                    >
+                      <div>
+                        {/* Upper Details */}
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-11 h-11 rounded-full bg-orange-100 text-orange-700 font-extrabold flex items-center justify-center text-sm border border-orange-200 uppercase shrink-0">
+                              {driver.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-extrabold text-[#00875A] truncate">{driver.name}</h4>
+                              <p className="text-[11px] font-mono text-gray-500 truncate">{driver.email}</p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-bold font-mono uppercase tracking-wide px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full shrink-0">
+                            Pending Review
+                          </span>
+                        </div>
+
+                        {/* Vehicle Description Details block */}
+                        <div className="mt-4 pt-4 border-t border-gray-200/60 space-y-2">
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div>
+                              <span className="text-gray-400 block font-mono">Vehicle Specs</span>
+                              <span className="font-semibold text-gray-700">{driver.carBrand}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400 block font-mono">License Plate</span>
+                              <span className="font-semibold text-gray-700 font-mono">{driver.plateNumber}</span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-gray-400 block font-mono">Vehicle ID</span>
+                              <span className="font-semibold text-gray-700 font-mono">{driver.vehicleId || 'N/A'}</span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-gray-400 block font-mono">Category</span>
+                              <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono border ${
+                                driver.carType === 'keke' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                driver.carType === 'shuttle' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                'bg-orange-50 text-orange-700 border-orange-200'
+                              }`}>
+                                {driver.carType}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-gray-450 font-medium pt-1">
+                            Registered: {new Date(driver.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="mt-6 pt-4 border-t border-gray-200/60 flex items-center space-x-2">
+                        <button
+                          onClick={() => handleApproveDriver(driver)}
+                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-750 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Approve & Verify</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeclineDriver(driver.id, driver.name)}
+                          className="px-3.5 py-2.5 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-700 rounded-xl text-xs font-bold transition border border-gray-200 flex items-center justify-center cursor-pointer"
+                          title="Decline Account"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SIMULATED EMAIL GATEWAY OVERLAY MODAL */}
+      <AnimatePresence>
+        {approvedEmailDetails && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-slate-800"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 20 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-lg w-full overflow-hidden"
+            >
+              {/* Email Gateway Top bar header */}
+              <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3.5 h-3.5 bg-emerald-500 rounded-full animate-ping shrink-0" style={{ animationDuration: '2.5s' }} />
+                  <span className="text-xs font-extrabold tracking-wider uppercase font-mono text-emerald-400">
+                    Dispatched Notification Alert
+                  </span>
+                </div>
+                <button
+                  onClick={() => setApprovedEmailDetails(null)}
+                  className="text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Email Envelope Header fields */}
+              <div className="bg-slate-50 border-b border-gray-150 p-4 text-xs font-medium text-gray-600 space-y-1.5">
+                <div className="flex">
+                  <span className="w-14 text-gray-400">From:</span>
+                  <span className="text-gray-800 font-semibold">campusride-verification@university.edu</span>
+                </div>
+                <div className="flex">
+                  <span className="w-14 text-gray-400">To:</span>
+                  <span className="text-[#00875A] font-bold">{approvedEmailDetails.to}</span>
+                </div>
+                <div className="flex">
+                  <span className="w-14 text-gray-400">Subject:</span>
+                  <span className="text-slate-900 font-bold">🚀 Congratulations! Your CampusRide Driver Account has been Approved!</span>
+                </div>
+                <div className="flex">
+                  <span className="w-14 text-gray-400">Date:</span>
+                  <span className="text-gray-500 font-mono">{approvedEmailDetails.dateSent}</span>
+                </div>
+              </div>
+
+              {/* Beautiful Email Letter Template Body */}
+              <div className="p-6 space-y-4 max-h-[360px] overflow-y-auto font-sans">
+                <div className="flex items-center space-x-2 text-emerald-700">
+                  <Award className="w-5 h-5" />
+                  <span className="text-xs font-black uppercase tracking-wider font-mono">Verification Clear • Status: Active</span>
+                </div>
+                
+                <h4 className="text-base font-extrabold text-slate-900">
+                  Dear {approvedEmailDetails.name},
+                </h4>
+                
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  We are pleased to inform you that your driver profile and vehicle documents have been successfully verified and approved by the <strong>University Parking & Transit Operations</strong>.
+                </p>
+
+                <div className="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100 flex items-center space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block font-mono uppercase">Certified Transit Vehicle</span>
+                    <span className="text-xs font-bold text-[#00875A]">{approvedEmailDetails.vehicle}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 font-sans">
+                  <h5 className="text-xs font-black uppercase tracking-widest text-slate-800 font-mono">Getting Started Instructions:</h5>
+                  <ol className="text-xs text-slate-600 space-y-1.5 list-decimal list-inside leading-relaxed">
+                    <li>Launch the <strong>CampusRide</strong> application in your browser.</li>
+                    <li>Select the <strong>Driver</strong> role switch toggle on the login portal screen.</li>
+                    <li>Enter your registered email address (<strong>{approvedEmailDetails.to}</strong>) and password to access your Shift Dashboard (Password: <strong className="font-mono text-emerald-750">{approvedEmailDetails.password}</strong>).</li>
+                  </ol>
+                </div>
+
+                <p className="text-[11px] text-gray-500 italic border-t border-gray-100 pt-3">
+                  Thank you for contributing to campus convenience and carbon neutrality. Welcome to our peer commuter network!
+                  <br />
+                  - CampusRide Transit Admin Team
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="bg-gray-50 border-t border-gray-150 px-5 py-4 flex items-center justify-end space-x-2">
+                <button
+                  onClick={() => setApprovedEmailDetails(null)}
+                  className="px-4.5 py-2.5 bg-slate-900 hover:bg-[#00875A] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Acknowledge & Close Mail Log</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
