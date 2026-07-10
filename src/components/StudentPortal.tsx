@@ -66,6 +66,7 @@ export interface ActivePool {
   status: 'active' | 'closed' | 'transit';
   driverAcceptCountdown?: number;
   driverAccepted?: boolean;
+  createdAt?: number;
 }
 
 interface StudentPortalProps {
@@ -80,6 +81,7 @@ interface StudentPortalProps {
   onAddNotification: (notif: AppNotification) => void;
   onUpdateRide: (ride: RideRequest | null) => void;
   onMarkNotificationsRead: () => void;
+  onClearNotifications?: () => void;
   driverProfile?: any;
   onUpdateDriverProfile?: (updates: any) => void;
   selectedSchoolId?: string;
@@ -108,6 +110,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   onAddNotification,
   onUpdateRide,
   onMarkNotificationsRead,
+  onClearNotifications,
   driverProfile,
   onUpdateDriverProfile,
   selectedSchoolId,
@@ -156,7 +159,21 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   }[]>([]);
 
   const [activePools, setActivePools] = useState<ActivePool[]>([]);
-  const [joinedPoolId, setJoinedPoolId] = useState<string | null>(null);
+  const [joinedPoolId, setJoinedPoolId] = useState<string | null>(() => {
+    const uid = userProfile?.id;
+    if (uid) {
+      const stored = localStorage.getItem(`campusride_joined_pool_id_${uid}`);
+      if (stored) return stored;
+      const storedRide = localStorage.getItem(`campusride_active_ride_${uid}`);
+      if (storedRide) {
+        try {
+          const parsed = JSON.parse(storedRide);
+          if (parsed && parsed.id) return parsed.id;
+        } catch (e) {}
+      }
+    }
+    return null;
+  });
   const [browseFilterPickup, setBrowseFilterPickup] = useState<string>('all');
   const [browseFilterDropoff, setBrowseFilterDropoff] = useState<string>('all');
   const [browseFilterVehicle, setBrowseFilterVehicle] = useState<string>('all');
@@ -225,8 +242,45 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   // Local state for interactive ride flow
-  const [poolingState, setPoolingState] = useState<'idle' | 'forming' | 'matched' | 'transit' | 'arrived' | 'rated'>('idle');
-  const [isMatchingDriver, setIsMatchingDriver] = useState<boolean>(false);
+  const [poolingState, setPoolingState] = useState<'idle' | 'forming' | 'matched' | 'transit' | 'arrived' | 'rated'>(() => {
+    const uid = userProfile?.id;
+    if (uid) {
+      const stored = localStorage.getItem(`campusride_pooling_state_${uid}`);
+      if (stored && stored !== 'idle') return stored as any;
+      
+      const storedRide = localStorage.getItem(`campusride_active_ride_${uid}`);
+      if (storedRide) {
+        try {
+          const parsed = JSON.parse(storedRide);
+          if (parsed && parsed.status) {
+            if (parsed.status === 'requested' || parsed.status === 'searching') return 'forming';
+            if (parsed.status === 'accepted' || parsed.status === 'arriving') return 'matched';
+            if (parsed.status === 'in_transit') return 'transit';
+            if (parsed.status === 'completed') return 'arrived';
+          }
+        } catch (e) {}
+      }
+    }
+    return 'idle';
+  });
+  const [isMatchingDriver, setIsMatchingDriver] = useState<boolean>(() => {
+    const uid = userProfile?.id;
+    if (uid) {
+      const stored = localStorage.getItem(`campusride_is_matching_driver_${uid}`);
+      if (stored !== null) return stored === 'true';
+
+      const storedRide = localStorage.getItem(`campusride_active_ride_${uid}`);
+      if (storedRide) {
+        try {
+          const parsed = JSON.parse(storedRide);
+          if (parsed && (parsed.status === 'requested' || parsed.status === 'searching')) {
+            return true;
+          }
+        } catch (e) {}
+      }
+    }
+    return false;
+  });
   const [searchFailed, setSearchFailed] = useState<boolean>(false);
   const [lobbyMembers, setLobbyMembers] = useState<PoolMember[]>([
     {
@@ -274,6 +328,27 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [paymentStep, setPaymentStep] = useState<'select' | 'transfer_details'>('select');
   const [isSimulatingRedirect, setIsSimulatingRedirect] = useState<boolean>(false);
   const [rideTransferCopied, setRideTransferCopied] = useState<boolean>(false);
+  
+  // Messenger-style chat overlay states
+  const [isChatOverlayOpen, setIsChatOverlayOpen] = useState<boolean>(false);
+  const floatingChatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Persist local pooling state changes
+  useEffect(() => {
+    if (!userProfile.id) return;
+    localStorage.setItem(`campusride_joined_pool_id_${userProfile.id}`, joinedPoolId || '');
+    localStorage.setItem(`campusride_pooling_state_${userProfile.id}`, poolingState);
+    localStorage.setItem(`campusride_is_matching_driver_${userProfile.id}`, isMatchingDriver ? 'true' : 'false');
+  }, [joinedPoolId, poolingState, isMatchingDriver, userProfile.id]);
+
+  // Scroll to bottom of floating chat
+  useEffect(() => {
+    if (isChatOverlayOpen && floatingChatBottomRef.current) {
+      setTimeout(() => {
+        floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+  }, [chatMessages, isChatOverlayOpen]);
 
   // Trigger payment method popup when ride gets accepted (matched)
   useEffect(() => {
@@ -312,7 +387,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       ...activeRide,
       paymentMethod: 'cash',
       paymentConfirmedByRider: true,
-      paymentValidatedByDriver: false
+      paymentValidatedByDriver: false,
+      riderPaid: true
     };
     onUpdateRide(updatedRide);
     setShowPaymentSelection(false);
@@ -348,7 +424,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       ...activeRide,
       paymentMethod: 'transfer',
       paymentConfirmedByRider: true,
-      paymentValidatedByDriver: false
+      paymentValidatedByDriver: false,
+      riderPaid: true
     };
     onUpdateRide(updatedRide);
     setShowPaymentSelection(false);
@@ -371,6 +448,51 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       id: `notif-${Date.now()}`,
       title: 'Transfer Payment Confirmed',
       message: `Your transfer of ₦${activeRide.cost} has been submitted for validation. The driver will confirm receipt on their device.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'success'
+    });
+  };
+
+  const handleSelectWalletPayment = () => {
+    if (!activeRide) return;
+    if (userProfile.walletBalance < activeRide.cost) {
+      alert("Insufficient wallet balance! Please reload your wallet or choose another payment method.");
+      return;
+    }
+    
+    // Deduct balance
+    const updatedBalance = userProfile.walletBalance - activeRide.cost;
+    onUpdateProfile({ walletBalance: updatedBalance });
+
+    // Add transaction
+    const newTxn: Transaction = {
+      id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
+      description: `Ride Payment: ${activeRide.pickup} to ${activeRide.dropoff}`,
+      amount: -activeRide.cost,
+      date: 'Today',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      method: 'Wallet Balance',
+      type: 'charge',
+      status: 'Completed',
+    };
+    onAddTransaction(newTxn);
+
+    const updatedRide: RideRequest = {
+      ...activeRide,
+      paymentMethod: 'wallet',
+      paymentConfirmedByRider: true,
+      paymentValidatedByDriver: true,
+      riderPaid: true
+    };
+    onUpdateRide(updatedRide);
+    setShowPaymentSelection(false);
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Wallet Payment Completed',
+      message: `₦${activeRide.cost} has been successfully deducted from your wallet for your ride.`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       date: 'Today',
       isRead: false,
@@ -511,12 +633,24 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       const activeReq = (globalRide && globalRide.passengerId === userProfile.id) ? globalRide : activeRide;
 
       // Sync driver's trip updates in real-time when matched or in transit
-      if (poolingState === 'matched' && globalRide && globalRide.passengerId === userProfile.id) {
-        if (globalRide.status === 'in_transit') {
-          setPoolingState('transit');
-          onUpdateRide(globalRide);
-        } else if (activeRide && activeRide.status !== globalRide.status) {
-          onUpdateRide(globalRide);
+      if (globalRide && globalRide.passengerId === userProfile.id) {
+        if (poolingState === 'matched') {
+          if (globalRide.status === 'in_transit') {
+            setPoolingState('transit');
+            onUpdateRide(globalRide);
+          } else if (globalRide.status === 'completed') {
+            setPoolingState('arrived');
+            onUpdateRide(globalRide);
+          } else if (activeRide && activeRide.status !== globalRide.status) {
+            onUpdateRide(globalRide);
+          }
+        } else if (poolingState === 'transit') {
+          if (globalRide.status === 'completed') {
+            setPoolingState('arrived');
+            onUpdateRide(globalRide);
+          } else if (activeRide && activeRide.status !== globalRide.status) {
+            onUpdateRide(globalRide);
+          }
         }
       }
 
@@ -748,7 +882,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         baseFare: activeVehicleConfig.poolPrice,
         status: 'active',
         driverAcceptCountdown: 60,
-        driverAccepted: false
+        driverAccepted: false,
+        createdAt: Date.now()
       };
 
       const updatedPools = [newPool, ...activePools];
@@ -780,35 +915,36 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     e.preventDefault();
     if (!chatInput.trim()) return;
 
+    const currentInput = chatInput;
     const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
+    if (!chatId) return;
+
     const newMsg = {
       sender: userProfile.name || 'Me',
-      text: chatInput,
+      text: currentInput,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isUser: true,
       senderId: userProfile.id
     };
 
-    if (chatId) {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      let msgs = [];
-      if (stored) {
-        try {
-          msgs = JSON.parse(stored);
-        } catch (err) {}
-      }
-      const updated = [...msgs, newMsg];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-      setChatMessages(updated);
-    } else {
-      setChatMessages(prev => [...prev, newMsg]);
+    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+    let msgs = [];
+    if (stored) {
+      try {
+        msgs = JSON.parse(stored);
+      } catch (err) {}
     }
+    const updated = [...msgs, newMsg];
+    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
+    setChatMessages(updated);
     setChatInput('');
   };
 
   // Quick reply messages
   const sendQuickReply = (text: string) => {
     const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
+    if (!chatId) return;
+
     const newMsg = {
       sender: userProfile.name || 'Me',
       text: text,
@@ -817,20 +953,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       senderId: userProfile.id
     };
 
-    if (chatId) {
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      let msgs = [];
-      if (stored) {
-        try {
-          msgs = JSON.parse(stored);
-        } catch (err) {}
-      }
-      const updated = [...msgs, newMsg];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-      setChatMessages(updated);
-    } else {
-      setChatMessages(prev => [...prev, newMsg]);
+    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+    let msgs = [];
+    if (stored) {
+      try {
+        msgs = JSON.parse(stored);
+      } catch (err) {}
     }
+    const updated = [...msgs, newMsg];
+    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
+    setChatMessages(updated);
   };
 
   // Trigger driver transit start
@@ -1131,7 +1263,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     if (joinedPoolId) {
       const updated = activePools.map(p => {
         if (p.id === joinedPoolId) {
-          return { ...p, driverAcceptCountdown: 60 };
+          return { ...p, driverAcceptCountdown: 60, createdAt: Date.now() };
         }
         return p;
       });
@@ -1178,8 +1310,32 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   // Complete Rating
   const handleRateSubmit = () => {
+    // Average the rating and update driverProfile
+    if (onUpdateDriverProfile && ratingScore > 0) {
+      const currentRating = driverProfile?.rating ?? 5.0;
+      const currentCount = driverProfile?.ratingsCount ?? 0;
+      const newCount = currentCount + 1;
+      const newRating = Number(((currentRating * currentCount + ratingScore) / newCount).toFixed(2));
+      
+      onUpdateDriverProfile({
+        rating: newRating,
+        ratingsCount: newCount
+      });
+
+      onAddNotification({
+        id: `notif-${Date.now()}`,
+        title: 'New Trip Rating Received',
+        message: `A passenger rated your recent ride ${ratingScore} Stars. Your average rating is now ★ ${newRating}.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: 'Today',
+        isRead: false,
+        type: 'success'
+      });
+    }
+
     setPoolingState('idle');
-    alert('Thank you for rating your ride! Your split savings have been recorded.');
+    onUpdateRide(null); // Clear active ride to allow new bookings
+    alert(`Thank you for rating your ride! You rated the driver ${ratingScore} stars.`);
   };
 
   // Wallet Funding handler
@@ -1236,8 +1392,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 sm:p-6 lg:p-8"
           >
           
-          {/* LEFT SIDE OR MAIN BOOKING SECTION (7 COLS ON LARGE) */}
-          <div className="lg:col-span-7 flex flex-col space-y-6">
+          {/* LEFT SIDE OR MAIN BOOKING SECTION (12 COLS ON LARGE) */}
+          <div className="lg:col-span-12 flex flex-col space-y-6">
             <CampusMap
               schoolId={selectedSchool.id}
               pickupId={pickup}
@@ -1983,15 +2139,31 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {poolingState === 'matched' && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
                 <div className="flex justify-between items-center">
-                  <span className="bg-[#00875A]/15 text-[#00875A] text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
-                    DRIVER ARRIVING
+                  <span className={`text-xs font-bold border px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider ${
+                    activeRide?.status === 'arriving'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse'
+                      : 'bg-emerald-100 text-[#00875A] border-emerald-300'
+                  }`}>
+                    {activeRide?.status === 'arriving' ? 'DRIVER HAS ARRIVED' : 'WAITING FOR DRIVER ARRIVAL'}
                   </span>
-                  <span className="text-xs font-mono text-slate-500">ETA: 2 Minutes</span>
+                  <span className="text-xs font-mono text-slate-500">
+                    {activeRide?.status === 'arriving' ? 'Driver is at Stop' : 'ETA: 2 Minutes'}
+                  </span>
+                </div>
+
+                {/* Implications & Safety Alerts Box */}
+                <div className="bg-amber-500/5 border border-amber-500/25 p-4 rounded-2xl space-y-2 text-left">
+                  <span className="text-xs font-extrabold text-[#BE5912] uppercase block tracking-wider">Ride Guidelines & Cancellation Policy</span>
+                  <ul className="text-[11px] text-slate-600 list-disc pl-4 space-y-1 leading-relaxed">
+                    <li><strong>Match Vehicle Plate:</strong> Verify vehicle corresponds to <span className="font-mono bg-slate-100 px-1 py-0.5 rounded font-black text-slate-800">RUN-918-LA</span> before boarding.</li>
+                    <li><strong>Logistics Liability:</strong> Cancellations after driver accepts cause gridlocks. Avoid repetitive cancellations to maintain a high rating.</li>
+                    <li><strong>Payment Timing:</strong> Please wait for driver arrival confirmation, then select your payment option on this screen to release lock.</li>
+                  </ul>
                 </div>
 
                 {/* Driver Profile Summary */}
                 <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-4 text-left">
                     <img 
                       referrerPolicy="no-referrer"
                       src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80" 
@@ -2001,12 +2173,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div>
                       <h3 className="text-base font-black text-[#00875A] flex items-center gap-1.5">
                         David Alao 
-                        <span className="text-xs font-mono text-amber-400 bg-[#00875A]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        <span className="text-xs font-mono text-amber-500 bg-[#00875A]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
                           ★ 4.9
                         </span>
                       </h3>
                       <p className="text-xs text-slate-500 font-bold font-mono">Toyota Corolla (Silver) • RUN-918-LA</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Mobile: +234 812 345 6789</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5 text-left">Mobile: +234 812 345 6789</p>
                     </div>
                   </div>
                   
@@ -2017,69 +2189,78 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   </div>
                 </div>
 
-                {/* Trust Payment Method Card */}
-                <div className="p-4 bg-[#00875A]/5 rounded-2xl border border-[#00875A]/15 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
-                      activeRide?.paymentMethod === 'transfer' 
-                        ? 'bg-blue-100 text-blue-600' 
-                        : 'bg-amber-100 text-amber-600'
-                    }`}>
-                      {activeRide?.paymentMethod === 'transfer' ? <ArrowRightLeft className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">PAYMENT METHOD</span>
-                      <span className="text-xs font-extrabold text-slate-700">
-                        {activeRide?.paymentMethod === 'transfer' 
-                          ? 'Bank Transfer' 
-                          : activeRide?.paymentMethod === 'cash' 
-                            ? 'Handover Cash'
-                            : 'Not Selected'}
-                      </span>
+                {/* Trust Payment Method Card (Disabled or Enabled based on status) */}
+                {activeRide?.status === 'accepted' ? (
+                  <div className="p-4 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center space-x-3 text-left">
+                      <div className="w-9 h-9 rounded-xl bg-slate-200 text-slate-500 flex items-center justify-center font-bold">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">PAYMENT OPTION LOCKED</span>
+                        <span className="text-xs font-bold text-slate-500">Wait for Driver Arrival Confirmation...</span>
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="p-4 bg-[#00875A]/5 rounded-2xl border border-[#00875A]/15 flex items-center justify-between">
+                    <div className="flex items-center space-x-3 text-left">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                        activeRide?.paymentMethod 
+                          ? 'bg-emerald-100 text-emerald-600' 
+                          : 'bg-amber-100 text-amber-600 animate-bounce'
+                      }`}>
+                        {activeRide?.paymentMethod === 'transfer' ? <ArrowRightLeft className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">PAYMENT METHOD</span>
+                        <span className="text-xs font-extrabold text-slate-700">
+                          {activeRide?.paymentMethod === 'transfer' 
+                            ? 'Bank Transfer' 
+                            : activeRide?.paymentMethod === 'cash' 
+                              ? 'Handover Cash'
+                              : activeRide?.paymentMethod === 'wallet'
+                                ? 'Student Wallet'
+                                : 'Select Option to Proceed'}
+                        </span>
+                      </div>
+                    </div>
 
-                  <div>
-                    {activeRide?.paymentMethod === 'transfer' ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold ${
-                          activeRide?.paymentValidatedByDriver 
-                            ? 'bg-emerald-100 text-emerald-700 font-bold' 
-                            : 'bg-amber-100 text-amber-700 font-bold animate-pulse'
-                        }`}>
-                          {activeRide?.paymentValidatedByDriver ? 'Payment Validated' : 'Pending Verification'}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setPaymentStep('transfer_details');
-                            setShowPaymentSelection(true);
-                          }}
-                          className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer animate-pulse"
-                        >
-                          View Bank Details
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-extrabold">
-                          {activeRide?.paymentMethod === 'cash' ? 'Cash on Arrival' : 'Required'}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setPaymentStep('select');
-                            setShowPaymentSelection(true);
-                          }}
-                          className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer"
-                        >
-                          {activeRide?.paymentMethod ? 'Change Method' : 'Choose Method'}
-                        </button>
-                      </div>
-                    )}
+                    <div>
+                      {activeRide?.paymentMethod ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-extrabold font-mono">
+                            Paid / Confirmed
+                          </span>
+                          <button
+                            onClick={() => {
+                              setPaymentStep('select');
+                              setShowPaymentSelection(true);
+                            }}
+                            className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer"
+                          >
+                            Change Method
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            onClick={() => {
+                              setPaymentStep('select');
+                              setShowPaymentSelection(true);
+                            }}
+                            className="bg-[#00875A] hover:bg-[#00875A]/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow-sm animate-pulse"
+                          >
+                            Pay Fare (₦{activeRide?.cost})
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Your Ride Pool Members</span>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block text-left">Your Ride Pool Members</span>
                   <div className="flex items-center space-x-2">
                     {lobbyMembers.map((member, idx) => (
                       <div key={idx} className="relative group">
@@ -2106,11 +2287,22 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     Cancel Ride
                   </button>
                   <button
-                    onClick={() => setPoolingState('transit')}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
+                    disabled={!activeRide?.riderPaid || activeRide?.status === 'accepted'}
+                    onClick={() => {
+                      setPoolingState('transit');
+                    }}
+                    className={`w-full font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 ${
+                      activeRide?.riderPaid && activeRide?.status === 'arriving'
+                        ? 'bg-[#00875A] hover:bg-[#00875A]/90 text-white cursor-pointer'
+                        : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                    }`}
                   >
                     <UserCheck className="w-4 h-4" />
-                    Board Vehicle
+                    {activeRide?.status === 'accepted' 
+                      ? 'Wait For Arrival' 
+                      : activeRide?.riderPaid 
+                        ? 'Ready to Commute' 
+                        : 'Pay to Board'}
                   </button>
                 </div>
               </div>
@@ -2221,12 +2413,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     placeholder="Add feedback comments... (optional)"
                     value={reviewText}
                     onChange={(e) => setReviewText(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
                   />
 
                   <button
                     onClick={handleRateSubmit}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A] text-slate-950 font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                   >
                     Finish & Close Trip
                   </button>
@@ -2234,110 +2426,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               </div>
             )}
             
-          </div>
-
-          {/* RIGHT SIDEBAR (5 COLS ON LARGE) - TRANSIT CHAT & ALERTS INBOX */}
-          <div className="lg:col-span-5 flex flex-col space-y-6">
-            
-            {/* Real-time Transit Chat Box inside Ride Pool */}
-            <div className="bg-white rounded-3xl border border-slate-200 flex flex-col h-[350px] lg:h-[450px] overflow-hidden">
-              <div className="p-4 border-b border-slate-200 bg-slate-100/50 flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#00875A]/15 flex items-center justify-center text-[#00875A]">
-                    <MessageSquare className="w-4.5 h-4.5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider block">Transit Pool Chat</h3>
-                    <span className="text-[10px] text-gray-500 block font-mono">ID: CHAT-POOL-8832</span>
-                  </div>
-                </div>
-                {poolingState === 'forming' || poolingState === 'matched' || poolingState === 'transit' ? (
-                  <span className="text-[10px] bg-[#00875A]/10 text-[#00875A] px-2 py-0.5 rounded-md font-mono font-bold animate-pulse">
-                    ● ACTIVE
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-slate-200 text-gray-500 px-2 py-0.5 rounded-md font-mono">
-                    OFFLINE
-                  </span>
-                )}
-              </div>
-
-              {poolingState === 'idle' ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-slate-50/50">
-                  <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 animate-pulse">
-                    <Lock className="w-5 h-5" />
-                  </div>
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Chat Restricted</h4>
-                  <p className="text-[11px] text-slate-500 max-w-[210px] leading-relaxed">
-                    Only active commuters who successfully join the ride pool can access this real-time transit chat room.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Chat Messages Scrolling Body */}
-                  <div className="flex-1 p-4 overflow-y-auto space-y-3.5 flex flex-col">
-                    {chatMessages.map((msg, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`max-w-[85%] flex flex-col ${
-                          msg.isUser ? 'self-end items-end' : 'self-start items-start'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-1.5 mb-1 text-[10px]">
-                          <span className="font-extrabold text-slate-500">{msg.sender}</span>
-                          <span className="text-gray-600 font-mono">{msg.time}</span>
-                        </div>
-                        <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                          msg.sender === 'System' 
-                            ? 'bg-slate-100/50 text-slate-600 border border-slate-200 italic text-center w-full font-mono'
-                            : msg.isUser 
-                              ? 'bg-[#00875A] text-white rounded-tr-none' 
-                              : 'bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-none'
-                        }`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={chatBottomRef}></div>
-                  </div>
-
-                  {/* Quick Replies row */}
-                  <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth">
-                    {['On my way!', 'I am at the stop', 'Wait for me', 'Awesome split!'].map((phrase, index) => (
-                      <button
-                        key={index}
-                        onClick={() => sendQuickReply(phrase)}
-                        className="px-3 py-1 bg-slate-100 hover:bg-gray-850 text-slate-500 hover:text-white border border-slate-150 shadow-xs rounded-lg text-[10px] font-bold transition-all shrink-0 cursor-pointer"
-                      >
-                        {phrase}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Message Submit Footer Form */}
-              <form onSubmit={handleSendMessage} className="p-3 bg-slate-100/50 border-t border-slate-200 flex items-center space-x-2">
-                <input
-                  type="text"
-                  placeholder={poolingState === 'idle' ? 'Join a pool to text...' : 'Type message here...'}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  disabled={poolingState === 'idle'}
-                  className="flex-1 bg-slate-50 border border-slate-150 shadow-xs rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#00875A]/30 disabled:opacity-50"
-                />
-                <button
-                  type="submit"
-                  disabled={poolingState === 'idle' || !chatInput.trim()}
-                  className="p-2.5 bg-[#00875A] hover:bg-[#00875A] disabled:bg-gray-850 text-white rounded-xl transition duration-150 cursor-pointer"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
-
-
-
           </div>
         </motion.div>
       )}
@@ -2444,6 +2532,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
           {/* Pools Grid */}
           {activePools.filter(pool => {
+            const elapsed = pool.createdAt ? Math.floor((Date.now() - pool.createdAt) / 1000) : 0;
+            const remaining = Math.max(0, (pool.driverAcceptCountdown ?? 60) - elapsed);
+            if (remaining <= 0) return false;
+            if (pool.status === 'closed' || pool.status === 'transit') return false;
             if (browseFilterPickup !== 'all' && pool.pickupId !== browseFilterPickup) return false;
             if (browseFilterDropoff !== 'all' && pool.dropoffId !== browseFilterDropoff) return false;
             if (browseFilterVehicle !== 'all' && pool.vehicleType !== browseFilterVehicle) return false;
@@ -2451,11 +2543,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           }).length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activePools.filter(pool => {
+                const elapsed = pool.createdAt ? Math.floor((Date.now() - pool.createdAt) / 1000) : 0;
+                const remaining = Math.max(0, (pool.driverAcceptCountdown ?? 60) - elapsed);
+                if (remaining <= 0) return false;
+                if (pool.status === 'closed' || pool.status === 'transit') return false;
                 if (browseFilterPickup !== 'all' && pool.pickupId !== browseFilterPickup) return false;
                 if (browseFilterDropoff !== 'all' && pool.dropoffId !== browseFilterDropoff) return false;
                 if (browseFilterVehicle !== 'all' && pool.vehicleType !== browseFilterVehicle) return false;
                 return true;
               }).map((pool) => {
+                const elapsed = pool.createdAt ? Math.floor((Date.now() - pool.createdAt) / 1000) : 0;
+                const remainingSeconds = Math.max(0, (pool.driverAcceptCountdown ?? 60) - elapsed);
                 const isUserJoined = joinedPoolId === pool.id;
                 const isFull = pool.currentRiders.length >= pool.maxRiders;
                 
@@ -2496,7 +2594,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <span>Driver matching closes:</span>
                       </div>
                       <span className="font-mono font-black text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded-md">
-                        {pool.driverAcceptCountdown !== undefined ? pool.driverAcceptCountdown : 60}s
+                        {remainingSeconds}s
                       </span>
                     </div>
 
@@ -2688,13 +2786,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200">
               <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Pooling savings (Month)</span>
-              <div className="text-2xl font-black text-slate-800 font-mono mt-1">+{currencySymbol}{userProfile.savedThisMonth.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
-              <p className="text-[10px] text-sage-medium mt-0.5">Saved split cost by sharing rides</p>
+              <div className="text-2xl font-black text-slate-800 font-mono mt-1">+{currencySymbol}{(transactions.filter(t => t.type === 'charge').reduce((acc, t) => acc + Math.round(Math.abs(t.amount) * 1.5), 0)).toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
+              <p className="text-[10px] text-emerald-600 mt-0.5">Saved split cost by sharing rides</p>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200">
               <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Trips completed</span>
-              <div className="text-2xl font-black text-slate-800 font-mono mt-1">{userProfile.tripsThisWeek}</div>
+              <div className="text-2xl font-black text-slate-800 font-mono mt-1">{transactions.filter(t => t.type === 'charge').length}</div>
               <p className="text-[10px] text-slate-500 mt-0.5">Reliable campus commutes logged</p>
             </div>
           </div>
@@ -2711,43 +2809,68 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
             {/* Custom SVG Bar Chart */}
             <div className="h-[200px] w-full flex items-end justify-between pt-6 px-4">
-              {[
-                { day: 'Mon', split: 350, solo: 700 },
-                { day: 'Tue', split: 175, solo: 700 },
-                { day: 'Wed', split: 117, solo: 700 },
-                { day: 'Thu', split: 350, solo: 700 },
-                { day: 'Fri', split: 88,  solo: 700 },
-                { day: 'Sat', split: 0,   solo: 0 },
-                { day: 'Sun', split: 117, solo: 700 }
-              ].map((data, idx) => {
-                const maxVal = 700;
-                const splitHeight = data.split > 0 ? (data.split / maxVal) * 150 : 0;
-                const soloHeight = data.solo > 0 ? (data.solo / maxVal) * 150 : 0;
+              {(() => {
+                const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const currentDayIdx = new Date().getDay();
                 
-                return (
-                  <div key={idx} className="flex flex-col items-center flex-1 group relative">
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full mb-2 bg-gray-950 text-white text-[10px] p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all border border-slate-200 flex flex-col pointer-events-none z-10 whitespace-nowrap shadow-xl">
-                      <span className="font-extrabold text-[#00875A]">Split: {currencySymbol}{data.split}</span>
-                      <span className="text-slate-500 line-through">Solo: {currencySymbol}{data.solo}</span>
-                    </div>
+                // Last 7 days chart array
+                const chartData = Array.from({ length: 7 }, (_, i) => {
+                  const idx = (currentDayIdx - 6 + i + 7) % 7;
+                  return { day: daysOfWeek[idx], split: 0, solo: 0 };
+                });
 
-                    <div className="w-12 h-[150px] flex items-end justify-center gap-1">
-                      {/* Solo Ride Bar Indicator (Backdrop) */}
-                      <div 
-                        className="w-3.5 bg-slate-200 hover:bg-gray-700 rounded-t-sm transition-all duration-300"
-                        style={{ height: `${soloHeight}px` }}
-                      ></div>
-                      {/* Active Pool Split Bar */}
-                      <div 
-                        className="w-3.5 bg-gradient-to-t from-[#00875A] to-[#00875A] rounded-t-sm transition-all duration-300"
-                        style={{ height: `${splitHeight}px` }}
-                      ></div>
+                // Match active charges
+                const charges = transactions.filter(t => t.type === 'charge');
+                if (charges.length === 0) {
+                  // Default mock-fallback only if they don't have any actual charges yet, so the chart is styled beautifully
+                  chartData[0] = { day: 'Mon', split: 350, solo: 700 };
+                  chartData[1] = { day: 'Tue', split: 175, solo: 700 };
+                  chartData[2] = { day: 'Wed', split: 117, solo: 700 };
+                  chartData[3] = { day: 'Thu', split: 350, solo: 700 };
+                  chartData[4] = { day: 'Fri', split: 88,  solo: 700 };
+                  chartData[5] = { day: 'Sat', split: 0,   solo: 0 };
+                  chartData[6] = { day: 'Sun', split: 117, solo: 700 };
+                } else {
+                  charges.forEach(txn => {
+                    const amt = Math.abs(txn.amount);
+                    // Distribute charges deterministically across past days using a hash to create a realistic chart
+                    const hashIdx = Math.abs(txn.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 7;
+                    chartData[hashIdx].split += amt;
+                    chartData[hashIdx].solo += Math.round(amt * 2.5);
+                  });
+                }
+
+                const maxVal = Math.max(...chartData.map(d => d.solo), 700);
+
+                return chartData.map((data, idx) => {
+                  const splitHeight = data.split > 0 ? (data.split / maxVal) * 150 : 0;
+                  const soloHeight = data.solo > 0 ? (data.solo / maxVal) * 150 : 0;
+                  
+                  return (
+                    <div key={idx} className="flex flex-col items-center flex-1 group relative">
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full mb-2 bg-gray-950 text-white text-[10px] p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all border border-slate-200 flex flex-col pointer-events-none z-10 whitespace-nowrap shadow-xl">
+                        <span className="font-extrabold text-[#00875A]">Split: {currencySymbol}{data.split}</span>
+                        <span className="text-slate-500 line-through">Solo: {currencySymbol}{data.solo}</span>
+                      </div>
+
+                      <div className="w-12 h-[150px] flex items-end justify-center gap-1">
+                        {/* Solo Ride Bar Indicator (Backdrop) */}
+                        <div 
+                          className="w-3.5 bg-slate-200 hover:bg-slate-400 rounded-t-sm transition-all duration-300"
+                          style={{ height: `${soloHeight}px` }}
+                        ></div>
+                        {/* Active Pool Split Bar */}
+                        <div 
+                          className="w-3.5 bg-gradient-to-t from-[#00875A] to-emerald-600 rounded-t-sm transition-all duration-300"
+                          style={{ height: `${splitHeight}px` }}
+                        ></div>
+                      </div>
+                      <span className="text-xs font-mono text-gray-500 mt-2 block">{data.day}</span>
                     </div>
-                    <span className="text-xs font-mono text-gray-500 mt-2 block">{data.day}</span>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
 
             <div className="flex justify-center items-center gap-6 pt-4 border-t border-slate-200 text-xs text-gray-500">
@@ -2774,13 +2897,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <Car className="w-5 h-5" />
                       </div>
                       <div>
-                        <span className="text-xs font-bold block text-white">{txn.description}</span>
+                        <span className="text-xs font-bold block text-slate-800">{txn.description}</span>
                         <span className="text-[10px] text-gray-500 block font-mono">{txn.date} • {txn.time}</span>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs font-mono font-black text-white block">-{currencySymbol}{txn.amount}</span>
-                      <span className="text-[9px] bg-[#00875A]/10 text-sage-medium px-2 py-0.5 rounded-full uppercase font-mono tracking-wide">Paid</span>
+                      <span className="text-xs font-mono font-black text-slate-800 block">-{currencySymbol}{txn.amount}</span>
+                      <span className="text-[9px] bg-[#00875A]/10 text-[#00875A] px-2 py-0.5 rounded-full uppercase font-mono tracking-wide font-bold">Paid</span>
                     </div>
                   </div>
                 ))}
@@ -2806,47 +2929,66 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           >
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-black text-[#00875A] tracking-tight">NOTIFICATIONS INBOX</h1>
-            <button
-              onClick={() => {
-                onMarkNotificationsRead();
-                alert('All messages marked as read.');
-              }}
-              className="text-xs text-[#00875A] hover:underline font-bold cursor-pointer"
-            >
-              Mark all as read
-            </button>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => {
+                  onMarkNotificationsRead();
+                  alert('All messages marked as read.');
+                }}
+                className="text-xs text-[#00875A] hover:underline font-bold cursor-pointer"
+              >
+                Mark all as read
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                onClick={() => {
+                  if (confirm("Are you sure you want to clear your notification history?")) {
+                    onClearNotifications?.();
+                  }
+                }}
+                className="text-xs text-rose-600 hover:underline font-bold cursor-pointer"
+              >
+                Clear all history
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {notifications.map((notif, index) => (
-              <div 
-                key={index} 
-                className={`p-5 rounded-2xl border transition-all ${
-                  notif.isRead 
-                    ? 'bg-white border-slate-200 opacity-70' 
-                    : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-blue-500/10'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start space-x-3.5">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      notif.type === 'success' 
-                        ? 'bg-[#00875A]/10 text-sage-medium' 
-                        : notif.type === 'receipt' 
-                          ? 'bg-[#00875A]/10 text-blue-450' 
-                          : 'bg-slate-200 text-slate-500'
-                    }`}>
-                      <BellRing className="w-5 h-5" />
+            {notifications && notifications.length > 0 ? (
+              notifications.map((notif, index) => (
+                <div 
+                  key={index} 
+                  className={`p-5 rounded-2xl border transition-all ${
+                    notif.isRead 
+                      ? 'bg-white border-slate-200 opacity-70' 
+                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-blue-500/10'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start space-x-3.5">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        notif.type === 'success' 
+                          ? 'bg-[#00875A]/10 text-sage-medium' 
+                          : notif.type === 'receipt' 
+                            ? 'bg-[#00875A]/10 text-blue-450' 
+                            : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        <BellRing className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">{notif.title}</h3>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{notif.message}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">{notif.title}</h3>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{notif.message}</p>
-                    </div>
+                    <span className="text-[10px] text-gray-500 font-mono tracking-wide shrink-0">{notif.time}</span>
                   </div>
-                  <span className="text-[10px] text-gray-500 font-mono tracking-wide shrink-0">{notif.time}</span>
                 </div>
+              ))
+            ) : (
+              <div className="py-12 text-center text-slate-400 text-xs italic bg-white border border-slate-150 rounded-2xl">
+                No notifications or alert updates. Check back later!
               </div>
-            ))}
+            )}
           </div>
         </motion.div>
       )}
@@ -3153,6 +3295,26 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </div>
 
                         <div className="grid grid-cols-1 gap-3">
+                          {/* Wallet Option */}
+                          <button
+                            type="button"
+                            onClick={handleSelectWalletPayment}
+                            className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+                              <Wallet className="w-5 h-5" />
+                            </div>
+                            <div className="space-y-1 w-full">
+                              <div className="flex justify-between items-baseline gap-2">
+                                <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Deduct from Wallet</h5>
+                                <span className="text-[10px] font-mono text-slate-500 shrink-0">Bal: ₦{userProfile.walletBalance.toLocaleString()}</span>
+                              </div>
+                              <p className="text-xs text-slate-500 leading-relaxed">
+                                Instantly pay ₦{activeRide.cost} using your secure preloaded student wallet balance.
+                              </p>
+                            </div>
+                          </button>
+
                           {/* Cash Option */}
                           <button
                             type="button"
@@ -3573,6 +3735,196 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           </div>
         )}
       </AnimatePresence>
+      
+      {/* FLOATING MESSENGER-STYLE CHAT OVERLAY ON THE LEFT */}
+      {(() => {
+        const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
+        if (!chatId) return null;
+
+        const counterPartyName = activeRide?.driverName || "Campus Transit Pool";
+        const counterPartyAvatar = activeRide?.driverAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80";
+        const isDriverAssigned = !!activeRide?.driverName;
+
+        return (
+          <motion.div
+            drag
+            dragMomentum={false}
+            dragElastic={0.08}
+            className="fixed bottom-20 left-6 md:bottom-6 md:left-80 z-50 flex flex-col-reverse items-start select-none"
+            style={{ touchAction: 'none' }}
+            id="floating-messenger-draggable-wrapper"
+          >
+            {/* 1. The Floating Circle Bubble (Messenger Style) */}
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsChatOverlayOpen(!isChatOverlayOpen)}
+              className={`relative w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl border cursor-grab active:cursor-grabbing transition-colors duration-200 ${
+                isChatOverlayOpen 
+                  ? 'bg-rose-600 border-rose-500 hover:bg-rose-700' 
+                  : 'bg-[#00875A] border-[#00875A]/20 hover:bg-[#00875A]/95'
+              }`}
+              style={{ boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)' }}
+              id="floating-messenger-bubble"
+            >
+              {isChatOverlayOpen ? (
+                <XCircle className="w-6 h-6" />
+              ) : (
+                <div className="relative">
+                  {isDriverAssigned ? (
+                    <img 
+                      src={counterPartyAvatar} 
+                      alt={counterPartyName}
+                      referrerPolicy="no-referrer"
+                      className="w-11 h-11 rounded-full object-cover border-2 border-white"
+                    />
+                  ) : (
+                    <MessageSquare className="w-6 h-6 text-white" />
+                  )}
+                  {/* Pulsing indicator of active chat */}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full animate-pulse" />
+                </div>
+              )}
+              
+              {/* Unread message count preview alert (simulated) */}
+              {!isChatOverlayOpen && chatMessages.length > 0 && (
+                <span className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[9px] font-black h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                  {chatMessages.length}
+                </span>
+              )}
+            </motion.button>
+
+            {/* 2. Expanded Floating Messenger Panel */}
+            <AnimatePresence>
+              {isChatOverlayOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.85, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, y: 15 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mb-3 w-[330px] sm:w-[360px] h-[450px] bg-white rounded-3xl shadow-2xl border border-slate-150 flex flex-col overflow-hidden select-text"
+                  style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}
+                  id="floating-messenger-panel"
+                >
+                  {/* Header */}
+                  <div className="p-4 bg-[#00875A] text-white flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="relative">
+                        <img 
+                          src={counterPartyAvatar} 
+                          alt={counterPartyName} 
+                          referrerPolicy="no-referrer"
+                          className="w-9 h-9 rounded-full object-cover border border-white/20"
+                        />
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black truncate max-w-[150px]">{counterPartyName}</h4>
+                        <span className="text-[9px] text-white/85 uppercase tracking-wider font-mono font-bold block">
+                          {isDriverAssigned ? 'Active Trip Driver' : 'Ride Pool Chat'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <button 
+                        onClick={() => setIsChatOverlayOpen(false)}
+                        className="p-1.5 hover:bg-white/10 rounded-lg text-white/90 hover:text-white cursor-pointer"
+                        title="Minimize"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body - Message feed */}
+                  <div className="flex-1 p-4 overflow-y-auto bg-slate-50 space-y-3 flex flex-col">
+                    {chatMessages.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                        <MessageSquare className="w-8 h-8 text-slate-300 mb-2" />
+                        <p className="text-[11px] text-slate-400">No messages yet. Send a greeting!</p>
+                      </div>
+                    ) : (
+                      chatMessages.map((msg, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`max-w-[85%] flex flex-col ${
+                            msg.isUser ? 'self-end items-end' : 'self-start items-start'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-1 mb-0.5 text-[9px] text-slate-400">
+                            <span className="font-extrabold">{msg.sender}</span>
+                            <span>•</span>
+                            <span className="font-mono">{msg.time}</span>
+                          </div>
+                          <div className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed shadow-2xs ${
+                            msg.sender === 'System' 
+                              ? 'bg-[#00875A]/5 text-slate-600 border border-slate-150 italic text-center w-full font-mono'
+                              : msg.isUser 
+                                ? 'bg-[#00875A] text-white rounded-tr-none' 
+                                : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
+                          }`}>
+                            {msg.text}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <div ref={floatingChatBottomRef} />
+                  </div>
+
+                  {/* Quick Replies Swiper Row */}
+                  <div className="px-3 py-1.5 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar">
+                    {['On my way!', 'I am at the stop', 'Wait for me', 'Awesome, thanks!'].map((phrase, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          sendQuickReply(phrase);
+                          // Auto scroll bottom
+                          setTimeout(() => {
+                            floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                          }, 100);
+                        }}
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-[#00875A] border border-slate-150 text-slate-500 hover:text-white rounded-lg text-[9px] font-bold transition-all shrink-0 cursor-pointer"
+                      >
+                        {phrase}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Message Input form */}
+                  <form 
+                    onSubmit={(e) => {
+                      handleSendMessage(e);
+                      // Auto scroll bottom
+                      setTimeout(() => {
+                        floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      }, 100);
+                    }} 
+                    className="p-2.5 bg-white border-t border-slate-150 flex items-center space-x-2"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Type a message..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#00875A] focus:ring-1 focus:ring-[#00875A]/20"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!chatInput.trim()}
+                      className="p-2 bg-[#00875A] hover:bg-[#00875A]/90 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-xl transition duration-150 cursor-pointer shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        );
+      })()}
 
     </div>
   );

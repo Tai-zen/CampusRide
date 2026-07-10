@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriverState, RideRequest, AppNotification, Transaction } from '../types';
 import { 
@@ -22,9 +22,14 @@ import {
   Sparkles,
   RefreshCw,
   Wallet,
-  Calendar
+  Calendar,
+  MessageSquare,
+  Send,
+  Check,
+  Copy,
+  ArrowRightLeft
 } from 'lucide-react';
-import { MOCK_INCOMING_REQUEST, CAMPUS_STOPS } from '../data';
+import { CAMPUS_STOPS } from '../data';
 import { UNIVERSITIES } from './SchoolSelection';
 import { CampusMap } from './CampusMap';
 
@@ -32,10 +37,13 @@ interface DriverPortalProps {
   activeView: string;
   driverProfile: DriverState;
   activeRide: RideRequest | null;
+  notifications?: AppNotification[];
   onUpdateDriverProfile: (updates: Partial<DriverState>) => void;
   onUpdateRide: (ride: RideRequest | null) => void;
   onAddNotification: (notif: AppNotification) => void;
   onAddTransaction: (txn: Transaction) => void;
+  onMarkNotificationsRead?: () => void;
+  onClearNotifications?: () => void;
   selectedSchoolId?: string;
   onNavigate?: (view: string) => void;
 }
@@ -44,19 +52,124 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   activeView,
   driverProfile,
   activeRide,
+  notifications = [],
   onUpdateDriverProfile,
   onUpdateRide,
   onAddNotification,
   onAddTransaction,
+  onMarkNotificationsRead,
+  onClearNotifications,
   selectedSchoolId,
   onNavigate,
 }) => {
   // Local Shift States
-  const [shiftOnline, setShiftOnline] = useState<boolean>(true);
+  const [shiftOnline, setShiftOnline] = useState<boolean>(() => driverProfile?.status !== 'Offline');
   const [incomingRequest, setIncomingRequest] = useState<RideRequest | null>(null);
   const [simTransitLoading, setSimTransitLoading] = useState<boolean>(false);
   const [scheduledRides, setScheduledRides] = useState<any[]>([]);
   const [liveDistance, setLiveDistance] = useState<number>(0);
+
+  // Sync shift online with driver profile status
+  useEffect(() => {
+    setShiftOnline(driverProfile?.status !== 'Offline');
+  }, [driverProfile?.status]);
+
+  // Real-time Chat States
+  const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string; isUser: boolean; senderId?: string }[]>([]);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [isChatOverlayOpen, setIsChatOverlayOpen] = useState<boolean>(false);
+  const floatingChatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Sync driver-side messages
+  useEffect(() => {
+    if (!activeRide) {
+      setChatMessages([]);
+      return;
+    }
+    const chatId = activeRide.id;
+    const loadChat = () => {
+      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+      if (stored) {
+        try {
+          const msgs = JSON.parse(stored);
+          setChatMessages(msgs);
+        } catch (e) {
+          console.error("Error parsing chat messages", e);
+        }
+      } else {
+        // If empty, set welcome system msg
+        const welcome = [
+          { sender: 'System', text: `Welcome to the active transit chat room! Discuss route details safely with your companions and driver.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+        ];
+        localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(welcome));
+        setChatMessages(welcome);
+      }
+    };
+
+    loadChat();
+    window.addEventListener('storage', loadChat);
+    const interval = setInterval(loadChat, 1500);
+    return () => {
+      window.removeEventListener('storage', loadChat);
+      clearInterval(interval);
+    };
+  }, [activeRide?.id]);
+
+  // Scroll to bottom of floating chat
+  useEffect(() => {
+    if (isChatOverlayOpen && floatingChatBottomRef.current) {
+      setTimeout(() => {
+        floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+  }, [chatMessages, isChatOverlayOpen]);
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !activeRide) return;
+
+    const chatId = activeRide.id;
+    const newMsg = {
+      sender: `${driverProfile.name} (Driver)`,
+      text: chatInput,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isUser: false
+    };
+
+    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+    let msgs = [];
+    if (stored) {
+      try {
+        msgs = JSON.parse(stored);
+      } catch (err) {}
+    }
+    const updated = [...msgs, newMsg];
+    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
+    setChatMessages(updated);
+    setChatInput('');
+  };
+
+  const sendQuickReply = (text: string) => {
+    if (!activeRide) return;
+    const chatId = activeRide.id;
+    const newMsg = {
+      sender: `${driverProfile.name} (Driver)`,
+      text: text,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isUser: false
+    };
+
+    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+    let msgs = [];
+    if (stored) {
+      try {
+        msgs = JSON.parse(stored);
+      } catch (err) {}
+    }
+    const updated = [...msgs, newMsg];
+    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
+    setChatMessages(updated);
+  };
 
   // Local Trust-Transfer Bank details state
   const [bankName, setBankName] = useState<string>(driverProfile.bankName || 'Access Bank Nigeria');
@@ -228,6 +341,38 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     };
   }, []);
 
+  // Monitor active trip cancellation from the student in real-time
+  useEffect(() => {
+    if (!activeRide) return;
+
+    const checkCancellation = () => {
+      const globalRideStr = localStorage.getItem('campusride_global_active_ride');
+      if (!globalRideStr) {
+        // The student has cancelled the active ride!
+        onUpdateRide(null);
+        onUpdateDriverProfile({ status: 'Idle' });
+        onAddNotification({
+          id: `driver-notif-${Date.now()}`,
+          title: 'Ride Cancelled',
+          message: `The active trip has been cancelled by the student.`,
+          date: 'Today',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isRead: false,
+          type: 'warning'
+        });
+        alert("The active trip has been cancelled by the student.");
+      }
+    };
+
+    window.addEventListener('storage', checkCancellation);
+    const interval = setInterval(checkCancellation, 1500);
+
+    return () => {
+      window.removeEventListener('storage', checkCancellation);
+      clearInterval(interval);
+    };
+  }, [activeRide?.id, onUpdateRide, onUpdateDriverProfile, onAddNotification]);
+
   // Toggle shift Online / Offline
   const handleToggleShift = () => {
     const nextState = !shiftOnline;
@@ -337,6 +482,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
         type: 'info'
       });
     } else if (activeRide.status === 'arriving') {
+      if (!activeRide.riderPaid) {
+        alert("The student has not completed their boarding payment yet. Please ask them to pay using their digital wallet, cash, or transfer before starting the ride.");
+        return;
+      }
       onUpdateRide({
         ...activeRide,
         status: 'in_transit',
@@ -352,7 +501,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
         type: 'info'
       });
     } else if (activeRide.status === 'in_transit') {
-      // Conclude trip: update driver balance, increment metrics, clear active ride
+      // Conclude trip: update driver balance, increment metrics, set to completed
       const fareEarned = activeRide.cost;
       onUpdateDriverProfile({
         todayEarnings: driverProfile.todayEarnings + fareEarned,
@@ -383,6 +532,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
         type: 'receipt'
       });
 
+      onUpdateRide({
+        ...activeRide,
+        status: 'completed'
+      });
+    } else if (activeRide.status === 'completed') {
       onUpdateRide(null);
     }
   };
@@ -701,13 +855,18 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 
                     <button
                       onClick={advanceDriverTripStatus}
-                      className="w-full py-2.5 bg-[#BE5912] hover:bg-[#BE5912]/90 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1 shadow-sm"
+                      className={`w-full py-2.5 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1 shadow-sm ${
+                        activeRide.status === 'arriving' && !activeRide.riderPaid
+                          ? 'bg-amber-500 hover:bg-amber-600 cursor-pointer'
+                          : 'bg-[#BE5912] hover:bg-[#BE5912]/90 cursor-pointer'
+                      }`}
                     >
-                      <Play className="w-4 h-4 fill-white" />
+                      <Play className="w-4 h-4 fill-white shrink-0" />
                       <span>
                         {activeRide.status === 'accepted' && 'Mark Arrived at Pickup Stop'}
-                        {activeRide.status === 'arriving' && 'Start Boarding & Commute'}
+                        {activeRide.status === 'arriving' && (activeRide.riderPaid ? 'Start Boarding & Commute' : 'Waiting for Passenger Payment...')}
                         {activeRide.status === 'in_transit' && 'Conclude Ride & Receive Fare'}
+                        {activeRide.status === 'completed' && 'Conclude & Return to Queue'}
                       </span>
                     </button>
                   </div>
@@ -1088,7 +1247,261 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           </div>
         </motion.div>
       )}
+
+      {/* DRIVER NOTIFICATIONS INBOX */}
+      {activeView === 'notifications' && (
+        <motion.div
+          key="notifications"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.05, ease: 'easeInOut' }}
+          className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-6 text-slate-800"
+        >
+          <div className="flex justify-between items-center">
+            <h1 className="text-xl font-black text-[#BE5912] tracking-tight uppercase">Driver Notification Inbox</h1>
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  onMarkNotificationsRead?.();
+                  alert('All messages marked as read.');
+                }}
+                className="text-xs text-[#BE5912] hover:underline font-bold cursor-pointer"
+              >
+                Mark all as read
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm("Are you sure you want to clear your notification history?")) {
+                    onClearNotifications?.();
+                  }
+                }}
+                className="text-xs text-rose-600 hover:underline font-bold cursor-pointer"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {notifications && notifications.length > 0 ? (
+              notifications.map((notif, index) => (
+                <div 
+                  key={index} 
+                  className={`p-5 rounded-2xl border transition-all text-left ${
+                    notif.isRead 
+                      ? 'bg-slate-50/50 border-slate-200 opacity-75' 
+                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-orange-500/10'
+                  }`}
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block leading-snug">{notif.title}</span>
+                      <p className="text-xs text-slate-500 leading-relaxed">{notif.message}</p>
+                      <span className="text-[10px] text-slate-400 font-mono block pt-1">{notif.time}</span>
+                    </div>
+                    {!notif.isRead && (
+                      <span className="bg-orange-100 text-orange-700 font-bold font-mono text-[9px] px-2 py-0.5 rounded-full uppercase shrink-0">New</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-12 text-center text-slate-400 text-xs italic">
+                No notifications or alert updates. Check back later!
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
       </AnimatePresence>
+
+      {/* FLOATING MESSENGER-STYLE CHAT OVERLAY ON THE LEFT */}
+      {(() => {
+        if (!activeRide) return null;
+
+        const counterPartyName = activeRide.passengerName || "Active Commuter";
+        const counterPartyAvatar = activeRide.passengerAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80";
+
+        return (
+          <motion.div
+            drag
+            dragMomentum={false}
+            dragElastic={0.08}
+            className="fixed bottom-20 left-6 md:bottom-6 md:left-80 z-50 flex flex-col-reverse items-start select-none"
+            style={{ touchAction: 'none' }}
+            id="driver-floating-messenger-draggable-wrapper"
+          >
+            {/* 1. The Floating Circle Bubble (Messenger Style) */}
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsChatOverlayOpen(!isChatOverlayOpen)}
+              className={`relative w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl border cursor-grab active:cursor-grabbing transition-colors duration-200 shrink-0 ${
+                isChatOverlayOpen 
+                  ? 'bg-rose-600 border-rose-500 hover:bg-rose-700' 
+                  : 'bg-[#BE5912] border-orange-500/20 hover:bg-[#BE5912]/95'
+              }`}
+              style={{ boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)' }}
+              id="driver-floating-messenger-bubble"
+            >
+              {isChatOverlayOpen ? (
+                <XCircle className="w-6 h-6" />
+              ) : (
+                <div className="relative">
+                  <img 
+                    src={counterPartyAvatar} 
+                    alt={counterPartyName}
+                    referrerPolicy="no-referrer"
+                    className="w-11 h-11 rounded-full object-cover border-2 border-white"
+                  />
+                  {/* Pulsing indicator of active chat */}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full animate-pulse" />
+                </div>
+              )}
+              
+              {/* Unread message count preview alert (simulated) */}
+              {!isChatOverlayOpen && chatMessages.length > 0 && (
+                <span className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[9px] font-black h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                  {chatMessages.length}
+                </span>
+              )}
+            </motion.button>
+
+            {/* 2. Expanded Floating Messenger Panel */}
+            <AnimatePresence>
+              {isChatOverlayOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.85, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, y: 15 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mb-3 w-[330px] sm:w-[360px] h-[450px] bg-white rounded-3xl shadow-2xl border border-slate-150 flex flex-col overflow-hidden select-text"
+                  style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}
+                  id="driver-floating-messenger-panel"
+                >
+                  {/* Header */}
+                  <div className="p-4 bg-[#BE5912] text-white flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="relative">
+                        <img 
+                          src={counterPartyAvatar} 
+                          alt={counterPartyName} 
+                          referrerPolicy="no-referrer"
+                          className="w-9 h-9 rounded-full object-cover border border-white/20"
+                        />
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black truncate max-w-[150px]">{counterPartyName}</h4>
+                        <span className="text-[9px] text-white/85 uppercase tracking-wider font-mono font-bold block">
+                          Active Trip Rider
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <button 
+                        onClick={() => setIsChatOverlayOpen(false)}
+                        className="p-1.5 hover:bg-white/10 rounded-lg text-white/90 hover:text-white cursor-pointer"
+                        title="Minimize"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body - Message feed */}
+                  <div className="flex-1 p-4 overflow-y-auto bg-slate-50 space-y-3 flex flex-col">
+                    {chatMessages.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                        <MessageSquare className="w-8 h-8 text-slate-300 mb-2" />
+                        <p className="text-[11px] text-slate-400">No messages yet. Message the rider about pickup!</p>
+                      </div>
+                    ) : (
+                      chatMessages.map((msg, idx) => {
+                        const isMsgFromMe = msg.sender.includes('Driver') || msg.sender === driverProfile.name;
+                        return (
+                          <div 
+                            key={idx} 
+                            className={`max-w-[85%] flex flex-col ${
+                              isMsgFromMe ? 'self-end items-end' : 'self-start items-start'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-1 mb-0.5 text-[9px] text-slate-400">
+                              <span className="font-extrabold">{msg.sender}</span>
+                              <span>•</span>
+                              <span className="font-mono">{msg.time}</span>
+                            </div>
+                            <div className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed shadow-2xs ${
+                              msg.sender === 'System' 
+                                ? 'bg-orange-50 text-slate-600 border border-orange-100 italic text-center w-full font-mono'
+                                : isMsgFromMe 
+                                  ? 'bg-[#BE5912] text-white rounded-tr-none' 
+                                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
+                            }`}>
+                              {msg.text}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={floatingChatBottomRef} />
+                  </div>
+
+                  {/* Quick Replies Swiper Row */}
+                  <div className="px-3 py-1.5 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar">
+                    {['Heading to pickup now', 'I have arrived', 'Traffic is light', 'Please verify your ID'].map((phrase, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          sendQuickReply(phrase);
+                          // Auto scroll bottom
+                          setTimeout(() => {
+                            floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                          }, 100);
+                        }}
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-[#BE5912] border border-slate-150 text-slate-500 hover:text-white rounded-lg text-[9px] font-bold transition-all shrink-0 cursor-pointer"
+                      >
+                        {phrase}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Message Input form */}
+                  <form 
+                    onSubmit={(e) => {
+                      handleSendMessage(e);
+                      // Auto scroll bottom
+                      setTimeout(() => {
+                        floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      }, 100);
+                    }} 
+                    className="p-2.5 bg-white border-t border-slate-150 flex items-center space-x-2"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Type a message..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#BE5912] focus:ring-1 focus:ring-[#BE5912]/20"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!chatInput.trim()}
+                      className="p-2 bg-[#BE5912] hover:bg-[#BE5912]/90 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-xl transition duration-150 cursor-pointer shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        );
+      })()}
     </div>
   );
 };

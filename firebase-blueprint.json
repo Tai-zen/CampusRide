@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents a unified user profile for students, drivers, or admins.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique user identifier matching the Auth UID." },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["student", "driver", "admin"] },
+        "avatar": { "type": "string" },
+        "idNumber": { "type": "string", "maxLength": 50 },
+        "enrolledTerm": { "type": "string", "maxLength": 100 },
+        "major": { "type": "string", "maxLength": 100 },
+        "walletBalance": { "type": "number" },
+        "isVerified": { "type": "boolean" },
+        "tripsThisWeek": { "type": "number" },
+        "carpoolRides": { "type": "number" },
+        "savedThisMonth": { "type": "number" },
+        "vehicle": { "type": "string", "maxLength": 200 },
+        "rating": { "type": "number" },
+        "ratingsCount": { "type": "number" },
+        "todayEarnings": { "type": "number" },
+        "completedTripsCount": { "type": "number" },
+        "hoursOnline": { "type": "number" },
+        "status": { "type": "string", "enum": ["On Trip", "Idle", "Break", "Offline"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "RideRequest": {
+      "title": "RideRequest",
+      "description": "Represents a physical ride booking request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "passengerId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "passengerAvatar": { "type": "string" },
+        "passengerRating": { "type": "number" },
+        "passengerType": { "type": "string", "enum": ["Student", "Staff", "Faculty"] },
+        "pickup": { "type": "string" },
+        "dropoff": { "type": "string" },
+        "status": { "type": "string", "enum": ["requested", "accepted", "arriving", "in_transit", "completed", "canceled"] },
+        "vehicleType": { "type": "string", "enum": ["Car", "Keke", "Shuttle"] },
+        "verifyPeer": { "type": "boolean" },
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "driverAvatar": { "type": "string" },
+        "driverVehicle": { "type": "string" },
+        "driverRating": { "type": "number" },
+        "cost": { "type": "number" },
+        "etaMinutes": { "type": "number" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "transfer"] },
+        "paymentConfirmedByRider": { "type": "boolean" },
+        "paymentValidatedByDriver": { "type": "boolean" },
+        "riderPaid": { "type": "boolean" }
+      },
+      "required": ["id", "passengerId", "pickup", "dropoff", "status", "cost"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A ledger record of student wallet reload or ride fare payment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string", "maxLength": 200 },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "method": { "type": "string" },
+        "type": { "type": "string", "enum": ["charge", "reload"] },
+        "status": { "type": "string", "enum": ["Completed", "Pending", "Canceled"] }
+      },
+      "required": ["id", "description", "amount", "type", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "An inbox alert message.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 100 },
+        "message": { "type": "string", "maxLength": 500 },
+        "time": { "type": "string" },
+        "date": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["info", "success", "receipt", "alert"] }
+      },
+      "required": ["id", "title", "message", "isRead", "type"]
+    },
+    "PendingDriver": {
+      "title": "PendingDriver",
+      "description": "Driver signup details awaiting admin approval.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "carBrand": { "type": "string" },
+        "carType": { "type": "string" },
+        "plateNumber": { "type": "string" },
+        "vehicleId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Root user profile storage."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Nested transaction history for a specific user."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Nested notifications inbox for a specific user."
+    },
+    "/rideRequests/{rideId}": {
+      "schema": "RideRequest",
+      "description": "Public ride request listings."
+    },
+    "/pendingDrivers/{driverId}": {
+      "schema": "PendingDriver",
+      "description": "Pending driver applications."
+    }
+  }
+}

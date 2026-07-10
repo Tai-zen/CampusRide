@@ -78,7 +78,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'booking', label: 'Request Ride', icon: Car, badge: null },
         { id: 'browse_pools', label: 'Browse Active Pools', icon: Compass, badge: null },
         { id: 'dashboard', label: 'Activity Dashboard', icon: LayoutDashboard, badge: null },
-        { id: 'notifications', label: 'Notifications Inbox', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
         { id: 'profile', label: 'Student Profile', icon: User, badge: null },
         { id: 'settings', label: 'App Settings', icon: Settings, badge: null },
       ];
@@ -142,9 +141,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {currentRole}
           </span>
           <button 
+            onClick={() => onNavigate('notifications')}
+            title="Notifications"
+            className="p-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition-all cursor-pointer relative"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 bg-rose-500 w-1.5 h-1.5 rounded-full" />
+            )}
+          </button>
+          <button 
             onClick={onLogout}
             title="Log Out"
-            className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>

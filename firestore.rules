@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reuseable global safety and identity validation primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isDriver() {
+      return isSignedIn() && getUserRole() == 'driver';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == 'admin';
+    }
+
+    // Entity validation functions
+    function isValidUserProfile(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.role is string && (data.role == 'student' || data.role == 'driver' || data.role == 'admin');
+    }
+
+    function isValidTransaction(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.description is string && data.description.size() <= 200 &&
+             data.amount is number &&
+             data.type is string && (data.type == 'charge' || data.type == 'reload') &&
+             data.status is string && (data.status == 'Completed' || data.status == 'Pending' || data.status == 'Canceled');
+    }
+
+    function isValidNotification(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.title is string && data.title.size() <= 100 &&
+             data.message is string && data.message.size() <= 500 &&
+             data.isRead is bool &&
+             data.type is string && (data.type == 'info' || data.type == 'success' || data.type == 'receipt' || data.type == 'alert');
+    }
+
+    function isValidRideRequest(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.passengerId is string && data.passengerId.size() <= 128 &&
+             data.pickup is string && data.pickup.size() <= 200 &&
+             data.dropoff is string && data.dropoff.size() <= 200 &&
+             data.status is string && (data.status == 'requested' || data.status == 'accepted' || data.status == 'arriving' || data.status == 'in_transit' || data.status == 'completed' || data.status == 'canceled') &&
+             data.cost is number;
+    }
+
+    function isValidPendingDriver(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100;
+    }
+
+    // Match blocks
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if (
+        (isOwner(userId) && isValidUserProfile(incoming()) && (
+          incoming().role == existing().role &&
+          incoming().email == existing().email &&
+          incoming().idNumber == existing().idNumber &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'walletBalance', 'tripsThisWeek', 'carpoolRides', 'savedThisMonth',
+            'vehicle', 'rating', 'ratingsCount', 'todayEarnings', 'completedTripsCount',
+            'hoursOnline', 'status', 'avatar'
+          ])
+        )) || isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      // Nested collections
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) && isValidTransaction(incoming());
+        allow update, delete: if false; // Transactions ledger is write-once
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) && isValidNotification(incoming());
+        allow update: if isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /rideRequests/{rideId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && incoming().passengerId == request.auth.uid && isValidRideRequest(incoming());
+      allow update: if isSignedIn() && (
+        // Case 1: Student updates status/payment
+        (existing().passengerId == request.auth.uid && incoming().passengerId == existing().passengerId && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentMethod', 'paymentConfirmedByRider', 'riderPaid'])
+        )) ||
+        // Case 2: Driver claims/updates status of ride
+        (isDriver() && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'status', 'driverId', 'driverName', 'driverAvatar', 'driverVehicle',
+            'driverRating', 'etaMinutes', 'paymentValidatedByDriver'
+          ])
+        )) ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (existing().passengerId == request.auth.uid || isAdmin());
+    }
+
+    match /pendingDrivers/{driverId} {
+      allow read: if isOwner(driverId) || isAdmin();
+      allow create: if isOwner(driverId) && isValidPendingDriver(incoming());
+      allow update: if isAdmin() && isValidPendingDriver(incoming());
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -7,9 +7,10 @@ import { motion, AnimatePresence } from 'motion/react';
 interface AuthScreensProps {
   onLogin: (role: UserRole, email: string, password?: string) => Promise<void> | void;
   onSignUp: (role: UserRole, name: string, email: string, password?: string, driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string }, idNumber?: string) => Promise<void> | void;
+  onGoogleSignIn?: () => Promise<void> | void;
 }
 
-export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp }) => {
+export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onGoogleSignIn }) => {
   const [isLogin, setIsLogin] = useState<boolean>(true);
   const [selectedRole, setSelectedRole] = useState<UserRole>('student');
   const [name, setName] = useState<string>('');
@@ -470,6 +471,32 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp }) =
               </span>
             </motion.button>
           </form>
+
+          {isLogin && onGoogleSignIn && (
+            <div className="mt-2">
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-gray-100"></div>
+                <span className="flex-shrink mx-4 text-[10px] font-mono text-gray-400 uppercase tracking-widest">or</span>
+                <div className="flex-grow border-t border-gray-100"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onGoogleSignIn}
+                className="w-full mt-2 py-3 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition shadow-sm cursor-pointer"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                  <g transform="matrix(1, 0, 0, 1, 0, 0)">
+                    <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.48c0,-0.61 -0.06,-1.2 -0.16,-1.72Z" fill="#4285f4" />
+                    <path d="M12,20.6c2.59,0 4.77,-0.86 6.36,-2.3l-3.3,-2.58c-0.91,0.61 -2.08,0.98 -3.06,0.98c-2.37,0 -4.38,-1.6 -5.1,-3.75H3.5v2.66c1.58,3.14 4.83,5.3 8.5,5.3Z" fill="#34a853" />
+                    <path d="M6.9,13.1c-0.18,-0.55 -0.28,-1.13 -0.28,-1.73s0.1,-1.18 0.28,-1.73V6.98H3.5a8.88,8.88 0 0,0 0,7.84L6.9,13.1Z" fill="#fbbc05" />
+                    <path d="M12,6.38c1.41,0 2.68,0.49 3.68,1.44l2.76,-2.76C16.77,3.52 14.59,3 12,3c-3.67,0 -6.92,2.16 -8.5,5.3l3.4,2.66c0.72,-2.15 2.73,-3.75 5.1,-3.75Z" fill="#ea4335" />
+                  </g>
+                </svg>
+                <span>Continue with Google</span>
+              </button>
+            </div>
+          )}
 
           <div id="auth-switcher-footer" className="text-center pt-2">
             <button

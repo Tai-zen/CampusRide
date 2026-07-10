@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { db } from '../lib/firebase';
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  updateDoc, 
+  query, 
+  where 
+} from 'firebase/firestore';
 import { 
   HOTLINK_MAP_ADMIN, 
-  SYSTEM_KPIS, 
-  MOCK_RECENT_TRIPS 
+  SYSTEM_KPIS 
 } from '../data';
 import { UNIVERSITIES } from './SchoolSelection';
 import { 
@@ -38,32 +48,7 @@ interface AdminCentralProps {
 }
 
 // Initial mock driver roster list for admin control panels
-const INITIAL_DRIVERS_ROSTER: DriverState[] = [
-  {
-    id: 'drv-car-1',
-    name: 'David Alao',
-    vehicle: 'Toyota Corolla (Silver) • 4P-928X',
-    rating: 4.9,
-    ratingsCount: 42,
-    todayEarnings: 12500,
-    completedTripsCount: 8,
-    hoursOnline: 6,
-    status: 'Idle',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
-  },
-  {
-    id: 'drv-keke-1',
-    name: 'Tunde (Keke)',
-    vehicle: 'Keke Tricycle (Yellow) • 5K-302B',
-    rating: 4.8,
-    ratingsCount: 31,
-    todayEarnings: 8200,
-    completedTripsCount: 6,
-    hoursOnline: 4,
-    status: 'On Trip',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
-  },
-];
+const INITIAL_DRIVERS_ROSTER: DriverState[] = [];
 
 export const AdminCentral: React.FC<AdminCentralProps> = ({
   activeView,
@@ -74,43 +59,67 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const mapImage = selectedSchool.mapImage;
 
-  const [driversRoster, setDriversRoster] = useState<DriverState[]>(() => {
-    const stored = localStorage.getItem('campusride_all_drivers_roster');
-    if (stored) return JSON.parse(stored);
-    localStorage.setItem('campusride_all_drivers_roster', JSON.stringify(INITIAL_DRIVERS_ROSTER));
-    return INITIAL_DRIVERS_ROSTER;
-  });
+  const [driversRoster, setDriversRoster] = useState<DriverState[]>([]);
+  const [pendingDrivers, setPendingDrivers] = useState<any[]>([]);
 
-  const [pendingDrivers, setPendingDrivers] = useState<any[]>(() => {
-    const stored = localStorage.getItem('campusride_pending_drivers');
-    if (stored) return JSON.parse(stored);
-    
-    // Seed default pending drivers
-    const seed = [
-      {
-        id: 'drv-pending-1',
-        name: 'Chinedu Okoye',
-        email: 'chinedu.okoye@campusride.edu',
-        carBrand: 'Yellow Piaggio Ape',
-        carType: 'keke',
-        plateNumber: 'KK-882-LA',
-        vehicleId: 'VID-KEKE-772',
-        createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
-      },
-      {
-        id: 'drv-pending-2',
-        name: 'Fatima Bello',
-        email: 'fatima.b@campusride.edu',
-        carBrand: 'White Suzuki Everyday',
-        carType: 'shuttle',
-        plateNumber: 'SH-192-KD',
-        vehicleId: 'VID-SHUT-109',
-        createdAt: new Date(Date.now() - 3600000 * 24).toISOString(), // 1 day ago
+  // 1. Synchronize Driver Roster from Firestore in real-time
+  useEffect(() => {
+    const q = query(collection(db, 'users'), where('role', '==', 'driver'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list: DriverState[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as DriverState);
+      });
+      setDriversRoster(list);
+    }, (error) => {
+      console.error("Firestore error reading driver roster:", error);
+    });
+    return () => unsub();
+  }, []);
+
+  // 2. Synchronize Pending Drivers from Firestore and auto-seed if empty
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'pendingDrivers'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach(doc => {
+        list.push({ ...doc.data(), id: doc.id });
+      });
+      if (list.length === 0 && snapshot.metadata.fromCache === false) {
+        // Seed default pending drivers if they do not exist
+        const seed = [
+          {
+            id: 'drv-pending-1',
+            name: 'Chinedu Okoye',
+            email: 'chinedu.okoye@campusride.edu',
+            carBrand: 'Yellow Piaggio Ape',
+            carType: 'keke',
+            plateNumber: 'KK-882-LA',
+            vehicleId: 'VID-KEKE-772',
+            createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+          },
+          {
+            id: 'drv-pending-2',
+            name: 'Fatima Bello',
+            email: 'fatima.b@campusride.edu',
+            carBrand: 'White Suzuki Everyday',
+            carType: 'shuttle',
+            plateNumber: 'SH-192-KD',
+            vehicleId: 'VID-SHUT-109',
+            createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+          }
+        ];
+        seed.forEach(async (item) => {
+          await setDoc(doc(db, 'pendingDrivers', item.id), item);
+        });
+        setPendingDrivers(seed);
+      } else {
+        setPendingDrivers(list);
       }
-    ];
-    localStorage.setItem('campusride_pending_drivers', JSON.stringify(seed));
-    return seed;
-  });
+    }, (error) => {
+      console.error("Firestore error reading pending drivers:", error);
+    });
+    return () => unsub();
+  }, []);
 
   const [approvedEmailDetails, setApprovedEmailDetails] = useState<any | null>(null);
   const [driverSearch, setDriverSearch] = useState<string>('');
@@ -120,52 +129,34 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
   const kekeShuttleRatio = localStorage.getItem('campusride_keke_shuttle_ratio') || '0.0%';
   const avgMatchDuration = localStorage.getItem('campusride_avg_match_duration') || '0.0 mins';
 
-  // Toggle individual driver state
-  const handleDriverStatusToggle = (driverId: string, currentStatus: string) => {
+  // Toggle individual driver state in Firestore
+  const handleDriverStatusToggle = async (driverId: string, currentStatus: string) => {
     let nextStatus: 'On Trip' | 'Idle' | 'Break' | 'Offline' = 'Idle';
     if (currentStatus === 'Idle') nextStatus = 'Break';
     else if (currentStatus === 'Break') nextStatus = 'Offline';
     else if (currentStatus === 'Offline') nextStatus = 'Idle';
-    else nextStatus = 'Idle'; // On trip remains on trip or resets to idle
+    else nextStatus = 'Idle';
 
-    const nextRoster = driversRoster.map(drv => drv.id === driverId ? { ...drv, status: nextStatus } : drv);
-    setDriversRoster(nextRoster);
-    localStorage.setItem('campusride_all_drivers_roster', JSON.stringify(nextRoster));
+    try {
+      await updateDoc(doc(db, 'users', driverId), { status: nextStatus });
+    } catch (error) {
+      console.error("Error toggling driver status in Firestore:", error);
+    }
   };
 
-  const handleApproveDriver = (driver: any) => {
-    // 1. Update campusride_auth to set isApproved: true
-    const authStr = localStorage.getItem('campusride_auth');
-    const authData = authStr ? JSON.parse(authStr) : {};
-    
-    const emailKey = driver.email.toLowerCase().trim();
-    if (!authData[emailKey]) {
-      // Seed credential for the driver so they can log in
-      authData[emailKey] = {
-        email: emailKey,
-        password: 'Driver123!', // default testing password
-        uid: driver.id,
-        role: 'driver',
-        name: driver.name,
-        idNumber: driver.vehicleId || driver.plateNumber || 'DRV-2024-8839',
-        isApproved: true
-      };
-    } else {
-      authData[emailKey].isApproved = true;
-    }
-    localStorage.setItem('campusride_auth', JSON.stringify(authData));
+  const handleApproveDriver = async (driver: any) => {
+    try {
+      const emailKey = driver.email.toLowerCase().trim();
+      const userRef = doc(db, 'users', driver.id);
+      const vehicleDetails = `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}${driver.vehicleId ? ` [ID: ${driver.vehicleId}]` : ''}`;
 
-    // 2. Update campusride_driver_profile_${driver.id} to set isApproved: true
-    const profileKey = `campusride_driver_profile_${driver.id}`;
-    const profileStr = localStorage.getItem(profileKey);
-    let dProfile = profileStr ? JSON.parse(profileStr) : null;
-    if (!dProfile) {
-      dProfile = {
+      // Create driver profile document in Firestore with isApproved set to true
+      const dProfile = {
         id: driver.id,
         name: driver.name,
-        email: driver.email,
+        email: emailKey,
         role: 'driver',
-        vehicle: `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}${driver.vehicleId ? ` [ID: ${driver.vehicleId}]` : ''}`,
+        vehicle: vehicleDetails,
         rating: 5.0,
         ratingsCount: 0,
         todayEarnings: 0,
@@ -178,57 +169,39 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
         plateNumber: driver.plateNumber,
         carType: driver.carType,
         vehicleId: driver.vehicleId,
+        createdAt: new Date().toISOString()
       };
-    } else {
-      dProfile.isApproved = true;
-    }
-    localStorage.setItem(profileKey, JSON.stringify(dProfile));
+      
+      await setDoc(userRef, dProfile, { merge: true });
 
-    // 3. Add to campusride_all_drivers_roster so they appear in live rosters
-    const rosterStr = localStorage.getItem('campusride_all_drivers_roster');
-    const roster: DriverState[] = rosterStr ? JSON.parse(rosterStr) : [];
-    if (!roster.some(d => d.id === driver.id)) {
-      roster.push({
-        id: driver.id,
+      // Remove from pendingDrivers collection
+      await deleteDoc(doc(db, 'pendingDrivers', driver.id));
+
+      // Trigger the Simulated Email modal!
+      setApprovedEmailDetails({
+        to: driver.email,
         name: driver.name,
-        vehicle: `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}`,
-        rating: 5.0,
-        ratingsCount: 0,
-        todayEarnings: 0,
-        completedTripsCount: 0,
-        hoursOnline: 0,
-        status: 'Offline',
-        avatar: dProfile.avatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
+        vehicle: vehicleDetails,
+        password: 'Driver123!', // default testing password
+        dateSent: new Date().toLocaleString(),
       });
-      localStorage.setItem('campusride_all_drivers_roster', JSON.stringify(roster));
-      setDriversRoster(roster);
+
+      // Dispatch storage event to update sidebar badges
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error("Error approving driver in Firestore:", error);
     }
-
-    // 4. Remove from campusride_pending_drivers
-    const updatedPending = pendingDrivers.filter(d => d.id !== driver.id);
-    localStorage.setItem('campusride_pending_drivers', JSON.stringify(updatedPending));
-    setPendingDrivers(updatedPending);
-
-    // 5. Trigger the Simulated Email modal!
-    setApprovedEmailDetails({
-      to: driver.email,
-      name: driver.name,
-      vehicle: `${driver.carBrand} (${driver.carType.toUpperCase()}) • ${driver.plateNumber}`,
-      password: authData[emailKey]?.password || 'Driver123!',
-      dateSent: new Date().toLocaleString(),
-    });
-
-    // Notify sidebar count listener by dispatching storage event
-    window.dispatchEvent(new Event('storage'));
   };
 
-  const handleDeclineDriver = (driverId: string, driverName: string) => {
+  const handleDeclineDriver = async (driverId: string, driverName: string) => {
     if (window.confirm(`Are you sure you want to decline ${driverName}'s driver registration?`)) {
-      const updatedPending = pendingDrivers.filter(d => d.id !== driverId);
-      localStorage.setItem('campusride_pending_drivers', JSON.stringify(updatedPending));
-      setPendingDrivers(updatedPending);
-      alert(`Registration for ${driverName} has been declined.`);
-      window.dispatchEvent(new Event('storage'));
+      try {
+        await deleteDoc(doc(db, 'pendingDrivers', driverId));
+        alert(`Registration for ${driverName} has been declined.`);
+        window.dispatchEvent(new Event('storage'));
+      } catch (error) {
+        console.error("Error declining driver in Firestore:", error);
+      }
     }
   };
 
