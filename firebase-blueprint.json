@@ -25,7 +25,10 @@
         "completedTripsCount": { "type": "number" },
         "hoursOnline": { "type": "number" },
         "status": { "type": "string", "enum": ["On Trip", "Idle", "Break", "Offline"] },
-        "createdAt": { "type": "string" }
+        "createdAt": { "type": "string" },
+        "adminComments": { "type": "string", "maxLength": 500 },
+        "declined": { "type": "boolean" },
+        "declineReason": { "type": "string", "maxLength": 500 }
       },
       "required": ["id", "name", "email", "role"]
     },
@@ -108,6 +111,22 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "name", "email"]
+    },
+    "SentEmail": {
+      "title": "SentEmail",
+      "description": "Log of email dispatch alerts sent by administration action.",
+      "type": "object",
+      "properties": {
+        "to": { "type": "string" },
+        "name": { "type": "string" },
+        "subject": { "type": "string" },
+        "type": { "type": "string", "enum": ["approve", "decline"] },
+        "comments": { "type": "string", "maxLength": 500 },
+        "dateSent": { "type": "string" },
+        "vehicle": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["to", "name", "subject", "type", "dateSent"]
     }
   },
   "firestore": {
@@ -130,6 +149,10 @@
     "/pendingDrivers/{driverId}": {
       "schema": "PendingDriver",
       "description": "Pending driver applications."
+    },
+    "/sent_emails/{emailId}": {
+      "schema": "SentEmail",
+      "description": "Administrative email action dispatch history logs."
     }
   }
 }

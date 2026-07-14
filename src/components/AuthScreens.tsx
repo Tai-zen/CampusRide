@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserRole } from '../types';
-import { KeyRound, Mail, UserPlus, LogIn, Car } from 'lucide-react';
+import { KeyRound, Mail, UserPlus, LogIn, Car, ClipboardCheck, Clock, Check } from 'lucide-react';
 import { LOGIN_BG_IMAGE } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -24,6 +24,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   const [carType, setCarType] = useState<'car' | 'keke' | 'shuttle'>('car');
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [driverSuccessDetails, setDriverSuccessDetails] = useState<{ name: string; email: string; vehicleId: string } | null>(null);
 
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role);
@@ -108,7 +109,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
 
     // Auto-detect and permit back-end admin logins if they use an admin-associated email address
     let finalRole = selectedRole;
-    if (isLogin && email.toLowerCase().includes('admin')) {
+    if (isLogin && (email.toLowerCase().includes('admin') || email.toLowerCase().trim() === 'wywsk64571@minitts.net')) {
       finalRole = 'admin';
     }
 
@@ -121,6 +122,15 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         .finally(() => setLoading(false));
     } else {
       Promise.resolve(onSignUp(finalRole, name, email, password, { carBrand, plateNumber, carType, vehicleId }, idNumber))
+        .then(() => {
+          if (finalRole === 'driver') {
+            setDriverSuccessDetails({
+              name,
+              email: email.toLowerCase().trim(),
+              vehicleId: vehicleId || 'DRV-2024-8839'
+            });
+          }
+        })
         .catch((err: any) => {
           setError(err.message || 'An error occurred during sign up.');
         })
@@ -188,6 +198,119 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         </div>
 
         <div className="max-w-md w-full mx-auto space-y-8">
+          {driverSuccessDetails ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="space-y-6 text-slate-800"
+            >
+              {/* Success Icon Header */}
+              <div className="flex flex-col items-center text-center space-y-3 pb-2">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm animate-bounce">
+                  <ClipboardCheck className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
+                  Application Received!
+                </h2>
+                <p className="text-sm text-slate-500 max-w-sm leading-relaxed">
+                  Your CampusRide driver account has been created successfully. It is currently awaiting administrative verification.
+                </p>
+              </div>
+
+              {/* Application Details Card */}
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 space-y-4 shadow-sm">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Profile Details</span>
+                  <span className="px-2.5 py-1 text-[10px] font-bold bg-amber-50 text-amber-700 rounded-full border border-amber-100 flex items-center uppercase tracking-wider font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse mr-1.5"></span>
+                    Pending Approval
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-y-3.5 text-xs">
+                  <div>
+                    <div className="text-slate-400 font-medium">Driver Name</div>
+                    <div className="text-slate-800 font-bold mt-0.5">{driverSuccessDetails.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 font-medium">Email Address</div>
+                    <div className="text-slate-800 font-bold mt-0.5 truncate" title={driverSuccessDetails.email}>{driverSuccessDetails.email}</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 font-medium">Vehicle ID</div>
+                    <div className="text-slate-800 font-mono font-bold mt-0.5">{driverSuccessDetails.vehicleId}</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 font-medium">Access Status</div>
+                    <div className="text-amber-600 font-bold mt-0.5">Awaiting Activation</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Workflow Process */}
+              <div className="space-y-3 pt-2 text-left">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Verification Process</h3>
+                
+                <div className="space-y-4">
+                  {/* Step 1 */}
+                  <div className="flex items-start space-x-3 text-xs">
+                    <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold flex-shrink-0">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800">Account Created</div>
+                      <p className="text-slate-500 text-[11px] mt-0.5">Your profile credentials have been safely created in the secure directory.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="flex items-start space-x-3 text-xs">
+                    <div className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold flex-shrink-0">
+                      2
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800">Administrator Review</div>
+                      <p className="text-slate-500 text-[11px] mt-0.5">The Admin will review your vehicle and license details in the "Reviews" operations panel.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex items-start space-x-3 text-xs">
+                    <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-bold flex-shrink-0">
+                      3
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-400">Instant Activation</div>
+                      <p className="text-slate-400 text-[11px] mt-0.5">Upon approval, your login lock is lifted and you can sign in to begin accepting ride requests.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CTA / Action Button */}
+              <div className="pt-4">
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    const savedEmail = driverSuccessDetails.email;
+                    setDriverSuccessDetails(null);
+                    setIsLogin(true);
+                    setSelectedRole('driver');
+                    setError('');
+                    setEmail(savedEmail); // Auto-fill the email for convenience
+                    setPassword('');
+                    setConfirmPassword('');
+                  }}
+                  className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold tracking-wide text-xs uppercase rounded-xl flex items-center justify-center space-x-2 shadow-lg shadow-orange-600/10 cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Return to Sign In</span>
+                </motion.button>
+              </div>
+            </motion.div>
+          ) : (
+            <>
           
           <motion.div 
             key={`${isLogin ? 'login' : 'register'}-${selectedRole}`}
@@ -513,6 +636,8 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
               <span className="text-primary font-bold">{isLogin ? 'Sign up here' : 'Log in here'}</span>
             </button>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import {
   Settings, 
   LogOut, 
   ShieldAlert,
+  AlertTriangle,
   ChevronRight,
   TrendingUp,
   LineChart,
@@ -19,7 +20,8 @@ import {
   RefreshCw,
   Gauge,
   Compass,
-  Calendar
+  Calendar,
+  Users
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -90,8 +92,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } else {
       return [
         { id: 'admin_operations', label: 'Operations Command', icon: ShieldAlert, badge: 'Live' },
+        { id: 'admin_users', label: 'User Directory', icon: Users, badge: null },
         { id: 'admin_analytics', label: 'Performance Hub', icon: LineChart, badge: null },
         { id: 'admin_reviews', label: 'Reviews', icon: Grid, badge: pendingReviewsCount > 0 ? `${pendingReviewsCount} New` : null },
+        { id: 'admin_complaints', label: 'Rider Complaints', icon: AlertTriangle, badge: null },
       ];
     }
   };
@@ -110,8 +114,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'driver_scheduled': return 'Scheduled';
       case 'driver_settings': return 'Settings';
       case 'admin_operations': return 'Ops';
+      case 'admin_users': return 'Users';
       case 'admin_analytics': return 'Analytics';
       case 'admin_reviews': return 'Reviews';
+      case 'admin_complaints': return 'Complaints';
       default: return label.split(' ')[0];
     }
   };
@@ -121,12 +127,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Top Header (Sticky) */}
       <header id="mobile-navigation-bar" className="md:hidden w-full h-16 bg-white border-b border-gray-100 px-4 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 rounded-lg bg-gray-50 border border-gray-100 p-1 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-transparent p-0 flex items-center justify-center overflow-hidden shrink-0">
             <img 
               referrerPolicy="no-referrer"
               src={selectedSchool.logoImage} 
               alt={`${selectedSchool.name} Logo`} 
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover rounded-lg"
             />
           </div>
           <div>
@@ -140,16 +146,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full font-mono bg-[#F9FAFB] ${currentRole === 'student' ? 'text-[#00875A]' : currentRole === 'driver' ? 'text-orange-600' : 'text-amber-700'}`}>
             {currentRole}
           </span>
-          <button 
-            onClick={() => onNavigate('notifications')}
-            title="Notifications"
-            className="p-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition-all cursor-pointer relative"
-          >
-            <Bell className="w-4 h-4" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 bg-rose-500 w-1.5 h-1.5 rounded-full" />
-            )}
-          </button>
           <button 
             onClick={onLogout}
             title="Log Out"
@@ -198,12 +194,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Upper Branding Section */}
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="w-11 h-11 rounded-xl bg-gray-50 border border-gray-100 p-1 flex items-center justify-center shadow-sm shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-transparent p-0 flex items-center justify-center overflow-hidden shrink-0">
               <img 
                 referrerPolicy="no-referrer"
                 src={selectedSchool.logoImage} 
                 alt={`${selectedSchool.name} Logo`} 
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover rounded-xl"
               />
             </div>
             <div>

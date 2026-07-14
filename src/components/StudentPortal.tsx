@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { db } from '../lib/firebase';
+import { collection, setDoc, doc } from 'firebase/firestore';
 import { 
   UserProfile, 
   AppNotification, 
@@ -86,6 +88,8 @@ interface StudentPortalProps {
   onUpdateDriverProfile?: (updates: any) => void;
   selectedSchoolId?: string;
   onDeleteAccount?: () => void;
+  isDarkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
 // Interface for dynamic pooling simulation
@@ -115,6 +119,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   onUpdateDriverProfile,
   selectedSchoolId,
   onDeleteAccount,
+  isDarkMode = false,
+  onToggleDarkMode,
 }) => {
   // Current School Details
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
@@ -229,16 +235,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // Dynamic prices based on active vehicle config
   const basePrice = rideMode === 'solo' ? activeVehicleConfig.soloPrice : activeVehicleConfig.poolPrice;
   const priceTiers: Record<string, number> = {
-    tier1: activeVehicleConfig.poolPrice,
-    tier2: activeVehicleConfig.poolPrice,
-    tier3: activeVehicleConfig.poolPrice,
-    tier4: activeVehicleConfig.poolPrice,
-    tier5: activeVehicleConfig.poolPrice,
-    tier6: activeVehicleConfig.poolPrice,
-    tier7: activeVehicleConfig.poolPrice,
-    tier8: activeVehicleConfig.poolPrice,
-    tier9: activeVehicleConfig.poolPrice,
-    tier10: activeVehicleConfig.poolPrice,
+    tier1: activeVehicleConfig.soloPrice, // If pool was created and no one joins (1 rider), pays full amount for solo
+    tier2: Math.round(activeVehicleConfig.soloPrice / 2), // If just 1 person joins (2 riders total), it's shared among both of them
+    tier3: Math.round(activeVehicleConfig.soloPrice / 3), // Shared among 3
+    tier4: Math.round(activeVehicleConfig.soloPrice / 4), // Shared among 4
+    tier5: Math.round(activeVehicleConfig.soloPrice / 5),
+    tier6: Math.round(activeVehicleConfig.soloPrice / 6),
+    tier7: Math.round(activeVehicleConfig.soloPrice / 7),
+    tier8: Math.round(activeVehicleConfig.soloPrice / 8),
+    tier9: Math.round(activeVehicleConfig.soloPrice / 9),
+    tier10: Math.round(activeVehicleConfig.soloPrice / 10),
   };
 
   // Local state for interactive ride flow
@@ -296,6 +302,50 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string; isUser: boolean; senderId?: string }[]>([]);
   const [chatInput, setChatInput] = useState<string>('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Complaint state variables
+  const [isComplaintFormOpen, setIsComplaintFormOpen] = useState<boolean>(false);
+  const [complaintCategory, setComplaintCategory] = useState<string>('Driver Behavior');
+  const [complaintDetails, setComplaintDetails] = useState<string>('');
+  const [isSubmittingComplaint, setIsSubmittingComplaint] = useState<boolean>(false);
+  const [complaintSuccessMsg, setComplaintSuccessMsg] = useState<string>('');
+
+  const handleSendComplaint = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!complaintDetails.trim()) return;
+
+    setIsSubmittingComplaint(true);
+    setComplaintSuccessMsg('');
+    try {
+      const complaintId = `COMP-${Date.now()}`;
+      const newComplaint = {
+        id: complaintId,
+        rideId: activeRide?.id || joinedPoolId || 'N/A',
+        passengerId: userProfile.id,
+        passengerName: userProfile.name,
+        passengerAvatar: userProfile.avatar,
+        driverId: activeRide?.driverId || 'N/A',
+        driverName: activeRide?.driverName || 'David Alao',
+        category: complaintCategory,
+        details: complaintDetails,
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+
+      await setDoc(doc(db, 'complaints', complaintId), newComplaint);
+      setComplaintSuccessMsg('Your complaint has been logged and sent to the admin team for immediate review.');
+      setComplaintDetails('');
+      setTimeout(() => {
+        setIsComplaintFormOpen(false);
+        setComplaintSuccessMsg('');
+      }, 4000);
+    } catch (err) {
+      console.error('Error submitting complaint:', err);
+      alert('Failed to submit complaint. Please check your network connection and try again.');
+    } finally {
+      setIsSubmittingComplaint(false);
+    }
+  };
 
   // Live simulation states
   const [simStep, setSimStep] = useState<number>(0);
@@ -1378,7 +1428,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 text-slate-800">
+    <div id="student-portal-viewport" className="flex-1 flex flex-col bg-slate-50 text-slate-800">
       <AnimatePresence mode="wait">
         
         {/* 1. VIEW CONTEXT: RIDE BOOKING / LOBBY / TRANSIT (ACTIVE VIEW = BOOKING) */}
@@ -2189,20 +2239,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   </div>
                 </div>
 
-                {/* Trust Payment Method Card (Disabled or Enabled based on status) */}
-                {activeRide?.status === 'accepted' ? (
-                  <div className="p-4 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center space-x-3 text-left">
-                      <div className="w-9 h-9 rounded-xl bg-slate-200 text-slate-500 flex items-center justify-center font-bold">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">PAYMENT OPTION LOCKED</span>
-                        <span className="text-xs font-bold text-slate-500">Wait for Driver Arrival Confirmation...</span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
+                {/* Trust Payment Method Card */}
+                <div className="space-y-4">
                   <div className="p-4 bg-[#00875A]/5 rounded-2xl border border-[#00875A]/15 flex items-center justify-between">
                     <div className="flex items-center space-x-3 text-left">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
@@ -2229,8 +2267,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div>
                       {activeRide?.paymentMethod ? (
                         <div className="flex flex-col items-end gap-1">
-                          <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-extrabold font-mono">
-                            Paid / Confirmed
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold font-mono ${
+                            activeRide?.paymentValidatedByDriver
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-amber-100 text-amber-700 animate-pulse'
+                          }`}>
+                            {activeRide?.paymentValidatedByDriver ? 'Paid & Confirmed' : 'Awaiting Validation'}
                           </span>
                           <button
                             onClick={() => {
@@ -2257,7 +2299,68 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       )}
                     </div>
                   </div>
-                )}
+
+                  {activeRide?.paymentMethod === 'transfer' && (
+                    <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-150 text-left space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-blue-700 font-extrabold uppercase tracking-wider">Driver Bank Details (Transfer)</span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold font-mono ${
+                          activeRide.paymentValidatedByDriver
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : activeRide.paymentConfirmedByRider
+                              ? 'bg-blue-100 text-blue-800 animate-pulse'
+                              : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {activeRide.paymentValidatedByDriver
+                            ? '✓ Confirmed by Driver'
+                            : activeRide.paymentConfirmedByRider
+                              ? 'Awaiting Driver Confirmation'
+                              : 'Pending Transfer Submission'}
+                        </span>
+                      </div>
+
+                      <div className="bg-white border border-blue-100 p-3 rounded-xl space-y-2 text-xs text-slate-700">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-medium">Bank Name:</span>
+                          <span className="font-extrabold text-slate-800">{getDriverBankDetails().bankName}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500 font-medium">Account Number:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-black text-[#00875A] text-sm tracking-wider">{getDriverBankDetails().accountNumber}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(getDriverBankDetails().accountNumber);
+                                setRideTransferCopied(true);
+                                setTimeout(() => setRideTransferCopied(false), 2000);
+                              }}
+                              className="p-1 hover:bg-[#00875A]/10 text-[#00875A] rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                              title="Copy account number"
+                            >
+                              {rideTransferCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-medium">Account Name:</span>
+                          <span className="font-bold text-slate-800 uppercase">{getDriverBankDetails().accountName}</span>
+                        </div>
+                      </div>
+
+                      {!activeRide.paymentConfirmedByRider && (
+                        <button
+                          type="button"
+                          onClick={handleConfirmTransferPayment}
+                          className="w-full bg-[#00875A] hover:bg-[#00875A]/95 text-white font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Confirm Transfer Sent
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block text-left">Your Ride Pool Members</span>
@@ -2304,6 +2407,81 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         ? 'Ready to Commute' 
                         : 'Pay to Board'}
                   </button>
+                </div>
+
+                {/* COMPLAINT SUBMISSION MODULE */}
+                <div className="mt-4 border-t border-slate-150 pt-4 text-left">
+                  {!isComplaintFormOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsComplaintFormOpen(true)}
+                      className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-250 py-3 px-4 rounded-2xl transition-all text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
+                      File An On-Trip Complaint
+                    </button>
+                  ) : (
+                    <div className="bg-rose-50/50 border border-rose-200/60 rounded-2xl p-4 text-left space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-rose-100 pb-2">
+                        <span className="text-xs font-black text-rose-800 uppercase tracking-wide flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-rose-600" />
+                          Lodge Active Trip Dispute
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsComplaintFormOpen(false)}
+                          className="text-xs font-extrabold text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      {complaintSuccessMsg ? (
+                        <div className="p-3 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-200 animate-pulse">
+                          {complaintSuccessMsg}
+                        </div>
+                      ) : (
+                        <div className="space-y-3.5">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Dispute Category</label>
+                            <select
+                              value={complaintCategory}
+                              onChange={(e) => setComplaintCategory(e.target.value)}
+                              className="w-full bg-white border border-rose-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-700"
+                            >
+                              <option value="Driver Behavior">Unprofessional Driver Behavior</option>
+                              <option value="Dangerous Driving">Dangerous Driving or Speeding</option>
+                              <option value="Route Deviation">Incorrect or Unauthorized Route Deviation</option>
+                              <option value="Vehicle Condition">Unsanitary or Damaged Vehicle Condition</option>
+                              <option value="Overcharging Dispute">Fare Dispute / Overcharging</option>
+                              <option value="Other">Other Operational Safety Concerns</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Incident Details</label>
+                            <textarea
+                              value={complaintDetails}
+                              onChange={(e) => setComplaintDetails(e.target.value)}
+                              placeholder="Provide specific details about what is happening on this ride. This is sent directly to administrators in real time."
+                              rows={3}
+                              className="w-full bg-white border border-rose-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-rose-500 outline-none text-slate-700 placeholder-slate-400 leading-relaxed font-semibold"
+                              required
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleSendComplaint(e as any)}
+                            disabled={isSubmittingComplaint || !complaintDetails.trim()}
+                            className="w-full bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl shadow-md shadow-rose-900/10 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer font-mono"
+                          >
+                            {isSubmittingComplaint ? 'Submitting Dispute...' : 'Transmit Dispute to Admin'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2357,6 +2535,81 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <CheckCircle className="w-4 h-4" />
                     Simulate Arrival
                   </button>
+                </div>
+
+                {/* COMPLAINT SUBMISSION MODULE */}
+                <div className="mt-4 border-t border-slate-150 pt-4 text-left">
+                  {!isComplaintFormOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsComplaintFormOpen(true)}
+                      className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-250 py-3 px-4 rounded-2xl transition-all text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
+                      File An On-Trip Complaint
+                    </button>
+                  ) : (
+                    <div className="bg-rose-50/50 border border-rose-200/60 rounded-2xl p-4 text-left space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-rose-100 pb-2">
+                        <span className="text-xs font-black text-rose-800 uppercase tracking-wide flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-rose-600" />
+                          Lodge Active Trip Dispute
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsComplaintFormOpen(false)}
+                          className="text-xs font-extrabold text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      {complaintSuccessMsg ? (
+                        <div className="p-3 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-200 animate-pulse">
+                          {complaintSuccessMsg}
+                        </div>
+                      ) : (
+                        <div className="space-y-3.5">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Dispute Category</label>
+                            <select
+                              value={complaintCategory}
+                              onChange={(e) => setComplaintCategory(e.target.value)}
+                              className="w-full bg-white border border-rose-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-700"
+                            >
+                              <option value="Driver Behavior">Unprofessional Driver Behavior</option>
+                              <option value="Dangerous Driving">Dangerous Driving or Speeding</option>
+                              <option value="Route Deviation">Incorrect or Unauthorized Route Deviation</option>
+                              <option value="Vehicle Condition">Unsanitary or Damaged Vehicle Condition</option>
+                              <option value="Overcharging Dispute">Fare Dispute / Overcharging</option>
+                              <option value="Other">Other Operational Safety Concerns</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Incident Details</label>
+                            <textarea
+                              value={complaintDetails}
+                              onChange={(e) => setComplaintDetails(e.target.value)}
+                              placeholder="Provide specific details about what is happening on this ride. This is sent directly to administrators in real time."
+                              rows={3}
+                              className="w-full bg-white border border-rose-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-rose-500 outline-none text-slate-700 placeholder-slate-400 leading-relaxed font-semibold"
+                              required
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleSendComplaint(e as any)}
+                            disabled={isSubmittingComplaint || !complaintDetails.trim()}
+                            className="w-full bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl shadow-md shadow-rose-900/10 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer font-mono"
+                          >
+                            {isSubmittingComplaint ? 'Submitting Dispute...' : 'Transmit Dispute to Admin'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -3070,7 +3323,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         placeholder="Enter other sum (e.g. 10000)"
                         value={customFundAmount}
                         onChange={(e) => setCustomFundAmount(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 px-8 py-3 rounded-2xl text-xs text-white focus:outline-none"
+                        className="w-full bg-slate-50 border border-slate-200 px-8 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -3473,7 +3726,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 className="w-20 h-20 rounded-full object-cover border-2 border-slate-150 shadow-xs"
               />
               <div className="text-center sm:text-left space-y-1">
-                <h3 className="text-lg font-black text-white">{userProfile.name}</h3>
+                <h3 className="text-lg font-black text-slate-800">{userProfile.name}</h3>
                 <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] inline-block font-mono tracking-wider">
                   Verified Commuter
                 </span>
@@ -3490,7 +3743,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     type="text" 
                     value={userProfile.name}
                     onChange={(e) => onUpdateProfile({ name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-white focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -3520,7 +3773,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     type="text" 
                     value={userProfile.major || 'Software Engineering'}
                     onChange={(e) => onUpdateProfile({ major: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-white focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none"
                   />
                 </div>
               </div>
@@ -3556,7 +3809,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-xs font-bold block text-white">Continuous Live Location Share</span>
+                  <span className="text-xs font-bold block text-slate-800">Continuous Live Location Share</span>
                   <span className="text-[10px] text-gray-500 block">Transmit coordinate locks to drivers when pooling is active</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -3572,7 +3825,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-xs font-bold block text-white">Same Gender Peer Matching</span>
+                  <span className="text-xs font-bold block text-slate-800">Dark Mode Theme</span>
+                  <span className="text-[10px] text-gray-500 block">Switch the application layout to a gorgeous, high-contrast dark night mode</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={isDarkMode} 
+                    onChange={onToggleDarkMode} 
+                    className="sr-only peer" 
+                  />
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold block text-slate-800">Same Gender Peer Matching</span>
                   <span className="text-[10px] text-gray-500 block">Strict matching filters to isolate peers of the same gender</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -3588,7 +3857,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-xs font-bold block text-white">Low Balance Wallet Alerts</span>
+                  <span className="text-xs font-bold block text-slate-800">Low Balance Wallet Alerts</span>
                   <span className="text-[10px] text-gray-500 block">System alert triggers when digital balance dips below ₦500</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -3600,6 +3869,46 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   />
                   <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
                 </label>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200 gap-3">
+                <div className="text-left">
+                  <span className="text-xs font-bold block text-slate-800">System Notification Permissions</span>
+                  <span className="text-[10px] text-gray-500 block">Receive real-time alerts outside the browser when drivers arrive or riders join your pool</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {'Notification' in window ? (
+                    Notification.permission === 'granted' ? (
+                      <span className="bg-emerald-100 text-emerald-850 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
+                        ✓ Enabled
+                      </span>
+                    ) : Notification.permission === 'denied' ? (
+                      <span className="bg-red-100 text-red-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
+                        Blocked
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const p = await Notification.requestPermission();
+                          if (p === 'granted') {
+                            alert("System notifications enabled successfully!");
+                            window.location.reload();
+                          } else {
+                            alert("Notification permission was not granted.");
+                          }
+                        }}
+                        className="bg-[#00875A] hover:bg-[#00875A]/90 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-xs font-mono"
+                      >
+                        Enable
+                      </button>
+                    )
+                  ) : (
+                    <span className="bg-slate-100 text-slate-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
+                      Not Supported
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -3689,7 +3998,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Est. Split Price</span>
                     <span className="text-lg font-mono font-black text-[#00875A]">
-                      {currencySymbol}{Math.round((checkoutPool.vehicleType === 'Car' ? 350 : checkoutPool.vehicleType === 'Keke' ? 200 : 100) / (checkoutPool.currentRiders.length + 1))}
+                      {currencySymbol}{(() => {
+                        const vCfg = VEHICLES.find(v => v.type === checkoutPool.vehicleType) || VEHICLES[0];
+                        return Math.round(vCfg.soloPrice / (checkoutPool.currentRiders.length + 1));
+                      })()}
                     </span>
                   </div>
                   <div className="text-right">

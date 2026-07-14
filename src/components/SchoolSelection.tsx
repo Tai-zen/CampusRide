@@ -28,7 +28,7 @@ export const UNIVERSITIES: School[] = [
     accentColor: '#00875A', // Emerald green
     brandColor: 'emerald',
     logoText: 'RUN',
-    logoImage: 'https://run.edu.ng/wp-content/uploads/2021/04/run-logo.png',
+    logoImage: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
     bannerImage: 'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?auto=format&fit=crop&w=600&q=80',
     center: { lat: 7.4082, lng: 4.4290 },
     zoom: 15,
@@ -162,12 +162,12 @@ export const SchoolSelection: React.FC<SchoolSelectionProps> = ({ onSelectSchool
                 >
                   <div className="flex items-center space-x-4">
                     {/* Circle Logo/Image Badge */}
-                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-gray-50 border border-gray-100 p-2.5 shadow-inner">
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-transparent p-0 overflow-hidden shrink-0">
                       <img 
                         referrerPolicy="no-referrer"
                         src={school.logoImage} 
                         alt={`${school.name} Logo`} 
-                        className="w-full h-full object-contain transition-transform duration-300 hover:scale-105"
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105 rounded-2xl"
                       />
                     </div>
 

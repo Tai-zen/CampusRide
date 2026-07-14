@@ -7,7 +7,7 @@ import { StudentPortal } from './components/StudentPortal';
 import { DriverPortal } from './components/DriverPortal';
 import { AdminCentral } from './components/AdminCentral';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, Wallet } from 'lucide-react';
+import { Bell, Wallet, X, CheckCircle } from 'lucide-react';
 import { 
   INITIAL_STUDENT_PROFILE, 
   INITIAL_DRIVER_PROFILE,
@@ -43,6 +43,31 @@ import {
   writeBatch 
 } from 'firebase/firestore';
 
+const showNativeNotification = async (title: string, body: string) => {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg) {
+          reg.showNotification(title, {
+            body,
+            icon: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
+            badge: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
+            vibrate: [200, 100, 200],
+            tag: 'campusride-update',
+            renotify: true
+          } as any);
+          return;
+        }
+      } catch (err) {
+        console.error('Error showing notification via Service Worker:', err);
+      }
+    }
+    new Notification(title, { body });
+  }
+};
+
 export default function App() {
   const isSigningUpRef = useRef<boolean>(false);
   const [currentUser, setCurrentUser] = useState<{ email: string; name: string; uid?: string } | null>(null);
@@ -52,12 +77,73 @@ export default function App() {
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
   const [showTopNotifications, setShowTopNotifications] = useState<boolean>(false);
   
+  // Dark mode support state
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('campusride_darkmode') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('campusride_darkmode', String(isDarkMode));
+    const layout = document.getElementById('application-layout-context');
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      if (layout) layout.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      if (layout) layout.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  // Register Service Worker & Request Notification Permission
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    return 'Notification' in window ? Notification.permission : 'denied';
+  });
+  const [dismissedNotificationBanner, setDismissedNotificationBanner] = useState<boolean>(() => {
+    return localStorage.getItem('campusride_dismissed_notif_banner') === 'true';
+  });
+
+  const handleRequestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      try {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        if (permission === 'granted') {
+          showNativeNotification("Notifications Enabled! 🔔", "You will now receive ride and pool updates outside the browser.");
+        }
+      } catch (err) {
+        console.error("Error requesting notification permission:", err);
+      }
+    }
+  };
+
+  const handleDismissNotificationBanner = () => {
+    setDismissedNotificationBanner(true);
+    localStorage.setItem('campusride_dismissed_notif_banner', 'true');
+  };
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => {
+          console.log('Service Worker registered successfully with scope:', reg.scope);
+        })
+        .catch((err) => {
+          console.error('Service Worker registration failed:', err);
+        });
+    }
+
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
   // High fidelity application databases in memory synced with Firestore
   const [userProfile, setUserProfile] = useState<UserProfile>(INITIAL_STUDENT_PROFILE);
   const [driverProfile, setDriverProfile] = useState<DriverState>(INITIAL_DRIVER_PROFILE);
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
+  const [driverPastRides, setDriverPastRides] = useState<RideRequest[]>([]);
 
   // Helper to get active user ID
   const getActiveUid = () => {
@@ -75,6 +161,21 @@ export default function App() {
 
           if (userDoc.exists()) {
             const profile = userDoc.data();
+
+            // Block unapproved drivers from logging in/entering via auth state
+            if (profile.role === 'driver' && !profile.isApproved) {
+              if (isSigningUpRef.current) {
+                console.log("Driver signup in progress, not blocking in onAuthStateChanged yet");
+                return;
+              }
+              console.log("Blocking unapproved driver from logging in");
+              await auth.signOut();
+              localStorage.removeItem('campusride_custom_session');
+              setCurrentUser(null);
+              setLoadingAuth(false);
+              return;
+            }
+
             setCurrentUser({
               email: firebaseUser.email || profile.email,
               name: profile.name,
@@ -159,13 +260,26 @@ export default function App() {
       console.error("Firestore error reading profile", error);
     });
 
-    // 2. Real-time Notifications sync
+    // 2. Real-time Notifications sync with Native Web Push Notification Support
+    let isInitialNotifLoad = true;
     const unsubNotifs = onSnapshot(collection(db, 'users', uid, 'notifications'), (snapshot) => {
       const list: AppNotification[] = [];
       snapshot.forEach(doc => {
         list.push(doc.data() as AppNotification);
       });
       setNotifications(list.sort((a, b) => b.id.localeCompare(a.id)));
+
+      if (!isInitialNotifLoad) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const n = change.doc.data() as AppNotification;
+            if (!n.isRead) {
+              showNativeNotification(n.title, n.message);
+            }
+          }
+        });
+      }
+      isInitialNotifLoad = false;
     }, (error) => {
       console.error("Firestore error reading notifications", error);
     });
@@ -201,13 +315,18 @@ export default function App() {
       const q = query(collection(db, 'rideRequests'), where('driverId', '==', uid));
       unsubRide = onSnapshot(q, (snapshot) => {
         let active: RideRequest | null = null;
+        const past: RideRequest[] = [];
         snapshot.forEach(doc => {
           const r = doc.data() as RideRequest;
           if (r.status !== 'completed' && r.status !== 'canceled') {
             active = r;
+          } else {
+            past.push(r);
           }
         });
         setActiveRide(active);
+        // Sort past rides by createdAt descending, default to 0 if not present
+        setDriverPastRides(past.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
       }, (error) => {
         console.error("Firestore error reading driver active ride", error);
       });
@@ -243,7 +362,7 @@ export default function App() {
         } else {
           // Fallback check: hardcode the admin email if they input the admin ID number
           if (loginId.toUpperCase() === 'ADM-2026-0001') {
-            targetEmail = 'admin@campusride.edu';
+            targetEmail = 'wywsk64571@minitts.net';
           } else {
             throw new Error(`No account found with this ID Number: "${loginId}".`);
           }
@@ -251,36 +370,48 @@ export default function App() {
       }
     }
 
-    // Auto-seed admin if logging in as admin for first time
-    if (targetEmail === 'admin@campusride.edu') {
+    // Sign in or sign up with Firebase Auth
+    let userCredential;
+    if (targetEmail === 'wywsk64571@minitts.net') {
       try {
-        const adminDoc = await getDoc(doc(db, 'users', 'admin-uid-101'));
+        userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
+      } catch (signInErr: any) {
+        if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
+          try {
+            userCredential = await createUserWithEmailAndPassword(auth, targetEmail, password);
+          } catch (signUpErr: any) {
+            throw signInErr;
+          }
+        } else {
+          throw signInErr;
+        }
+      }
+    } else {
+      userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
+    }
+
+    const uid = userCredential.user.uid;
+
+    // Auto-seed admin user document if logging in as admin for first time
+    if (targetEmail === 'wywsk64571@minitts.net') {
+      try {
+        const adminDoc = await getDoc(doc(db, 'users', uid));
         if (!adminDoc.exists()) {
           // Create admin profile
-          await setDoc(doc(db, 'users', 'admin-uid-101'), {
-            id: 'admin-uid-101',
+          await setDoc(doc(db, 'users', uid), {
+            id: uid,
             name: 'Sarah Jenkins',
-            email: 'admin@campusride.edu',
+            email: 'wywsk64571@minitts.net',
             role: 'admin',
             avatar: INITIAL_ADMIN_PROFILE.avatar,
             idNumber: 'ADM-2026-0001',
             isVerified: true
           });
-          // Also try to create auth account if it doesn't exist
-          try {
-            await createUserWithEmailAndPassword(auth, 'admin@campusride.edu', password);
-          } catch (ae) {
-            // ignore if auth account already exists
-          }
         }
       } catch (err) {
         console.warn("Seeding admin warning", err);
       }
     }
-
-    // Sign in with Firebase Auth
-    const userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
-    const uid = userCredential.user.uid;
 
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (!userDoc.exists()) {
@@ -301,7 +432,13 @@ export default function App() {
         throw new Error("This account is registered as a Driver. Please select the Driver role to log in.");
       }
       if (!profile.isApproved) {
-        throw new Error("Your driver profile is currently pending administrative verification and approval. Once verified, you will receive an email confirmation and can log in.");
+        await auth.signOut();
+        const feedback = profile.adminComments ? `\n\nAdministrator review feedback: "${profile.adminComments}"` : "";
+        if (profile.declined) {
+          throw new Error(`Your driver application has been declined by the administrator.${feedback}\n\nPlease submit a new application with accurate credentials or contact Transit Operations.`);
+        } else {
+          throw new Error(`Your driver profile is currently pending administrative verification and approval. Once verified, you will receive an email confirmation and can log in.${feedback}`);
+        }
       }
     }
 
@@ -344,7 +481,15 @@ export default function App() {
       const emailKey = email.toLowerCase().trim();
 
       // Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, emailKey, password);
+      let userCredential;
+      try {
+        userCredential = await createUserWithEmailAndPassword(auth, emailKey, password);
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          throw new Error(`An account with email "${email}" already exists. Multiple account creation with the same email is not allowed.`);
+        }
+        throw authErr;
+      }
       const uid = userCredential.user.uid;
 
       const profileData: any = {
@@ -370,7 +515,11 @@ export default function App() {
           savedThisMonth: 0,
           isVerified: true
         };
-        await setDoc(doc(db, 'users', uid), studentProfile);
+        try {
+          await setDoc(doc(db, 'users', uid), studentProfile);
+        } catch (dbErr) {
+          handleFirestoreError(dbErr, OperationType.WRITE, `users/${uid}`);
+        }
         setUserProfile(studentProfile);
       } else if (role === 'driver') {
         const vehicleDetails = driverInfo 
@@ -390,20 +539,28 @@ export default function App() {
           carType: driverInfo?.carType || 'car',
           vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
         };
-        await setDoc(doc(db, 'users', uid), dProfile);
+        try {
+          await setDoc(doc(db, 'users', uid), dProfile);
+        } catch (dbErr) {
+          handleFirestoreError(dbErr, OperationType.WRITE, `users/${uid}`);
+        }
         setDriverProfile(dProfile);
 
         // Save to pending drivers
-        await setDoc(doc(db, 'pendingDrivers', uid), {
-          id: uid,
-          name,
-          email: emailKey,
-          carBrand: driverInfo?.carBrand || 'Toyota Camry',
-          carType: driverInfo?.carType || 'car',
-          plateNumber: driverInfo?.plateNumber || '4P-928X',
-          vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
-          createdAt: new Date().toISOString()
-        });
+        try {
+          await setDoc(doc(db, 'pendingDrivers', uid), {
+            id: uid,
+            name,
+            email: emailKey,
+            carBrand: driverInfo?.carBrand || 'Toyota Camry',
+            carType: driverInfo?.carType || 'car',
+            plateNumber: driverInfo?.plateNumber || '4P-928X',
+            vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
+            createdAt: new Date().toISOString()
+          });
+        } catch (dbErr) {
+          handleFirestoreError(dbErr, OperationType.WRITE, `pendingDrivers/${uid}`);
+        }
       }
 
       // Welcome Notification
@@ -418,10 +575,16 @@ export default function App() {
         isRead: false,
         type: 'success',
       };
-      await setDoc(doc(db, 'users', uid, 'notifications', welcomeNotif.id), welcomeNotif);
+      try {
+        await setDoc(doc(db, 'users', uid, 'notifications', welcomeNotif.id), welcomeNotif);
+      } catch (dbErr) {
+        handleFirestoreError(dbErr, OperationType.WRITE, `users/${uid}/notifications/${welcomeNotif.id}`);
+      }
 
       if (role === 'driver') {
-        throw new Error("SUCCESS: Your driver registration was successful! Your credentials have been submitted to the university administrator for verification and approval under 'Reviews'. Once approved, you will receive an email notification and can log in.");
+        await auth.signOut();
+        isSigningUpRef.current = false;
+        return;
       }
 
       const session = {
@@ -534,6 +697,13 @@ export default function App() {
       }
     } else if (activeRide) {
       // Clear ride by archiving/cancelling in Firestore or setting local to null if state transition is handled
+      if (activeRide.status !== 'completed' && activeRide.status !== 'canceled') {
+        try {
+          await updateDoc(doc(db, 'rideRequests', activeRide.id), { status: 'canceled' });
+        } catch (e) {
+          console.error("Error setting active ride to canceled in Firestore:", e);
+        }
+      }
       setActiveRide(null);
     } else {
       setActiveRide(null);
@@ -643,112 +813,43 @@ export default function App() {
       {/* Main Viewport Content block */}
       <main id="main-viewport-body" className="flex-1 flex flex-col relative min-w-0 pb-20 md:pb-0">
         
-        {/* Top Navbar */}
-        <header className="bg-white border-b border-gray-100 h-16 px-6 flex items-center justify-between sticky top-0 z-40 shrink-0 shadow-xs">
-          <div className="flex items-center space-x-2 md:space-x-4">
-            <h2 className="text-sm md:text-base font-black uppercase tracking-wider text-slate-800">
-              {activeView === 'booking' && 'Request Ride'}
-              {activeView === 'browse_pools' && 'Browse Active Pools'}
-              {activeView === 'dashboard' && 'Activity Dashboard'}
-              {activeView === 'notifications' && 'Notifications Inbox'}
-              {activeView === 'profile' && 'Student Profile'}
-              {activeView === 'settings' && 'App Settings'}
-              {activeView === 'driver_dashboard' && 'Shift Dashboard'}
-              {activeView === 'driver_scheduled' && 'Scheduled Rides'}
-              {activeView === 'driver_settings' && 'Driver Settings'}
-              {activeView === 'admin_operations' && 'Operations Command'}
-              {activeView === 'admin_analytics' && 'Performance Hub'}
-              {activeView === 'admin_reviews' && 'Reviews Hub'}
-            </h2>
-          </div>
-          
-          <div className="flex items-center space-x-3">
-            
-            {/* Top Navbar Notification Button with Dropdown */}
-            <div className="relative">
-              <button 
-                onClick={() => setShowTopNotifications(!showTopNotifications)}
-                className="relative p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-[#00875A] rounded-xl border border-gray-150 transition-all cursor-pointer"
-                title="Notifications"
+        {/* Native Web Push Notifications Consent Banner */}
+        {notificationPermission === 'default' && !dismissedNotificationBanner && (
+          <div className="bg-gradient-to-r from-[#00875A] to-teal-600 text-white p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 animate-fade-in relative z-20">
+            <div className="flex items-start md:items-center space-x-3 text-left">
+              <div className="bg-white/15 p-2 rounded-xl text-white mt-0.5 md:mt-0 flex-shrink-0 animate-pulse">
+                <Bell className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center gap-1.5">
+                  Enable System Notifications
+                  <span className="bg-white/20 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-widest font-mono">Outside Browser</span>
+                </h4>
+                <p className="text-[11px] sm:text-xs text-emerald-50 max-w-2xl leading-relaxed">
+                  Stay updated instantly! Receive real-time alerts for driver arrivals, newly formed ride pools, and group chats—even when you close this tab or put it in the background.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end md:self-auto flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleDismissNotificationBanner}
+                className="hover:bg-white/10 text-white/85 hover:text-white font-bold py-2 px-3 rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer"
               >
-                <Bell className="w-5 h-5" />
-                {notifications.filter(n => !n.isRead).length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center border border-white animate-pulse">
-                    {notifications.filter(n => !n.isRead).length}
-                  </span>
-                )}
+                Later
               </button>
-
-              {/* Float Dropdown Panel */}
-              <AnimatePresence>
-                {showTopNotifications && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40 cursor-default" 
-                      onClick={() => setShowTopNotifications(false)}
-                    />
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2.5 w-80 md:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-50 text-slate-800"
-                    >
-                      <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-[#00875A]">Notifications</span>
-                        <div className="flex space-x-3 text-[10px] font-bold">
-                          <button 
-                            onClick={() => {
-                              handleMarkNotificationsRead();
-                              alert('All marked as read.');
-                            }}
-                            className="text-[#00875A] hover:underline cursor-pointer"
-                          >
-                            Mark Read
-                          </button>
-                          <span className="text-slate-300">|</span>
-                          <button 
-                            onClick={() => {
-                              if (confirm("Are you sure you want to clear your notification history?")) {
-                                handleClearNotifications();
-                                setShowTopNotifications(false);
-                              }
-                            }}
-                            className="text-rose-600 hover:underline cursor-pointer"
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                        {notifications.length > 0 ? (
-                          notifications.map((n) => (
-                            <div 
-                              key={n.id} 
-                              className={`p-4 text-left transition-colors hover:bg-slate-50 ${!n.isRead ? 'bg-amber-500/5' : ''}`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="text-xs font-bold text-slate-800 block leading-snug">{n.title}</span>
-                                <span className="text-[9px] text-slate-400 font-mono shrink-0">{n.time}</span>
-                              </div>
-                              <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{n.message}</p>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="p-8 text-center text-xs text-slate-400 italic">
-                            Your inbox is clear! No active alerts.
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
+              <button
+                type="button"
+                onClick={handleRequestNotificationPermission}
+                className="bg-white text-[#00875A] hover:bg-emerald-50 font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle className="w-3.5 h-3.5 stroke-[3]" />
+                Enable Alerts
+              </button>
             </div>
           </div>
-        </header>
-
+        )}
+        
         {/* Render portal based on Active Switching Role context */}
         {currentRole === 'student' && (
           <StudentPortal 
@@ -768,6 +869,8 @@ export default function App() {
             onUpdateDriverProfile={handleUpdateDriverProfile}
             selectedSchoolId={selectedSchoolId}
             onDeleteAccount={handleDeleteAccount}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
           />
         )}
 
@@ -776,6 +879,7 @@ export default function App() {
             activeView={activeView}
             driverProfile={driverProfile}
             activeRide={activeRide}
+            driverPastRides={driverPastRides}
             notifications={notifications}
             onUpdateDriverProfile={handleUpdateDriverProfile}
             onUpdateRide={handleUpdateRide}
@@ -785,6 +889,8 @@ export default function App() {
             onClearNotifications={handleClearNotifications}
             selectedSchoolId={selectedSchoolId}
             onNavigate={setActiveView}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
           />
         )}
 
@@ -794,6 +900,9 @@ export default function App() {
             activeRide={activeRide}
             onUpdateRide={handleUpdateRide}
             selectedSchoolId={selectedSchoolId}
+            notifications={notifications}
+            onMarkNotificationsRead={handleMarkNotificationsRead}
+            onClearNotifications={handleClearNotifications}
           />
         )}
       </main>

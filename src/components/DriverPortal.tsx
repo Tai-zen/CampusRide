@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriverState, RideRequest, AppNotification, Transaction } from '../types';
+import { db } from '../lib/firebase';
+import { collection, query, where, onSnapshot, setDoc, doc, getDoc } from 'firebase/firestore';
 import { 
   Car, 
   Clock, 
@@ -37,6 +39,7 @@ interface DriverPortalProps {
   activeView: string;
   driverProfile: DriverState;
   activeRide: RideRequest | null;
+  driverPastRides?: RideRequest[];
   notifications?: AppNotification[];
   onUpdateDriverProfile: (updates: Partial<DriverState>) => void;
   onUpdateRide: (ride: RideRequest | null) => void;
@@ -46,12 +49,15 @@ interface DriverPortalProps {
   onClearNotifications?: () => void;
   selectedSchoolId?: string;
   onNavigate?: (view: string) => void;
+  isDarkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
 export const DriverPortal: React.FC<DriverPortalProps> = ({
   activeView,
   driverProfile,
   activeRide,
+  driverPastRides = [],
   notifications = [],
   onUpdateDriverProfile,
   onUpdateRide,
@@ -61,10 +67,13 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   onClearNotifications,
   selectedSchoolId,
   onNavigate,
+  isDarkMode = false,
+  onToggleDarkMode,
 }) => {
   // Local Shift States
   const [shiftOnline, setShiftOnline] = useState<boolean>(() => driverProfile?.status !== 'Offline');
   const [incomingRequest, setIncomingRequest] = useState<RideRequest | null>(null);
+  const [declinedRideIds, setDeclinedRideIds] = useState<Set<string>>(() => new Set());
   const [simTransitLoading, setSimTransitLoading] = useState<boolean>(false);
   const [scheduledRides, setScheduledRides] = useState<any[]>([]);
   const [liveDistance, setLiveDistance] = useState<number>(0);
@@ -308,70 +317,68 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     }
   };
 
-  // Synchronize incoming ride request from students across tabs/components in real time
-  React.useEffect(() => {
-    const handleStorageChange = () => {
-      const globalRideStr = localStorage.getItem('campusride_global_active_ride');
-      if (globalRideStr) {
-        try {
-          const globalRide = JSON.parse(globalRideStr) as RideRequest;
-          if (globalRide.status === 'requested') {
-            setIncomingRequest(globalRide);
-          } else {
-            setIncomingRequest(null);
-          }
-        } catch (e) {
-          setIncomingRequest(null);
-        }
-      } else {
-        setIncomingRequest(null);
-      }
-    };
+  // Helper to send a notification directly to the student's Firestore notifications subcollection
+  const sendStudentNotification = async (title: string, message: string, type: 'info' | 'success' | 'receipt' | 'alert') => {
+    if (!activeRide || !activeRide.passengerId) return;
+    try {
+      const studentNotifId = `notif-${Date.now()}`;
+      const studentNotif: AppNotification = {
+        id: studentNotifId,
+        title,
+        message,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: 'Today',
+        isRead: false,
+        type
+      };
+      await setDoc(doc(db, 'users', activeRide.passengerId, 'notifications', studentNotifId), studentNotif);
+    } catch (e) {
+      console.error("Error writing notification to passenger", e);
+    }
+  };
 
-    // Initial sync
-    handleStorageChange();
-
-    window.addEventListener('storage', handleStorageChange);
-    // 1-second interval fallback polling for robust UI sync
-    const interval = setInterval(handleStorageChange, 1000);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, []);
-
-  // Monitor active trip cancellation from the student in real-time
+  // Synchronize incoming ride request from students across devices in real-time via Firestore
   useEffect(() => {
-    if (!activeRide) return;
+    if (!shiftOnline || activeRide) {
+      setIncomingRequest(null);
+      return;
+    }
 
-    const checkCancellation = () => {
-      const globalRideStr = localStorage.getItem('campusride_global_active_ride');
-      if (!globalRideStr) {
-        // The student has cancelled the active ride!
-        onUpdateRide(null);
-        onUpdateDriverProfile({ status: 'Idle' });
-        onAddNotification({
-          id: `driver-notif-${Date.now()}`,
-          title: 'Ride Cancelled',
-          message: `The active trip has been cancelled by the student.`,
-          date: 'Today',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          isRead: false,
-          type: 'warning'
-        });
-        alert("The active trip has been cancelled by the student.");
-      }
-    };
+    const q = query(
+      collection(db, 'rideRequests'),
+      where('status', '==', 'requested')
+    );
 
-    window.addEventListener('storage', checkCancellation);
-    const interval = setInterval(checkCancellation, 1500);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let foundRequest: RideRequest | null = null;
+      snapshot.forEach((doc) => {
+        const r = doc.data() as RideRequest;
+        if (!r.driverId && r.status === 'requested' && !declinedRideIds.has(r.id)) {
+          foundRequest = r;
+        }
+      });
+      setIncomingRequest(foundRequest);
+    }, (error) => {
+      console.error("Firestore error listening to incoming requested rides", error);
+    });
 
     return () => {
-      window.removeEventListener('storage', checkCancellation);
-      clearInterval(interval);
+      unsubscribe();
     };
-  }, [activeRide?.id, onUpdateRide, onUpdateDriverProfile, onAddNotification]);
+  }, [shiftOnline, activeRide, declinedRideIds]);
+
+  // Monitor active trip cancellation or status changes from Firestore in real-time
+  const prevActiveRideIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeRide) {
+      prevActiveRideIdRef.current = activeRide.id;
+    } else if (prevActiveRideIdRef.current) {
+      // Transitioned from active ride to no active ride!
+      // This means the trip was completed or cancelled by the student
+      prevActiveRideIdRef.current = null;
+      onUpdateDriverProfile({ status: 'Idle' });
+    }
+  }, [activeRide, onUpdateDriverProfile]);
 
   // Toggle shift Online / Offline
   const handleToggleShift = () => {
@@ -393,21 +400,25 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   };
 
   // Accept student incoming ride request
-  const handleAcceptRide = () => {
+  const handleAcceptRide = async () => {
     if (activeRide) {
       alert("You are not allowed to accept more than one ride at once. Each driver must complete their active ride before accepting another.");
       return;
     }
 
-    // Validate if the ride is still active in global storage before accepting
-    const globalRideStr = localStorage.getItem('campusride_global_active_ride');
-    if (!globalRideStr) {
-      alert("This ride request has already been cancelled or deleted by the student.");
-      setIncomingRequest(null);
-      return;
-    }
-
     if (!incomingRequest) return;
+
+    // Validate if the ride is still active in Firestore before accepting
+    try {
+      const docSnap = await getDoc(doc(db, 'rideRequests', incomingRequest.id));
+      if (!docSnap.exists() || docSnap.data().status !== 'requested') {
+        alert("This ride request has already been cancelled or accepted by another driver.");
+        setIncomingRequest(null);
+        return;
+      }
+    } catch (e) {
+      console.error("Error validating ride request status:", e);
+    }
     
     const acceptedRide: RideRequest = {
       ...incomingRequest,
@@ -424,6 +435,25 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     onUpdateDriverProfile({ status: 'On Trip' });
     setIncomingRequest(null);
 
+    // Write a real-time notification to the student's notifications subcollection in Firestore
+    if (acceptedRide.passengerId) {
+      try {
+        const studentNotifId = `notif-${Date.now()}`;
+        const studentNotif: AppNotification = {
+          id: studentNotifId,
+          title: 'Driver Matched!',
+          message: `Your campus ride request has been accepted by ${driverProfile.name} in their ${driverProfile.vehicle}. They are arriving in 4 minutes!`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: 'Today',
+          isRead: false,
+          type: 'success'
+        };
+        await setDoc(doc(db, 'users', acceptedRide.passengerId, 'notifications', studentNotifId), studentNotif);
+      } catch (e) {
+        console.error("Error writing match notification to passenger", e);
+      }
+    }
+
     onAddNotification({
       id: `driver-notif-${Date.now()}`,
       title: 'Ride Request Accepted',
@@ -437,27 +467,20 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 
   // Decline invitation
   const handleDeclineRide = () => {
+    if (incomingRequest) {
+      setDeclinedRideIds(prev => {
+        const next = new Set(prev);
+        next.add(incomingRequest.id);
+        return next;
+      });
+    }
     setIncomingRequest(null);
     alert('Ride request has been declined. Returning to pool.');
   };
 
   // Refresh incoming matching invitations
   const refreshPassengerMatches = () => {
-    const globalRideStr = localStorage.getItem('campusride_global_active_ride');
-    if (globalRideStr) {
-      try {
-        const globalRide = JSON.parse(globalRideStr) as RideRequest;
-        if (globalRide.status === 'requested') {
-          setIncomingRequest(globalRide);
-          alert(`Fetched active student request from ${globalRide.passengerName}!`);
-          return;
-        }
-      } catch (e) {
-        console.error("Error parsing global ride request", e);
-      }
-    }
-    setIncomingRequest(null);
-    alert("No active ride requests currently forming on campus.");
+    alert("Real-time automated matching is active. New campus ride requests will show up instantly!");
   };
 
   // Driver Trip Controls
@@ -472,6 +495,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
         status: 'arriving',
         etaMinutes: 1,
       });
+      sendStudentNotification(
+        'Driver Arrived!',
+        `Your driver ${driverProfile.name} has arrived at ${activeRide.pickup} in their ${driverProfile.vehicle}. Please proceed to the boarding stop.`,
+        'info'
+      );
       onAddNotification({
         id: `driver-notif-${Date.now()}`,
         title: 'Arrived at Pickup Stop',
@@ -491,6 +519,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
         status: 'in_transit',
         etaMinutes: 5,
       });
+      sendStudentNotification(
+        'Ride in Transit',
+        `Your ride to ${activeRide.dropoff} is now active and in transit. Have a safe trip!`,
+        'info'
+      );
       onAddNotification({
         id: `driver-notif-${Date.now()}`,
         title: 'Ride Started',
@@ -521,6 +554,12 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       };
 
       onAddTransaction(newTxn);
+
+      sendStudentNotification(
+        'Ride Completed!',
+        `Thank you for riding with CampusRide! Your trip from ${activeRide.pickup} to ${activeRide.dropoff} has been successfully completed.`,
+        'success'
+      );
 
       onAddNotification({
         id: `driver-notif-${Date.now()}`,
@@ -951,6 +990,96 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   )}
                 </div>
               )}
+
+              {/* DRIVER EARNINGS & PAST TRIPS SECTION */}
+              <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-[#BE5912] flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-orange-600" />
+                      Earnings Ledger & Past Travels
+                    </h3>
+                    <p className="text-xs text-gray-400">Review your past successfully completed rides and total shift earnings.</p>
+                  </div>
+                  <div className="mt-2 sm:mt-0 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold font-mono">
+                    Lifetime Earnings: ₦{(driverPastRides.reduce((acc, curr) => acc + (curr.cost || 0), 0) + driverProfile.todayEarnings).toLocaleString()}
+                  </div>
+                </div>
+
+                {/* Analytical Graph (Bento styling) */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                  <div className="md:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white flex flex-col justify-between shadow-xs">
+                    <div>
+                      <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Active Metrics</span>
+                      <h4 className="text-sm font-bold mt-1">Earning Insights</h4>
+                    </div>
+                    
+                    <div className="my-4 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Completed Shifts:</span>
+                        <span className="font-extrabold text-orange-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Average Fare per Ride:</span>
+                        <span className="font-extrabold text-teal-400 font-mono">
+                          ₦{driverPastRides.filter(r => r.status === 'completed').length > 0 
+                            ? Math.round(driverPastRides.filter(r => r.status === 'completed').reduce((acc, curr) => acc + (curr.cost || 0), 0) / driverPastRides.filter(r => r.status === 'completed').length) 
+                            : 0}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Shift Status:</span>
+                        <span className={`font-black uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full ${shiftOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                          {shiftOnline ? 'ONLINE' : 'OFFLINE'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right border-t border-white/10 pt-3">
+                      <span className="text-[10px] text-gray-400 block font-mono">TODAY'S LEDGER</span>
+                      <span className="text-xl font-black text-emerald-400 font-mono">₦{driverProfile.todayEarnings}</span>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-7 space-y-3">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono block text-left">Past Rides Completed</span>
+                    
+                    <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1">
+                      {driverPastRides.filter(r => r.status === 'completed').length === 0 ? (
+                        <div className="text-center p-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-gray-400 text-xs">
+                          No completed trips found in your account history.
+                        </div>
+                      ) : (
+                        driverPastRides.filter(r => r.status === 'completed').map((ride, idx) => (
+                          <div key={ride.id || idx} className="flex items-center justify-between p-3.5 bg-gray-50 hover:bg-gray-100/70 border border-gray-150 rounded-2xl transition-colors">
+                            <div className="flex items-start gap-3 text-left">
+                              <div className="w-8 h-8 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center font-bold text-xs shrink-0">
+                                <Car className="w-4 h-4" />
+                              </div>
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-bold text-gray-800">{ride.passengerName}</span>
+                                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-extrabold uppercase font-mono">Completed</span>
+                                </div>
+                                <span className="text-[10px] text-gray-500 truncate block">
+                                  {ride.pickup} → {ride.dropoff}
+                                </span>
+                                <span className="text-[9px] text-gray-400 font-mono block">
+                                  {ride.date || 'Today'} • {ride.time}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-xs font-black text-[#BE5912] block font-mono">+₦{ride.cost}</span>
+                              <span className="text-[8px] text-gray-400 font-bold uppercase font-mono">{ride.paymentMethod || 'Wallet'}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -1235,6 +1364,30 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Driver Theme Settings Option */}
+          <div className="pt-6 border-t border-gray-150 space-y-4">
+            <div>
+              <h3 className="text-base font-extrabold text-[#BE5912]">App Styling Preferences</h3>
+              <p className="text-xs text-gray-400">Configure layout features and application display options.</p>
+            </div>
+
+            <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+              <div>
+                <span className="text-xs font-bold block text-slate-800">Dark Mode Night-Theme</span>
+                <span className="text-[10px] text-gray-400 block">Switch the application layout to high-contrast dark eye-safe design</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={isDarkMode} 
+                  onChange={onToggleDarkMode} 
+                  className="sr-only peer" 
+                />
+                <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#BE5912]"></div>
+              </label>
+            </div>
           </div>
 
           <div className="pt-4 border-t border-gray-150 flex items-center justify-between">

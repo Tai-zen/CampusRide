@@ -29,7 +29,9 @@ service cloud.firestore {
     }
 
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'none';
     }
 
     function isDriver() {
@@ -45,7 +47,35 @@ service cloud.firestore {
       return data.id is string && data.id.size() <= 128 &&
              data.name is string && data.name.size() <= 100 &&
              data.email is string && data.email.size() <= 100 &&
-             data.role is string && (data.role == 'student' || data.role == 'driver' || data.role == 'admin');
+             data.role is string && (data.role == 'student' || data.role == 'driver' || data.role == 'admin') &&
+             (!('major' in data) || (data.major is string && data.major.size() <= 100)) &&
+             (!('idNumber' in data) || (data.idNumber is string && data.idNumber.size() <= 50)) &&
+             (!('enrolledTerm' in data) || (data.enrolledTerm is string && data.enrolledTerm.size() <= 100)) &&
+             (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 1000)) &&
+             (!('vehicle' in data) || (data.vehicle is string && data.vehicle.size() <= 200)) &&
+             (!('status' in data) || (data.status is string && (data.status == 'On Trip' || data.status == 'Idle' || data.status == 'Break' || data.status == 'Offline'))) &&
+             (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 100)) &&
+             (!('bankAccountNumber' in data) || (data.bankAccountNumber is string && data.bankAccountNumber.size() <= 20)) &&
+             (!('bankAccountName' in data) || (data.bankAccountName is string && data.bankAccountName.size() <= 100)) &&
+             (!('walletBalance' in data) || (data.walletBalance is number)) &&
+             (!('tripsThisWeek' in data) || (data.tripsThisWeek is number)) &&
+             (!('carpoolRides' in data) || (data.carpoolRides is number)) &&
+             (!('savedThisMonth' in data) || (data.savedThisMonth is number)) &&
+             (!('rating' in data) || (data.rating is number)) &&
+             (!('ratingsCount' in data) || (data.ratingsCount is number)) &&
+             (!('todayEarnings' in data) || (data.todayEarnings is number)) &&
+             (!('completedTripsCount' in data) || (data.completedTripsCount is number)) &&
+             (!('hoursOnline' in data) || (data.hoursOnline is number)) &&
+             (!('isVerified' in data) || (data.isVerified is bool)) &&
+             (!('isApproved' in data) || (data.isApproved is bool)) &&
+             (!('carBrand' in data) || (data.carBrand is string && data.carBrand.size() <= 100)) &&
+             (!('plateNumber' in data) || (data.plateNumber is string && data.plateNumber.size() <= 30)) &&
+             (!('carType' in data) || (data.carType is string && (data.carType == 'car' || data.carType == 'keke' || data.carType == 'shuttle'))) &&
+             (!('vehicleId' in data) || (data.vehicleId is string && data.vehicleId.size() <= 100)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100)) &&
+             (!('adminComments' in data) || (data.adminComments is string && data.adminComments.size() <= 500) || data.adminComments == null) &&
+             (!('declined' in data) || (data.declined is bool)) &&
+             (!('declineReason' in data) || (data.declineReason is string && data.declineReason.size() <= 500));
     }
 
     function isValidTransaction(data) {
@@ -61,7 +91,9 @@ service cloud.firestore {
              data.title is string && data.title.size() <= 100 &&
              data.message is string && data.message.size() <= 500 &&
              data.isRead is bool &&
-             data.type is string && (data.type == 'info' || data.type == 'success' || data.type == 'receipt' || data.type == 'alert');
+             data.type is string && (data.type == 'info' || data.type == 'success' || data.type == 'receipt' || data.type == 'alert') &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
+             (!('time' in data) || (data.time is string && data.time.size() <= 50));
     }
 
     function isValidRideRequest(data) {
@@ -70,28 +102,63 @@ service cloud.firestore {
              data.pickup is string && data.pickup.size() <= 200 &&
              data.dropoff is string && data.dropoff.size() <= 200 &&
              data.status is string && (data.status == 'requested' || data.status == 'accepted' || data.status == 'arriving' || data.status == 'in_transit' || data.status == 'completed' || data.status == 'canceled') &&
-             data.cost is number;
+             data.cost is number &&
+             (!('passengerName' in data) || (data.passengerName is string && data.passengerName.size() <= 100)) &&
+             (!('passengerAvatar' in data) || (data.passengerAvatar is string && data.passengerAvatar.size() <= 1000)) &&
+             (!('passengerRating' in data) || (data.passengerRating is number)) &&
+             (!('passengerType' in data) || (data.passengerType is string && (data.passengerType == 'Student' || data.passengerType == 'Staff' || data.passengerType == 'Faculty'))) &&
+             (!('vehicleType' in data) || (data.vehicleType is string && (data.vehicleType == 'Car' || data.vehicleType == 'Keke' || data.vehicleType == 'Shuttle'))) &&
+             (!('verifyPeer' in data) || (data.verifyPeer is bool)) &&
+             (!('driverId' in data) || (data.driverId is string && data.driverId.size() <= 128)) &&
+             (!('driverName' in data) || (data.driverName is string && data.driverName.size() <= 100)) &&
+             (!('driverAvatar' in data) || (data.driverAvatar is string && data.driverAvatar.size() <= 1000)) &&
+             (!('driverVehicle' in data) || (data.driverVehicle is string && data.driverVehicle.size() <= 200)) &&
+             (!('driverRating' in data) || (data.driverRating is number)) &&
+             (!('etaMinutes' in data) || (data.etaMinutes is number)) &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
+             (!('time' in data) || (data.time is string && data.time.size() <= 50)) &&
+             (!('createdAt' in data) || (data.createdAt is number)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && (data.paymentMethod == 'cash' || data.paymentMethod == 'transfer'))) &&
+             (!('paymentConfirmedByRider' in data) || (data.paymentConfirmedByRider is bool)) &&
+             (!('paymentValidatedByDriver' in data) || (data.paymentValidatedByDriver is bool)) &&
+             (!('riderPaid' in data) || (data.riderPaid is bool));
     }
 
     function isValidPendingDriver(data) {
       return data.id is string && data.id.size() <= 128 &&
              data.name is string && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 100;
+             data.email is string && data.email.size() <= 100 &&
+             (!('carBrand' in data) || (data.carBrand is string && data.carBrand.size() <= 100)) &&
+             (!('carType' in data) || (data.carType is string && (data.carType == 'car' || data.carType == 'keke' || data.carType == 'shuttle'))) &&
+             (!('plateNumber' in data) || (data.plateNumber is string && data.plateNumber.size() <= 30)) &&
+             (!('vehicleId' in data) || (data.vehicleId is string && data.vehicleId.size() <= 100)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100));
+    }
+
+    function isValidSentEmail(data) {
+      return data.to is string && data.to.size() <= 100 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.subject is string && data.subject.size() <= 200 &&
+             data.type is string && (data.type == 'approve' || data.type == 'decline') &&
+             data.dateSent is string && data.dateSent.size() <= 100 &&
+             (!('comments' in data) || (data.comments is string && data.comments.size() <= 500) || data.comments == null) &&
+             (!('vehicle' in data) || (data.vehicle is string && data.vehicle.size() <= 250)) &&
+             (!('password' in data) || (data.password is string && data.password.size() <= 50));
     }
 
     // Match blocks
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow create: if (isOwner(userId) || isAdmin()) && isValidUserProfile(incoming());
       allow update: if (
         (isOwner(userId) && isValidUserProfile(incoming()) && (
           incoming().role == existing().role &&
           incoming().email == existing().email &&
-          incoming().idNumber == existing().idNumber &&
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'walletBalance', 'tripsThisWeek', 'carpoolRides', 'savedThisMonth',
-            'vehicle', 'rating', 'ratingsCount', 'todayEarnings', 'completedTripsCount',
-            'hoursOnline', 'status', 'avatar'
+            'name', 'major', 'avatar', 'vehicle', 'walletBalance', 'tripsThisWeek',
+            'carpoolRides', 'savedThisMonth', 'rating', 'ratingsCount',
+            'todayEarnings', 'completedTripsCount', 'hoursOnline', 'status',
+            'bankName', 'bankAccountNumber', 'bankAccountName'
           ])
         )) || isAdmin()
       );
@@ -106,7 +173,7 @@ service cloud.firestore {
 
       match /notifications/{notificationId} {
         allow read: if isOwner(userId) || isAdmin();
-        allow create: if (isOwner(userId) || isAdmin()) && isValidNotification(incoming());
+        allow create: if (isOwner(userId) || isDriver() || isAdmin() || isSignedIn()) && isValidNotification(incoming());
         allow update: if isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
         allow delete: if isOwner(userId) || isAdmin();
       }
@@ -137,6 +204,18 @@ service cloud.firestore {
       allow create: if isOwner(driverId) && isValidPendingDriver(incoming());
       allow update: if isAdmin() && isValidPendingDriver(incoming());
       allow delete: if isAdmin();
+    }
+
+    match /sent_emails/{emailId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isValidSentEmail(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /complaints/{complaintId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && incoming().passengerId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
   }
 }

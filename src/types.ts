@@ -19,6 +19,7 @@ export interface UserProfile {
 export interface DriverState {
   id: string;
   name: string;
+  email?: string;
   vehicle: string;
   rating: number;
   ratingsCount: number;

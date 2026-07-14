@@ -29,3 +29,229 @@
 .animate-dash {
   animation: dash 10s linear infinite;
 }
+
+/* Smooth scrolling globally */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom compact scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Dark mode scrollbars */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ==========================================================================
+   HIGH FIDELITY GLOBAL DARK MODE STYLING OVERRIDES (HCI COMPLIANT)
+   ========================================================================== */
+.dark {
+  color-scheme: dark;
+}
+
+/* 
+   1. LEVEL 0: Outer Layout Base Canvas 
+   Gorgeous deep slate-blue/navy base that conforms with professional dark mode designs.
+*/
+.dark #application-layout-context,
+.dark #student-portal-viewport,
+.dark #driver-portal-viewport,
+.dark #admin-portal-viewport {
+  background-color: #0F172A !important; /* Deep dark slate-blue (Slate-900) */
+  color: #E2E8F0 !important;
+}
+
+/* 
+   2. LEVEL 1: Primary Elevated Surfaces
+   Cards, Sidebars, Bottom Bars, and Modal contents.
+*/
+.dark #side-rail-navigation,
+.dark #mobile-navigation-bar,
+.dark #mobile-bottom-navbar,
+.dark .bg-white {
+  background-color: #1E293B !important; /* Elegant navy-slate (Slate-800) */
+  border-color: #334155 !important; /* Slate-700 border */
+}
+
+/* Sidebar navigation buttons active state */
+.dark #side-rail-navigation button.bg-slate-50,
+.dark #side-rail-navigation button.text-slate-900,
+.dark #side-rail-navigation .bg-[#00875A]\/10 {
+  background-color: #334155 !important; /* Slate-700 */
+  color: #F8FAFC !important;
+}
+
+/* 
+   3. LEVEL 2: Soft Inner Lists and Card Panels
+   Nested structures, status banners, input groups. Beautifully elevated from Slate-800.
+*/
+.dark .bg-slate-50,
+.dark .bg-gray-50,
+.dark .bg-[#F9FAFB],
+.dark .bg-slate-50\/50,
+.dark .bg-gray-50\/50,
+.dark .bg-slate-100,
+.dark .bg-gray-100,
+.dark .bg-amber-500\/5,
+.dark .bg-orange-50\/50,
+.dark .bg-amber-50 {
+  background-color: #243248 !important; /* Comfortably lighter Slate-750 */
+  color: #CBD5E1 !important;
+  border-color: #334155 !important;
+}
+
+/* 
+   4. BORDERS: Clean Structural Separation
+*/
+.dark .border-slate-200,
+.dark .border-gray-200,
+.dark .border-gray-150,
+.dark .border-slate-150,
+.dark .border-gray-100,
+.dark .border-slate-100,
+.dark .border-slate-300,
+.dark .border-gray-300 {
+  border-color: #334155 !important;
+}
+
+/* 
+   5. TYPOGRAPHY: Strict HCI Contrast Hierarchies 
+*/
+/* Primary Headers (Highly crisp, comfortable display text) */
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6,
+.dark .text-slate-900,
+.dark .text-gray-900,
+.dark .text-slate-800,
+.dark .text-gray-800 {
+  color: #F8FAFC !important; /* Slate 50 */
+}
+
+/* Secondary Copy (Muted body text to minimize glare) */
+.dark .text-slate-700,
+.dark .text-gray-700,
+.dark .text-slate-600,
+.dark .text-gray-600,
+.dark span.text-white {
+  color: #CBD5E1 !important; /* Slate 300 */
+}
+
+/* Muted Footnotes and Captions (Ensures clean secondary reading) */
+.dark .text-slate-500,
+.dark .text-gray-500,
+.dark .text-slate-400,
+.dark .text-gray-400 {
+  color: #94A3B8 !important; /* Slate 400 */
+}
+
+/* 
+   6. INTERACTIVE ELEMENTS: Inputs, Selection Lists, and Forms
+*/
+.dark input[type="text"],
+.dark input[type="number"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="search"],
+.dark select,
+.dark textarea {
+  background-color: #0F172A !important; /* Recessed Slate-900 for high-contrast form elements */
+  color: #F8FAFC !important;
+  border-color: #334155 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748B !important; /* Slate 500 */
+}
+
+/* Dropdown selections and options context */
+.dark select option {
+  background-color: #121824 !important;
+  color: #F8FAFC !important;
+}
+
+/* Intercept light-mode hover events to prevent white flashes */
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-100:hover,
+.dark .hover\:bg-slate-150:hover {
+  background-color: #1E293B !important;
+}
+
+/* 
+   7. BRAND ACCENTS: Contrast Optimized & Eyesafe Colorways
+*/
+/* Green Accents (Student/Commuter Scope) */
+.dark .text-[#00875A] {
+  color: #34D399 !important; /* Bright soft Emerald-400 for text readability */
+}
+.dark .bg-[#00875A] {
+  background-color: #10B981 !important; /* Vivid Emerald-500 for solid buttons */
+  color: #0B0F19 !important; /* High contrast dark text on green button */
+}
+.dark .bg-[#00875A] .text-white,
+.dark .bg-[#00875A] span {
+  color: #0B0F19 !important;
+}
+.dark .border-[#00875A] {
+  border-color: #10B981 !important;
+}
+
+/* Orange Accents (Driver Scope) */
+.dark .text-[#BE5912] {
+  color: #FB923C !important; /* Soft sunset Orange-400 for text readability */
+}
+.dark .bg-[#BE5912] {
+  background-color: #F97316 !important; /* Vivid Orange-500 for solid buttons */
+  color: #0B0F19 !important; /* High contrast dark text on orange button */
+}
+.dark .bg-[#BE5912] .text-white,
+.dark .bg-[#BE5912] span {
+  color: #0B0F19 !important;
+}
+.dark .border-[#BE5912] {
+  border-color: #F97316 !important;
+}
+
+/* 
+   8. INTERACTIVE CANVAS / MAPS FILTERS
+   Soften the map colors in dark mode to fit the overall ambient workspace.
+*/
+.dark #campus-interactive-canvas,
+.dark .map-container-overlay {
+  filter: invert(0.9) hue-rotate(180deg) contrast(1.1) brightness(0.9);
+  opacity: 0.85;
+}
+
+/* Modals overlays color saturation increase */
+.dark .bg-black\/70 {
+  background-color: rgba(9, 13, 22, 0.85) !important;
+}
+
