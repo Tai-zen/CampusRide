@@ -86,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } else if (currentRole === 'driver') {
       return [
         { id: 'driver_dashboard', label: 'Shift Dashboard', icon: Gauge, badge: null },
+        { id: 'driver_earnings', label: 'Shift Earnings Ledger', icon: TrendingUp, badge: null },
         { id: 'driver_scheduled', label: 'Scheduled Rides', icon: Calendar, badge: null },
         { id: 'driver_settings', label: 'Driver Settings', icon: Settings, badge: null },
       ];
@@ -111,6 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'profile': return 'Profile';
       case 'settings': return 'Settings';
       case 'driver_dashboard': return 'Dashboard';
+      case 'driver_earnings': return 'Earnings';
       case 'driver_scheduled': return 'Scheduled';
       case 'driver_settings': return 'Settings';
       case 'admin_operations': return 'Ops';

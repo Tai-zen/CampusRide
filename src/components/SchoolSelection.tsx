@@ -28,7 +28,7 @@ export const UNIVERSITIES: School[] = [
     accentColor: '#00875A', // Emerald green
     brandColor: 'emerald',
     logoText: 'RUN',
-    logoImage: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
+    logoImage: 'https://upload.wikimedia.org/wikipedia/en/c/cc/Redeemer%27s_University_logo.png',
     bannerImage: 'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?auto=format&fit=crop&w=600&q=80',
     center: { lat: 7.4082, lng: 4.4290 },
     zoom: 15,

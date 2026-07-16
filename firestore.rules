@@ -96,6 +96,22 @@ service cloud.firestore {
              (!('time' in data) || (data.time is string && data.time.size() <= 50));
     }
 
+    function isValidReview(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.passengerName is string && data.passengerName.size() <= 100 &&
+             data.rating is number &&
+             data.comment is string && data.comment.size() <= 500 &&
+             (!('passengerAvatar' in data) || (data.passengerAvatar is string && data.passengerAvatar.size() <= 1000)) &&
+             (!('time' in data) || (data.time is string && data.time.size() <= 50)) &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
+             (!('createdAt' in data) || (data.createdAt is number));
+    }
+
+    function isValidSchool(data) {
+      return data.logoImage is string && data.logoImage.size() <= 1000 &&
+             (!('updatedAt' in data) || (data.updatedAt is number));
+    }
+
     function isValidRideRequest(data) {
       return data.id is string && data.id.size() <= 128 &&
              data.passengerId is string && data.passengerId.size() <= 128 &&
@@ -177,6 +193,12 @@ service cloud.firestore {
         allow update: if isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
         allow delete: if isOwner(userId) || isAdmin();
       }
+
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isValidReview(incoming());
+        allow update, delete: if isAdmin();
+      }
     }
 
     match /rideRequests/{rideId} {
@@ -216,6 +238,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && incoming().passengerId == request.auth.uid;
       allow update, delete: if isAdmin();
+    }
+
+    match /schools/{schoolId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidSchool(incoming());
+      allow delete: if isAdmin();
     }
   }
 }

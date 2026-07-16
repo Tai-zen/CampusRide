@@ -57,6 +57,26 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   
   // Local state for simulated drivers
   const [drivers, setDrivers] = useState<SimulatedDriver[]>([]);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapMode, setMapMode] = useState<'google' | 'schematic'>(hasValidKey ? 'google' : 'schematic');
+
+  // Capture Google Maps auth and billing errors reactively
+  useEffect(() => {
+    const originalAuthFailure = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn("Google Maps Auth/Billing Failure detected. Falling back to high-fidelity schematic map.");
+      setMapError("BillingNotEnabledMapError");
+      setMapMode("schematic");
+      if (originalAuthFailure) {
+        try {
+          originalAuthFailure();
+        } catch (e) {}
+      }
+    };
+    return () => {
+      (window as any).gm_authFailure = originalAuthFailure;
+    };
+  }, []);
   
   // Selected stops coordinates
   const pickupStop = stops.find((s) => s.id === pickupId);
@@ -258,11 +278,42 @@ export const CampusMap: React.FC<CampusMapProps> = ({
             <span className="text-[10px] text-gray-500 font-mono block">GPS Feed: {selectedSchool.name} Campus Network</span>
           </div>
         </div>
+
+        {/* Map Mode Switcher */}
+        {hasValidKey && (
+          <div className="flex bg-slate-200/80 p-0.5 rounded-xl border border-slate-200">
+            <button
+              onClick={() => {
+                if (mapError) return;
+                setMapMode('google');
+              }}
+              disabled={!!mapError}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                mapMode === 'google' && !mapError
+                  ? 'bg-white text-slate-800 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 disabled:opacity-40 disabled:cursor-not-allowed'
+              }`}
+              title={mapError ? "Google Maps disabled due to API/billing error" : "Switch to Google Satellite Map"}
+            >
+              Satellite
+            </button>
+            <button
+              onClick={() => setMapMode('schematic')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                mapMode === 'schematic' || mapError
+                  ? 'bg-white text-slate-800 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Schematic {mapError && "⚠️"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Map Stage */}
       <div className="relative w-full h-[320px] md:h-[400px] bg-slate-100 flex items-center justify-center overflow-hidden">
-        {hasValidKey ? (
+        {hasValidKey && mapMode === 'google' && !mapError ? (
           /* GOOGLE MAPS COMPONENT (Only renders if key is authentic starting with AIzaSy) */
           <APIProvider apiKey={API_KEY} version="weekly">
             <Map
@@ -464,16 +515,28 @@ export const CampusMap: React.FC<CampusMapProps> = ({
               );
             })}
 
-            {/* Instruction Banner if Key is Missing */}
-            <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 text-white p-3.5 rounded-2xl border border-slate-700/50 flex items-start space-x-3 shadow-xl backdrop-blur-xs z-30 animate-fadeIn pointer-events-none">
-              <Info className="w-5 h-5 text-[#BE5912] shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="text-[11px] font-black uppercase tracking-wider text-[#BE5912] block">Interactive Map Feed Loaded</span>
-                <p className="text-[10px] text-gray-300 leading-normal">
-                  To connect with real satellite view & detailed paths, enter your <code>GOOGLE_MAPS_PLATFORM_KEY</code> in <strong>Settings</strong> (⚙️ top-right) → <strong>Secrets</strong>.
-                </p>
+            {/* Instruction Banner if Key is Missing or has Error */}
+            {mapError ? (
+              <div className="absolute bottom-4 left-4 right-4 bg-amber-950/95 text-white p-3.5 rounded-2xl border border-amber-500/30 flex items-start space-x-3 shadow-xl backdrop-blur-xs z-30 animate-fadeIn">
+                <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 block">Google Maps Billing Required</span>
+                  <p className="text-[10px] text-gray-200 leading-normal">
+                    The provided Google Maps key lacks enabled billing (<code>BillingNotEnabledMapError</code>). We have seamlessly switched you to our high-fidelity schematic campus map!
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 text-white p-3.5 rounded-2xl border border-slate-700/50 flex items-start space-x-3 shadow-xl backdrop-blur-xs z-30 animate-fadeIn pointer-events-none">
+                <Info className="w-5 h-5 text-[#BE5912] shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-[#BE5912] block">Interactive Map Feed Loaded</span>
+                  <p className="text-[10px] text-gray-300 leading-normal">
+                    To connect with real satellite view & detailed paths, enter your <code>GOOGLE_MAPS_PLATFORM_KEY</code> in <strong>Settings</strong> (⚙️ top-right) → <strong>Secrets</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

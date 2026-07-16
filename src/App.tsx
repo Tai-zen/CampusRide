@@ -52,8 +52,8 @@ const showNativeNotification = async (title: string, body: string) => {
         if (reg) {
           reg.showNotification(title, {
             body,
-            icon: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
-            badge: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
+            icon: 'https://upload.wikimedia.org/wikipedia/en/c/cc/Redeemer%27s_University_logo.png',
+            badge: 'https://upload.wikimedia.org/wikipedia/en/c/cc/Redeemer%27s_University_logo.png',
             vibrate: [200, 100, 200],
             tag: 'campusride-update',
             renotify: true
@@ -241,6 +241,34 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // 0. Real-time synchronization of schools custom configuration (e.g. logos)
+  const [customLogos, setCustomLogos] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const unsubSchools = onSnapshot(collection(db, 'schools'), (snapshot) => {
+      const logos: Record<string, string> = {};
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.logoImage) {
+          logos[docSnap.id] = data.logoImage;
+        }
+      });
+      setCustomLogos(logos);
+    }, (error) => {
+      console.warn("Firestore schools metadata listener error", error);
+    });
+    return () => unsubSchools();
+  }, []);
+
+  useEffect(() => {
+    Object.keys(customLogos).forEach(schoolId => {
+      const school = UNIVERSITIES.find(u => u.id === schoolId);
+      if (school) {
+        school.logoImage = customLogos[schoolId];
+      }
+    });
+  }, [customLogos]);
+
   // Real-time synchronization of Firestore collections under current logged-in user
   useEffect(() => {
     const uid = currentUser?.uid;
@@ -301,12 +329,20 @@ export default function App() {
       const q = query(collection(db, 'rideRequests'), where('passengerId', '==', uid));
       unsubRide = onSnapshot(q, (snapshot) => {
         let active: RideRequest | null = null;
+        let latestRide: RideRequest | null = null;
         snapshot.forEach(doc => {
           const r = doc.data() as RideRequest;
-          if (r.status !== 'completed' && r.status !== 'canceled') {
-            active = r;
+          if (!latestRide || (r.createdAt || 0) > (latestRide.createdAt || 0)) {
+            latestRide = r;
           }
         });
+        if (latestRide) {
+          if (latestRide.status !== 'canceled') {
+            if (latestRide.status !== 'completed' || !latestRide.passengerRated) {
+              active = latestRide;
+            }
+          }
+        }
         setActiveRide(active);
       }, (error) => {
         console.error("Firestore error reading student active ride", error);
@@ -319,6 +355,8 @@ export default function App() {
         snapshot.forEach(doc => {
           const r = doc.data() as RideRequest;
           if (r.status !== 'completed' && r.status !== 'canceled') {
+            active = r;
+          } else if (r.status === 'completed' && !r.driverConcluded) {
             active = r;
           } else {
             past.push(r);

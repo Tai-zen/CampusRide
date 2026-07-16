@@ -57,6 +57,10 @@ export interface RideRequest {
   paymentMethod?: 'cash' | 'transfer';
   paymentConfirmedByRider?: boolean;
   paymentValidatedByDriver?: boolean;
+  riderPaid?: boolean;
+  passengerRated?: boolean;
+  driverConcluded?: boolean;
+  driverCredited?: boolean;
 }
 
 export type TransactionType = 'charge' | 'reload';

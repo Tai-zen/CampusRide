@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DriverState, RideRequest, AppNotification, Transaction } from '../types';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, getDoc } from 'firebase/firestore';
+import { isSupabaseConfigured, uploadFile, uploadLogoFromUrl } from '../lib/supabase';
 import { 
   Car, 
   Clock, 
@@ -29,7 +30,11 @@ import {
   Send,
   Check,
   Copy,
-  ArrowRightLeft
+  ArrowRightLeft,
+  UploadCloud,
+  Server,
+  AlertCircle,
+  ImageIcon
 } from 'lucide-react';
 import { CAMPUS_STOPS } from '../data';
 import { UNIVERSITIES } from './SchoolSelection';
@@ -77,6 +82,117 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   const [simTransitLoading, setSimTransitLoading] = useState<boolean>(false);
   const [scheduledRides, setScheduledRides] = useState<any[]>([]);
   const [liveDistance, setLiveDistance] = useState<number>(0);
+  const [reviews, setReviews] = useState<any[]>([]);
+
+  // Supabase Media & Logo Upload states for Drivers
+  const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
+  const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
+  const [supabaseSuccess, setSupabaseSuccess] = useState<string | null>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    setSupabaseError(null);
+    setSupabaseSuccess(null);
+
+    try {
+      const bucketName = 'campus-ride';
+      const filePath = `avatars/driver_${driverProfile.id || Date.now()}_${Date.now()}_${file.name}`;
+      
+      const publicUrl = await uploadFile(bucketName, filePath, file);
+      
+      // Update profile in Firestore
+      await onUpdateDriverProfile({ avatar: publicUrl });
+      
+      setSupabaseSuccess('Driver profile picture uploaded successfully and synchronized with Firestore!');
+    } catch (err: any) {
+      console.error(err);
+      setSupabaseError(err.message || 'An error occurred during file upload.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    setSupabaseError(null);
+    setSupabaseSuccess(null);
+
+    try {
+      const bucketName = 'campus-ride';
+      const filePath = `logos/university_${selectedSchoolId || 'run'}_${Date.now()}_${file.name}`;
+      
+      const publicUrl = await uploadFile(bucketName, filePath, file);
+      
+      // Save/link in Firestore under schools collection
+      if (selectedSchoolId) {
+        await setDoc(doc(db, 'schools', selectedSchoolId), {
+          logoImage: publicUrl,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+      
+      setSupabaseSuccess('University logo uploaded successfully to Supabase Storage and updated in Firestore!');
+    } catch (err: any) {
+      console.error(err);
+      setSupabaseError(err.message || 'An error occurred during logo upload.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleMirrorDefaultLogo = async () => {
+    const selectedSchool = UNIVERSITIES.find(u => u.id === (selectedSchoolId || 'run')) || UNIVERSITIES[0];
+    if (!selectedSchool.logoImage) return;
+    setUploadingLogo(true);
+    setSupabaseError(null);
+    setSupabaseSuccess(null);
+
+    try {
+      const bucketName = 'campus-ride';
+      const publicUrl = await uploadLogoFromUrl(bucketName, selectedSchool.logoImage);
+      
+      // Save in Firestore under schools collection
+      if (selectedSchoolId) {
+        await setDoc(doc(db, 'schools', selectedSchoolId), {
+          logoImage: publicUrl,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+      
+      setSupabaseSuccess('Successfully mirrored and saved the official university logo to Supabase Storage!');
+    } catch (err: any) {
+      console.error(err);
+      setSupabaseError(err.message || 'An error occurred during logo mirroring.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+
+  // Sync reviews from database
+  useEffect(() => {
+    if (!driverProfile?.id) return;
+    const q = query(
+      collection(db, 'users', driverProfile.id, 'reviews')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setReviews(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+    }, (error) => {
+      console.error("Firestore error reading reviews:", error);
+    });
+    return () => unsubscribe();
+  }, [driverProfile?.id]);
 
   // Sync shift online with driver profile status
   useEffect(() => {
@@ -483,6 +599,58 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     alert("Real-time automated matching is active. New campus ride requests will show up instantly!");
   };
 
+  // Helper to credit driver for a completed ride
+  const creditDriverForRide = (ride: RideRequest) => {
+    if (ride.driverCredited) return;
+
+    const fareEarned = ride.cost;
+    onUpdateDriverProfile({
+      todayEarnings: driverProfile.todayEarnings + fareEarned,
+      completedTripsCount: driverProfile.completedTripsCount + 1,
+      hoursOnline: Number((driverProfile.hoursOnline + 0.4).toFixed(1)),
+      status: 'Idle',
+    });
+
+    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const newTxn: Transaction = {
+      id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
+      description: `Earnings: Trip from ${ride.pickup} to ${ride.dropoff}`,
+      amount: fareEarned,
+      date: 'Jun 19, 2026',
+      time: timeString,
+      method: 'Transit Payout',
+      type: 'reload',
+      status: 'Completed',
+    };
+
+    onAddTransaction(newTxn);
+
+    onAddNotification({
+      id: `driver-notif-${Date.now()}`,
+      title: 'Ride Completed & Fare Credited',
+      message: `Successfully completed trip for ${ride.passengerName}. ₦${fareEarned.toFixed(2)} has been credited to your earnings account.`,
+      date: 'Jun 19, 2026',
+      time: timeString,
+      isRead: false,
+      type: 'receipt'
+    });
+  };
+
+  // Automatically credit driver and conclude the ride on the driver's side if the passenger completes it
+  useEffect(() => {
+    if (activeRide && activeRide.status === 'completed' && !activeRide.driverConcluded) {
+      if (!activeRide.driverCredited) {
+        creditDriverForRide(activeRide);
+      }
+      onUpdateRide({
+        ...activeRide,
+        driverConcluded: true,
+        driverCredited: true
+      });
+    }
+  }, [activeRide?.status, activeRide?.driverConcluded, activeRide?.driverCredited]);
+
   // Driver Trip Controls
   const advanceDriverTripStatus = () => {
     if (!activeRide) return;
@@ -535,25 +703,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       });
     } else if (activeRide.status === 'in_transit') {
       // Conclude trip: update driver balance, increment metrics, set to completed
-      const fareEarned = activeRide.cost;
-      onUpdateDriverProfile({
-        todayEarnings: driverProfile.todayEarnings + fareEarned,
-        completedTripsCount: driverProfile.completedTripsCount + 1,
-        status: 'Idle',
-      });
-
-      const newTxn: Transaction = {
-        id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
-        description: `Earnings: Trip from ${activeRide.pickup} to ${activeRide.dropoff}`,
-        amount: fareEarned,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        method: 'Transit Payout',
-        type: 'reload',
-        status: 'Completed',
-      };
-
-      onAddTransaction(newTxn);
+      creditDriverForRide(activeRide);
 
       sendStudentNotification(
         'Ride Completed!',
@@ -561,22 +711,20 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
         'success'
       );
 
-      onAddNotification({
-        id: `driver-notif-${Date.now()}`,
-        title: 'Ride Completed & Fare Credited',
-        message: `Successfully completed trip for ${activeRide.passengerName}. ₦${fareEarned.toFixed(2)} has been credited to your earnings account.`,
-        date: 'Jun 19, 2026',
-        time: timeString,
-        isRead: false,
-        type: 'receipt'
-      });
-
       onUpdateRide({
         ...activeRide,
-        status: 'completed'
+        status: 'completed',
+        driverCredited: true
       });
     } else if (activeRide.status === 'completed') {
-      onUpdateRide(null);
+      if (!activeRide.driverCredited) {
+        creditDriverForRide(activeRide);
+      }
+      onUpdateRide({
+        ...activeRide,
+        driverConcluded: true,
+        driverCredited: true
+      });
     }
   };
 
@@ -627,13 +775,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             
             {/* KPI Trips */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/20 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Completed Travels</span>
                 <span className="text-2xl font-extrabold text-[#BE5912] block">{driverProfile.completedTripsCount}</span>
-                <span className="text-[9px] text-[#BE5912] font-bold bg-[#F9FAFB] px-2 rounded-full inline-block">
-                  Target: 20 shifts
-                </span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-orange-600 flex items-center justify-center">
                 <Car className="w-5 h-5" />
@@ -641,7 +786,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             </div>
 
             {/* KPI Average Rating */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/25 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider block font-mono">Average Rating</span>
                 <span className="text-2xl font-extrabold text-[#BE5912] block">★ {driverProfile.rating}</span>
@@ -655,7 +800,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             </div>
 
             {/* KPI Hours Online */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/20 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Hours Clocked</span>
                 <span className="text-2xl font-extrabold text-[#BE5912] block">{driverProfile.hoursOnline} hrs</span>
@@ -672,7 +817,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* Incoming Requests Panel OR Active Trip Controller */}
-            <div className="lg:col-span-12 space-y-6">
+            <div className="lg:col-span-8 space-y-6">
               {(() => {
                 const selectedSchool = UNIVERSITIES.find(u => u.id === (selectedSchoolId || 'run')) || UNIVERSITIES[0];
                 const campusStops = selectedSchool.stops;
@@ -991,102 +1136,85 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 </div>
               )}
 
-              {/* DRIVER EARNINGS & PAST TRIPS SECTION */}
-              <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
+              </div>
+
+              {/* Rider Reviews Sidebar Panel */}
+              <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                   <div>
-                    <h3 className="text-base font-extrabold text-[#BE5912] flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-orange-600" />
-                      Earnings Ledger & Past Travels
-                    </h3>
-                    <p className="text-xs text-gray-400">Review your past successfully completed rides and total shift earnings.</p>
+                    <h3 className="text-sm font-extrabold text-[#BE5912]">Rider Feedback</h3>
+                    <p className="text-[10px] text-gray-400">Verbatim comments from Redeemer's campus commuters.</p>
                   </div>
-                  <div className="mt-2 sm:mt-0 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold font-mono">
-                    Lifetime Earnings: ₦{(driverPastRides.reduce((acc, curr) => acc + (curr.cost || 0), 0) + driverProfile.todayEarnings).toLocaleString()}
-                  </div>
+                  <span className="text-[10px] bg-[#BE5912]/10 text-[#BE5912] font-bold px-2.5 py-1 rounded-lg font-mono">
+                    ★ {driverProfile.rating || '5.0'} Avg
+                  </span>
                 </div>
 
-                {/* Analytical Graph (Bento styling) */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  <div className="md:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white flex flex-col justify-between shadow-xs">
-                    <div>
-                      <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Active Metrics</span>
-                      <h4 className="text-sm font-bold mt-1">Earning Insights</h4>
-                    </div>
-                    
-                    <div className="my-4 space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-400">Completed Shifts:</span>
-                        <span className="font-extrabold text-orange-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-400">Average Fare per Ride:</span>
-                        <span className="font-extrabold text-teal-400 font-mono">
-                          ₦{driverPastRides.filter(r => r.status === 'completed').length > 0 
-                            ? Math.round(driverPastRides.filter(r => r.status === 'completed').reduce((acc, curr) => acc + (curr.cost || 0), 0) / driverPastRides.filter(r => r.status === 'completed').length) 
-                            : 0}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-400">Shift Status:</span>
-                        <span className={`font-black uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full ${shiftOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                          {shiftOnline ? 'ONLINE' : 'OFFLINE'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-right border-t border-white/10 pt-3">
-                      <span className="text-[10px] text-gray-400 block font-mono">TODAY'S LEDGER</span>
-                      <span className="text-xl font-black text-emerald-400 font-mono">₦{driverProfile.todayEarnings}</span>
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-7 space-y-3">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono block text-left">Past Rides Completed</span>
-                    
-                    <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1">
-                      {driverPastRides.filter(r => r.status === 'completed').length === 0 ? (
-                        <div className="text-center p-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-gray-400 text-xs">
-                          No completed trips found in your account history.
-                        </div>
-                      ) : (
-                        driverPastRides.filter(r => r.status === 'completed').map((ride, idx) => (
-                          <div key={ride.id || idx} className="flex items-center justify-between p-3.5 bg-gray-50 hover:bg-gray-100/70 border border-gray-150 rounded-2xl transition-colors">
-                            <div className="flex items-start gap-3 text-left">
-                              <div className="w-8 h-8 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center font-bold text-xs shrink-0">
-                                <Car className="w-4 h-4" />
-                              </div>
-                              <div className="space-y-0.5 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs font-bold text-gray-800">{ride.passengerName}</span>
-                                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-extrabold uppercase font-mono">Completed</span>
-                                </div>
-                                <span className="text-[10px] text-gray-500 truncate block">
-                                  {ride.pickup} → {ride.dropoff}
-                                </span>
-                                <span className="text-[9px] text-gray-400 font-mono block">
-                                  {ride.date || 'Today'} • {ride.time}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className="text-xs font-black text-[#BE5912] block font-mono">+₦{ride.cost}</span>
-                              <span className="text-[8px] text-gray-400 font-bold uppercase font-mono">{ride.paymentMethod || 'Wallet'}</span>
-                            </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                  {[
+                    ...reviews,
+                    {
+                      id: 'default-1',
+                      passengerName: 'Sarah Adenuga',
+                      passengerAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+                      rating: 5,
+                      comment: 'Very professional and arrived on time! Car was super neat.',
+                      time: '10:15 AM',
+                      date: 'Today'
+                    },
+                    {
+                      id: 'default-2',
+                      passengerName: 'David Okoye',
+                      passengerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+                      rating: 5,
+                      comment: 'Lifesaver! Got me to the college lecture theater right on time.',
+                      time: 'Yesterday',
+                      date: 'Yesterday'
+                    },
+                    {
+                      id: 'default-3',
+                      passengerName: 'Emmanuel Eke',
+                      passengerAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+                      rating: 4,
+                      comment: 'Smooth driving and polite conversation around the campus gates.',
+                      time: '2 days ago',
+                      date: '2 days ago'
+                    }
+                  ].map((rev) => (
+                    <div key={rev.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <img 
+                            referrerPolicy="no-referrer"
+                            src={rev.passengerAvatar} 
+                            alt={rev.passengerName} 
+                            className="w-7 h-7 rounded-full object-cover border border-gray-200"
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 block leading-tight">{rev.passengerName}</span>
+                            <span className="text-[9px] text-gray-400 font-mono">{rev.time}</span>
                           </div>
-                        ))
-                      )}
+                        </div>
+                        <div className="flex items-center space-x-0.5 text-amber-500 shrink-0">
+                          {Array.from({ length: rev.rating }).map((_, i) => (
+                            <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed italic">
+                        "{rev.comment}"
+                      </p>
                     </div>
-                  </div>
+                  ))}
                 </div>
               </div>
+
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
 
         {/* RENDER VIEW: EARNINGS LEDGER */}
-        {false && activeView === 'driver_earnings' && (
+        {activeView === 'driver_earnings' && (
           <motion.div
             key="driver_earnings"
             initial={{ opacity: 0, y: 12 }}
@@ -1096,54 +1224,135 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             id="view-driver-earnings"
             className="space-y-6"
           >
-          
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
-              <div>
-                <h3 className="text-lg font-extrabold text-[#BE5912]">Shift Performance & Earnings</h3>
-                <p className="text-xs text-gray-450 font-medium">Breakdown of credits reloads, carpool clean-energy incentives, and tips.</p>
-              </div>
-
-              <div className="bg-[#F9FAFB] text-[#BE5912] border border-[#BE5912]/30 px-4 py-2 rounded-xl text-xs font-bold leading-normal">
-                Monthly Payout Method: Direct Deposit to Chase Acct (*8429)
-              </div>
-            </div>
-
-            {/* Analytical Graph Placeholder (High-contrast bento styling) */}
-            <div className="h-64 bg-slate-900 rounded-2xl overflow-hidden relative p-6 flex flex-col justify-between text-white">
-              <div className="flex items-center justify-between">
+            {/* DRIVER EARNINGS & PAST TRIPS SECTION */}
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
                 <div>
-                  <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
-                  <span className="text-lg font-extrabold">Weekly Shift Revenue Graph</span>
+                  <h3 className="text-base font-extrabold text-[#BE5912] flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-orange-600" />
+                    Earnings Ledger & Past Travels
+                  </h3>
+                  <p className="text-xs text-gray-400">Review your past successfully completed rides and total shift earnings.</p>
                 </div>
-                <span className="text-xs bg-[#BE5912] text-white font-bold px-3 py-1 rounded-full">+12.5% vs Last Week</span>
+                <div className="mt-2 sm:mt-0 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold font-mono">
+                  Lifetime Earnings: ₦{(driverPastRides.reduce((acc, curr) => acc + (curr.cost || 0), 0) + driverProfile.todayEarnings).toLocaleString()}
+                </div>
               </div>
-              
-              {/* Simulated visual bar charts */}
-              <div className="flex items-end justify-between h-32 gap-3 pt-4">
-                {[
-                  { day: 'Mon', amt: 84 },
-                  { day: 'Tue', amt: 124 },
-                  { day: 'Wed', amt: 198 },
-                  { day: 'Thu', amt: 142 },
-                  { day: 'Fri (Today)', amt: 224 },
-                  { day: 'Sat', amt: 0 },
-                  { day: 'Sun', amt: 0 }
-                ].map((item, id) => (
-                  <div key={id} className="flex-1 flex flex-col items-center group cursor-pointer">
-                    <span className="text-[9px] font-mono text-orange-500 invisible group-hover:visible mb-1">₦{item.amt}</span>
-                    <div 
-                      className="w-full bg-[#BE5912] rounded-t-md transition-all group-hover:bg-amber-400 shadow-sm shadow-amber-900/10" 
-                      style={{ height: `${Math.max(item.amt / 224 * 100, 5)}%` }}
-                    ></div>
-                    <span className="text-[10px] text-gray-400 mt-2 font-mono">{item.day}</span>
+
+              {/* Analytical Graph & Insights in Bento layout */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                
+                {/* Column 1: Weekly Shift Revenue Graph */}
+                <div className="md:col-span-7 bg-slate-900 rounded-2xl overflow-hidden relative p-6 flex flex-col justify-between text-white h-72">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
+                      <span className="text-lg font-extrabold">Weekly Shift Revenue Graph</span>
+                    </div>
+                    <span className="text-xs bg-[#BE5912] text-white font-bold px-3 py-1 rounded-full">+12.5% vs Last Week</span>
                   </div>
-                ))}
+                  
+                  {/* Simulated visual bar charts */}
+                  <div className="flex items-end justify-between h-36 gap-3 pt-4">
+                    {[
+                      { day: 'Mon', amt: 84 },
+                      { day: 'Tue', amt: 124 },
+                      { day: 'Wed', amt: 198 },
+                      { day: 'Thu', amt: 142 },
+                      { day: 'Fri (Today)', amt: 224 },
+                      { day: 'Sat', amt: 0 },
+                      { day: 'Sun', amt: 0 }
+                    ].map((item, id) => (
+                      <div key={id} className="flex-1 flex flex-col items-center group cursor-pointer">
+                        <span className="text-[9px] font-mono text-orange-500 invisible group-hover:visible mb-1">₦{item.amt}</span>
+                        <div 
+                          className="w-full bg-[#BE5912] rounded-t-md transition-all group-hover:bg-amber-400 shadow-sm shadow-amber-900/10" 
+                          style={{ height: `${Math.max(item.amt / 224 * 100, 5)}%` }}
+                        ></div>
+                        <span className="text-[10px] text-gray-400 mt-2 font-mono">{item.day}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Column 2: Active Metrics & Today's Earnings */}
+                <div className="md:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white flex flex-col justify-between shadow-xs h-72">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Active Metrics</span>
+                    <h4 className="text-sm font-bold mt-1">Earning Insights</h4>
+                  </div>
+                  
+                  <div className="my-4 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">Completed Shifts:</span>
+                      <span className="font-extrabold text-orange-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">Average Fare per Ride:</span>
+                      <span className="font-extrabold text-teal-400 font-mono">
+                        ₦{driverPastRides.filter(r => r.status === 'completed').length > 0 
+                          ? Math.round(driverPastRides.filter(r => r.status === 'completed').reduce((acc, curr) => acc + (curr.cost || 0), 0) / driverPastRides.filter(r => r.status === 'completed').length) 
+                          : 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">Shift Status:</span>
+                      <span className={`font-black uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full ${shiftOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                        {shiftOnline ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right border-t border-white/10 pt-3">
+                    <span className="text-[10px] text-gray-400 block font-mono">TODAY'S LEDGER</span>
+                    <span className="text-xl font-black text-[#00875A] font-mono">₦{driverProfile.todayEarnings}</span>
+                  </div>
+                </div>
+
               </div>
+
+              {/* Past Completed Rides List */}
+              <div className="space-y-3 border-t border-gray-100 pt-6">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider font-mono block text-left">Past Rides Completed</span>
+                
+                <div className="space-y-2.5">
+                  {driverPastRides.filter(r => r.status === 'completed').length === 0 ? (
+                    <div className="text-center p-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-gray-400 text-xs">
+                      No completed trips found in your account history.
+                    </div>
+                  ) : (
+                    driverPastRides.filter(r => r.status === 'completed').map((ride, idx) => (
+                      <div key={ride.id || idx} className="flex items-center justify-between p-3.5 bg-gray-50 hover:bg-gray-100/70 border border-gray-150 rounded-2xl transition-colors">
+                        <div className="flex items-start gap-3 text-left">
+                          <div className="w-8 h-8 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center font-bold text-xs shrink-0">
+                            <Car className="w-4 h-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-gray-800">{ride.passengerName}</span>
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-extrabold uppercase font-mono">Completed</span>
+                            </div>
+                            <span className="text-[10px] text-gray-500 truncate block">
+                              {ride.pickup} → {ride.dropoff}
+                            </span>
+                            <span className="text-[9px] text-gray-400 font-mono block">
+                              {ride.date || 'Today'} • {ride.time}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-black text-[#BE5912] block font-mono">+₦{ride.cost}</span>
+                          <span className="text-[8px] text-gray-400 font-bold uppercase font-mono">{ride.paymentMethod || 'Wallet'}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
 
         {/* RENDER VIEW: SCHEDULED RIDES LIST */}
         {activeView === 'driver_scheduled' && (
@@ -1260,6 +1469,136 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             <h2 className="text-lg font-extrabold text-[#BE5912]">Vehicle profile registries</h2>
             <p className="text-xs text-gray-400">Current car description records certified to complete campus rides.</p>
           </div>
+
+          {/* Supabase Media & Profile Picture Settings */}
+          <div className="space-y-4 pt-4 border-t border-gray-150">
+            <h3 className="text-xs font-black text-[#BE5912] uppercase tracking-wider border-b border-gray-100 pb-2">Supabase Storage Configuration</h3>
+            
+            {/* Supabase Status Banner */}
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
+              isSupabaseConfigured 
+                ? 'bg-orange-50/50 border-orange-100 text-orange-800' 
+                : 'bg-amber-50/50 border-amber-150 text-amber-800'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-xl shrink-0 ${isSupabaseConfigured ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
+                  <Server className="w-5 h-5 animate-none" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold block text-left">
+                    Supabase Storage Connection: {isSupabaseConfigured ? 'ACTIVE' : 'NOT CONFIGURATED'}
+                  </span>
+                  <span className="text-[10px] text-gray-500 block text-left leading-relaxed">
+                    {isSupabaseConfigured 
+                      ? 'Connected securely! High fidelity file transfers are fully validated.' 
+                      : 'Define VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your workspace Secrets configuration to enable media uploads.'}
+                  </span>
+                </div>
+              </div>
+              {isSupabaseConfigured && (
+                <span className="bg-orange-100 text-orange-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest font-mono self-start sm:self-auto">
+                  ONLINE
+                </span>
+              )}
+            </div>
+
+            {supabaseError && (
+              <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs flex items-start gap-2 text-left">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{supabaseError}</span>
+              </div>
+            )}
+
+            {supabaseSuccess && (
+              <div className="p-3 bg-orange-50 border border-orange-100 text-orange-800 rounded-xl text-xs flex items-start gap-2 text-left">
+                <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{supabaseSuccess}</span>
+              </div>
+            )}
+
+            {isSupabaseConfigured && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Avatar Upload Block */}
+                <div className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col justify-between space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="relative shrink-0">
+                      <img 
+                        referrerPolicy="no-referrer"
+                        src={driverProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'} 
+                        alt="Driver Avatar" 
+                        className="w-12 h-12 rounded-full object-cover border border-slate-300"
+                      />
+                      {uploadingAvatar && (
+                        <div className="absolute inset-0 bg-black/45 rounded-full flex items-center justify-center">
+                          <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-left">
+                      <span className="text-xs font-bold block text-slate-800 font-sans">Driver Profile Picture</span>
+                      <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
+                        Replace your current profile avatar on the driver portal database.
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="w-full h-10 bg-white border border-gray-150 hover:border-[#BE5912] rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs">
+                    <UploadCloud className="w-4 h-4 text-gray-500" />
+                    <span>{uploadingAvatar ? 'Uploading...' : 'Choose Picture'}</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAvatarUpload} 
+                      disabled={uploadingAvatar} 
+                      className="hidden" 
+                    />
+                  </label>
+                </div>
+
+                {/* University Logo Upload/Mirror Block */}
+                <div className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col justify-between space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <img 
+                      referrerPolicy="no-referrer"
+                      src={UNIVERSITIES.find(u => u.id === (selectedSchoolId || 'run'))?.logoImage || UNIVERSITIES[0].logoImage} 
+                      alt="School Logo" 
+                      className="w-12 h-12 object-contain shrink-0 p-1 bg-white rounded-xl border border-gray-150"
+                    />
+                    <div className="text-left">
+                      <span className="text-xs font-bold block text-slate-800 font-sans">University Portal Logo</span>
+                      <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
+                        Save Redeemer's official logo to Supabase, or upload a custom alternative.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="h-10 bg-white border border-gray-150 hover:border-[#BE5912] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs">
+                      <UploadCloud className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{uploadingLogo ? '...' : 'Upload Logo'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLogoUpload} 
+                        disabled={uploadingLogo} 
+                        className="hidden" 
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleMirrorDefaultLogo}
+                      disabled={uploadingLogo}
+                      className="h-10 bg-white border border-gray-150 hover:border-[#BE5912] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{uploadingLogo ? '...' : 'Mirror Logo'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
 
           <div className="space-y-4">
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">

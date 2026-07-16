@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, setDoc, doc } from 'firebase/firestore';
+import { collection, setDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { isSupabaseConfigured, uploadFile, uploadLogoFromUrl } from '../lib/supabase';
 import { 
   UserProfile, 
   AppNotification, 
@@ -48,7 +49,11 @@ import {
   RefreshCw,
   Sparkles,
   Compass,
-  LogOut
+  LogOut,
+  UploadCloud,
+  Server,
+  AlertCircle,
+  ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -125,6 +130,96 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // Current School Details
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const campusStops = selectedSchool.stops;
+
+  // Supabase Media & Logo Upload states
+  const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
+  const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
+  const [supabaseSuccess, setSupabaseSuccess] = useState<string | null>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    setSupabaseError(null);
+    setSupabaseSuccess(null);
+
+    try {
+      const bucketName = 'campus-ride';
+      const filePath = `avatars/student_${userProfile.id || Date.now()}_${Date.now()}_${file.name}`;
+      
+      const publicUrl = await uploadFile(bucketName, filePath, file);
+      
+      // Update profile in Firestore
+      await onUpdateProfile({ avatar: publicUrl });
+      
+      setSupabaseSuccess('Profile picture uploaded successfully and synchronized with Firestore!');
+    } catch (err: any) {
+      console.error(err);
+      setSupabaseError(err.message || 'An error occurred during file upload.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    setSupabaseError(null);
+    setSupabaseSuccess(null);
+
+    try {
+      const bucketName = 'campus-ride';
+      const filePath = `logos/university_${selectedSchoolId || 'run'}_${Date.now()}_${file.name}`;
+      
+      const publicUrl = await uploadFile(bucketName, filePath, file);
+      
+      // Save/link in Firestore under schools collection
+      if (selectedSchoolId) {
+        await setDoc(doc(db, 'schools', selectedSchoolId), {
+          logoImage: publicUrl,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+      
+      setSupabaseSuccess('University logo uploaded successfully to Supabase Storage and updated in Firestore!');
+    } catch (err: any) {
+      console.error(err);
+      setSupabaseError(err.message || 'An error occurred during logo upload.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleMirrorDefaultLogo = async () => {
+    if (!selectedSchool.logoImage) return;
+    setUploadingLogo(true);
+    setSupabaseError(null);
+    setSupabaseSuccess(null);
+
+    try {
+      const bucketName = 'campus-ride';
+      const publicUrl = await uploadLogoFromUrl(bucketName, selectedSchool.logoImage);
+      
+      // Save in Firestore under schools collection
+      if (selectedSchoolId) {
+        await setDoc(doc(db, 'schools', selectedSchoolId), {
+          logoImage: publicUrl,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+      
+      setSupabaseSuccess('Successfully mirrored and saved the official university logo to Supabase Storage!');
+    } catch (err: any) {
+      console.error(err);
+      setSupabaseError(err.message || 'An error occurred during logo mirroring.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   // Booking details
   const [pickup, setPickup] = useState<string>('');
@@ -664,51 +759,40 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     };
   }, [joinedPoolId, activeRide?.id]);
 
+  // Sync poolingState reactively based on Firestore activeRide status
+  useEffect(() => {
+    if (activeRide) {
+      if (activeRide.status === 'requested' || activeRide.status === 'searching') {
+        setPoolingState('forming');
+      } else if (activeRide.status === 'accepted' || activeRide.status === 'arriving') {
+        // If they have selected cash, or confirmed transfer, proceed to transit page!
+        if (activeRide.paymentMethod === 'cash' || (activeRide.paymentMethod === 'transfer' && activeRide.paymentConfirmedByRider) || activeRide.paymentMethod === 'wallet') {
+          setPoolingState('transit');
+        } else {
+          setPoolingState('matched');
+        }
+      } else if (activeRide.status === 'in_transit') {
+        setPoolingState('transit');
+      } else if (activeRide.status === 'completed') {
+        if (activeRide.passengerRated) {
+          setPoolingState('idle');
+        } else {
+          setPoolingState('arrived');
+        }
+      }
+    } else {
+      if (poolingState === 'forming' || poolingState === 'matched' || poolingState === 'transit') {
+        setPoolingState('idle');
+      }
+    }
+  }, [activeRide?.status, activeRide?.paymentMethod, activeRide?.paymentConfirmedByRider, activeRide?.passengerRated]);
+
   // Precise 1-minute countdown timer linked to actual requested/created timestamp
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     const handleTick = () => {
-      const req = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
-      
-      // Look up global active ride if we are the host of a requested ride
-      const globalRideStr = localStorage.getItem('campusride_global_active_ride');
-      let globalRide: RideRequest | null = null;
-      if (globalRideStr) {
-        try {
-          globalRide = JSON.parse(globalRideStr) as RideRequest;
-        } catch (e) {}
-      }
-
-      const activeReq = (globalRide && globalRide.passengerId === userProfile.id) ? globalRide : activeRide;
-
-      // Sync driver's trip updates in real-time when matched or in transit
-      if (globalRide && globalRide.passengerId === userProfile.id) {
-        if (poolingState === 'matched') {
-          if (globalRide.status === 'in_transit') {
-            setPoolingState('transit');
-            onUpdateRide(globalRide);
-          } else if (globalRide.status === 'completed') {
-            setPoolingState('arrived');
-            onUpdateRide(globalRide);
-          } else if (activeRide && activeRide.status !== globalRide.status) {
-            onUpdateRide(globalRide);
-          }
-        } else if (poolingState === 'transit') {
-          if (globalRide.status === 'completed') {
-            setPoolingState('arrived');
-            onUpdateRide(globalRide);
-          } else if (activeRide && activeRide.status !== globalRide.status) {
-            onUpdateRide(globalRide);
-          }
-        }
-      }
-
-      // If the global ride was concluded (driver clicked Conclude Ride which deletes/clears it)
-      if ((poolingState === 'matched' || poolingState === 'transit') && !globalRide && activeRide) {
-        setPoolingState('arrived');
-        onUpdateRide(null);
-      }
+      const activeReq = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
 
       if (poolingState === 'forming' && isMatchingDriver && activeReq) {
         if (activeReq.status === 'accepted' || activeReq.status === 'arriving' || activeReq.status === 'in_transit') {
@@ -751,7 +835,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     return () => clearInterval(interval);
   }, [poolingState, isMatchingDriver, activeRide, activePools, joinedPoolId, checkoutPool]);
 
-  // Live path/trip progress simulation
+  // Live path/trip progress simulation (purely visual progress, no auto-complete)
   useEffect(() => {
     let progressInterval: NodeJS.Timeout;
     if (poolingState === 'transit') {
@@ -759,33 +843,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         setLiveDistance(prev => {
           if (prev >= 100) {
             clearInterval(progressInterval);
-            setPoolingState('arrived');
-            // Complete ride transaction
-            const finalFare = Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1']);
-            onUpdateProfile({
-              walletBalance: Math.max(0, userProfile.walletBalance - finalFare),
-              tripsThisWeek: userProfile.tripsThisWeek + 1,
-              savedThisMonth: userProfile.savedThisMonth + (basePrice - finalFare)
-            });
-            onAddTransaction({
-              id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-              description: `Split Ride: ${getStopName(pickup)} ➔ ${getStopName(dropoff)}`,
-              amount: finalFare,
-              date: 'Today',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              method: 'Digital Wallet Split',
-              type: 'charge',
-              status: 'Completed'
-            });
-            onAddNotification({
-              id: `notif-${Date.now()}`,
-              title: 'Arrived at Destination!',
-              message: `You split the fare. paid ${currencySymbol}${finalFare} instead of ${currencySymbol}${basePrice}. Saved ${currencySymbol}${basePrice - finalFare}!`,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              date: 'Today',
-              isRead: false,
-              type: 'receipt'
-            });
             return 100;
           }
           const nextDist = prev + 5;
@@ -1358,29 +1415,106 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     });
   };
 
-  // Complete Rating
-  const handleRateSubmit = () => {
-    // Average the rating and update driverProfile
-    if (onUpdateDriverProfile && ratingScore > 0) {
-      const currentRating = driverProfile?.rating ?? 5.0;
-      const currentCount = driverProfile?.ratingsCount ?? 0;
-      const newCount = currentCount + 1;
-      const newRating = Number(((currentRating * currentCount + ratingScore) / newCount).toFixed(2));
-      
-      onUpdateDriverProfile({
-        rating: newRating,
-        ratingsCount: newCount
-      });
+  // Complete / End the ride on student's side
+  const handleEndRide = async () => {
+    if (!activeRide) return;
+    
+    const finalFare = activeRide.cost;
+    
+    // Increment trips count
+    onUpdateProfile({
+      tripsThisWeek: userProfile.tripsThisWeek + 1,
+      savedThisMonth: userProfile.savedThisMonth + Math.max(0, (basePrice - finalFare))
+    });
 
-      onAddNotification({
-        id: `notif-${Date.now()}`,
-        title: 'New Trip Rating Received',
-        message: `A passenger rated your recent ride ${ratingScore} Stars. Your average rating is now ★ ${newRating}.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        date: 'Today',
-        isRead: false,
-        type: 'success'
-      });
+    const updatedRide: RideRequest = {
+      ...activeRide,
+      status: 'completed'
+    };
+
+    await onUpdateRide(updatedRide);
+    setPoolingState('arrived');
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      title: 'Ride Completed!',
+      message: `Your ride from ${getStopName(pickup)} to ${getStopName(dropoff)} has been successfully completed.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today',
+      isRead: false,
+      type: 'receipt'
+    });
+  };
+
+  // Complete Rating
+  const handleRateSubmit = async () => {
+    // Average the rating and update driverProfile directly in Firestore
+    if (activeRide) {
+      if (activeRide.driverId && ratingScore > 0) {
+        const driverId = activeRide.driverId;
+        try {
+          const driverDocRef = doc(db, 'users', driverId);
+          const driverDocSnap = await getDoc(driverDocRef);
+          
+          let currentRating = 5.0;
+          let currentCount = 0;
+          
+          if (driverDocSnap.exists()) {
+            const driverData = driverDocSnap.data();
+            currentRating = driverData.rating ?? 5.0;
+            currentCount = driverData.ratingsCount ?? 0;
+          }
+          
+          const newCount = currentCount + 1;
+          const newRating = Number(((currentRating * currentCount + ratingScore) / newCount).toFixed(2));
+          
+          // Update the driver's profile in Firestore directly!
+          await updateDoc(driverDocRef, {
+            rating: newRating,
+            ratingsCount: newCount
+          });
+
+          // Add a review doc to the driver's reviews subcollection
+          const reviewId = `rev-${Date.now()}`;
+          await setDoc(doc(db, 'users', driverId, 'reviews', reviewId), {
+            id: reviewId,
+            passengerName: activeRide.passengerName || 'Anonymous Rider',
+            passengerAvatar: activeRide.passengerAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+            rating: ratingScore,
+            comment: reviewText.trim() || 'Rider rated the travel experience.',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: 'Today',
+            createdAt: Date.now()
+          });
+
+          // Clear review feedback state
+          setReviewText('');
+
+          // Add a notification to the driver
+          const notifId = `notif-${Date.now()}`;
+          await setDoc(doc(db, 'users', driverId, 'notifications', notifId), {
+            id: notifId,
+            title: 'New Trip Rating Received',
+            message: `A passenger rated your recent ride ${ratingScore} Stars. Your average rating is now ★ ${newRating}.`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: 'Today',
+            isRead: false,
+            type: 'success'
+          });
+
+        } catch (err) {
+          console.error("Error updating driver rating:", err);
+        }
+      }
+
+      // Mark the ride as passenger rated in Firestore so onSnapshot ignores it
+      try {
+        await updateDoc(doc(db, 'rideRequests', activeRide.id), {
+          passengerRated: true
+        });
+      } catch (e) {
+        console.error("Error marking passengerRated in Firestore:", e);
+      }
     }
 
     setPoolingState('idle');
@@ -2529,11 +2663,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                 <div className="pt-4 border-t border-slate-200">
                   <button
-                    onClick={() => setPoolingState('arrived')}
+                    onClick={handleEndRide}
                     className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <CheckCircle className="w-4 h-4" />
-                    Simulate Arrival
+                    Conclude & End Ride
                   </button>
                 </div>
 
@@ -3804,6 +3938,135 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
+            {/* Supabase Media & Profile Picture Settings */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider border-b border-slate-200 pb-2">Supabase Storage Configuration</h3>
+              
+              {/* Supabase Status Banner */}
+              <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
+                isSupabaseConfigured 
+                  ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800' 
+                  : 'bg-amber-50/50 border-amber-150 text-amber-800'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-xl shrink-0 ${isSupabaseConfigured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    <Server className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-left">
+                      Supabase Storage Connection: {isSupabaseConfigured ? 'ACTIVE' : 'NOT CONFIGURATED'}
+                    </span>
+                    <span className="text-[10px] text-gray-500 block text-left leading-relaxed">
+                      {isSupabaseConfigured 
+                        ? 'Connected securely! High fidelity file transfers are fully validated.' 
+                        : 'Define VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your workspace Secrets configuration to enable media uploads.'}
+                    </span>
+                  </div>
+                </div>
+                {isSupabaseConfigured && (
+                  <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest font-mono self-start sm:self-auto">
+                    ONLINE
+                  </span>
+                )}
+              </div>
+
+              {supabaseError && (
+                <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs flex items-start gap-2 text-left">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{supabaseError}</span>
+                </div>
+              )}
+
+              {supabaseSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl text-xs flex items-start gap-2 text-left">
+                  <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{supabaseSuccess}</span>
+                </div>
+              )}
+
+              {isSupabaseConfigured && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Avatar Upload Block */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="relative shrink-0">
+                        <img 
+                          referrerPolicy="no-referrer"
+                          src={userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'} 
+                          alt="Student Avatar" 
+                          className="w-12 h-12 rounded-full object-cover border border-slate-300"
+                        />
+                        {uploadingAvatar && (
+                          <div className="absolute inset-0 bg-black/45 rounded-full flex items-center justify-center">
+                            <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <span className="text-xs font-bold block text-slate-800 font-sans">Commuter Profile Picture</span>
+                        <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
+                          Replace your current profile avatar on the student portal database.
+                        </span>
+                      </div>
+                    </div>
+
+                    <label className="w-full h-10 bg-white border border-slate-200 hover:border-[#00875A] rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs">
+                      <UploadCloud className="w-4 h-4 text-slate-500" />
+                      <span>{uploadingAvatar ? 'Uploading...' : 'Choose Picture'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleAvatarUpload} 
+                        disabled={uploadingAvatar} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+
+                  {/* University Logo Upload/Mirror Block */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <img 
+                        referrerPolicy="no-referrer"
+                        src={selectedSchool.logoImage} 
+                        alt="School Logo" 
+                        className="w-12 h-12 object-contain shrink-0 p-1 bg-white rounded-xl border border-slate-200"
+                      />
+                      <div className="text-left">
+                        <span className="text-xs font-bold block text-slate-800 font-sans">University Portal Logo</span>
+                        <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
+                          Save Redeemer's official logo to Supabase, or upload a custom alternative.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="h-10 bg-white border border-slate-200 hover:border-[#00875A] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs">
+                        <UploadCloud className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{uploadingLogo ? '...' : 'Upload Logo'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleLogoUpload} 
+                          disabled={uploadingLogo} 
+                          className="hidden" 
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleMirrorDefaultLogo}
+                        disabled={uploadingLogo}
+                        className="h-10 bg-white border border-slate-200 hover:border-[#00875A] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{uploadingLogo ? '...' : 'Mirror Logo'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4">
               <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider border-b border-slate-200 pb-2">Transit Preferences</h3>
               

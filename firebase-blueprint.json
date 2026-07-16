@@ -127,9 +127,39 @@
         "password": { "type": "string" }
       },
       "required": ["to", "name", "subject", "type", "dateSent"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Represents a passenger review for a driver.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "passengerName": { "type": "string", "maxLength": 100 },
+        "passengerAvatar": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 500 },
+        "time": { "type": "string" },
+        "date": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "passengerName", "rating", "comment", "createdAt"]
+    },
+    "School": {
+      "title": "School",
+      "description": "Custom configuration metadata for universities, such as branding logos.",
+      "type": "object",
+      "properties": {
+        "logoImage": { "type": "string", "maxLength": 1000 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["logoImage"]
     }
   },
   "firestore": {
+    "/schools/{schoolId}": {
+      "schema": "School",
+      "description": "Custom configuration metadata and branding for a specific university."
+    },
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "Root user profile storage."
@@ -141,6 +171,10 @@
     "/users/{userId}/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "Nested notifications inbox for a specific user."
+    },
+    "/users/{userId}/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Nested passenger reviews for a specific driver."
     },
     "/rideRequests/{rideId}": {
       "schema": "RideRequest",
