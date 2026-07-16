@@ -439,6 +439,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       driverAvatar: driverProfile.avatar,
       driverVehicle: driverProfile.vehicle,
       driverRating: driverProfile.rating,
+      driverPlateNumber: driverProfile.plateNumber || (driverProfile.vehicle ? (driverProfile.vehicle.includes(' • ') ? driverProfile.vehicle.split(' • ')[1] : 'RUN-918-LA') : 'RUN-918-LA'),
+      driverBankName: driverProfile.bankName || 'Access Bank Nigeria',
+      driverBankAccountNumber: driverProfile.bankAccountNumber || '2088392102',
+      driverBankAccountName: driverProfile.bankAccountName || driverProfile.name || 'David Alao',
     };
 
     // Remove it from global scheduled rides
@@ -583,6 +587,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       driverAvatar: driverProfile.avatar,
       driverVehicle: driverProfile.vehicle,
       driverRating: driverProfile.rating,
+      driverPlateNumber: driverProfile.plateNumber || (driverProfile.vehicle ? (driverProfile.vehicle.includes(' • ') ? driverProfile.vehicle.split(' • ')[1] : 'RUN-918-LA') : 'RUN-918-LA'),
+      driverBankName: driverProfile.bankName || 'Access Bank Nigeria',
+      driverBankAccountNumber: driverProfile.bankAccountNumber || '2088392102',
+      driverBankAccountName: driverProfile.bankAccountName || driverProfile.name || 'David Alao',
       etaMinutes: 4,
     };
 
@@ -1188,61 +1196,38 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 </div>
 
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                  {[
-                    ...reviews,
-                    {
-                      id: 'default-1',
-                      passengerName: 'Sarah Adenuga',
-                      passengerAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-                      rating: 5,
-                      comment: 'Very professional and arrived on time! Car was super neat.',
-                      time: '10:15 AM',
-                      date: 'Today'
-                    },
-                    {
-                      id: 'default-2',
-                      passengerName: 'David Okoye',
-                      passengerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-                      rating: 5,
-                      comment: 'Lifesaver! Got me to the college lecture theater right on time.',
-                      time: 'Yesterday',
-                      date: 'Yesterday'
-                    },
-                    {
-                      id: 'default-3',
-                      passengerName: 'Emmanuel Eke',
-                      passengerAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
-                      rating: 4,
-                      comment: 'Smooth driving and polite conversation around the campus gates.',
-                      time: '2 days ago',
-                      date: '2 days ago'
-                    }
-                  ].map((rev) => (
-                    <div key={rev.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <img 
-                            referrerPolicy="no-referrer"
-                            src={rev.passengerAvatar} 
-                            alt={rev.passengerName} 
-                            className="w-7 h-7 rounded-full object-cover border border-gray-200"
-                          />
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 block leading-tight">{rev.passengerName}</span>
-                            <span className="text-[9px] text-gray-400 font-mono">{rev.time}</span>
+                  {reviews.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 text-xs font-bold">
+                      No rider feedback has been submitted yet.
+                    </div>
+                  ) : (
+                    reviews.map((rev) => (
+                      <div key={rev.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <img 
+                              referrerPolicy="no-referrer"
+                              src={rev.passengerAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"} 
+                              alt={rev.passengerName || "Student"} 
+                              className="w-7 h-7 rounded-full object-cover border border-gray-200"
+                            />
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 block leading-tight">{rev.passengerName || "Student"}</span>
+                              <span className="text-[9px] text-gray-400 font-mono">{rev.time || "Today"}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-0.5 text-amber-500 shrink-0">
+                            {Array.from({ length: rev.rating || 5 }).map((_, i) => (
+                              <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                            ))}
                           </div>
                         </div>
-                        <div className="flex items-center space-x-0.5 text-amber-500 shrink-0">
-                          {Array.from({ length: rev.rating }).map((_, i) => (
-                            <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                          ))}
-                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed italic">
+                          "{rev.comment}"
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-600 leading-relaxed italic">
-                        "{rev.comment}"
-                      </p>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 

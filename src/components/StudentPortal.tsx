@@ -506,6 +506,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   const getDriverBankDetails = () => {
     const ride = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+    if (ride) {
+      if ((ride as any).driverBankAccountNumber) {
+        return {
+          bankName: (ride as any).driverBankName || 'Access Bank Nigeria',
+          accountNumber: (ride as any).driverBankAccountNumber || '2088392102',
+          accountName: (ride as any).driverBankAccountName || ride.driverName || 'David Alao'
+        };
+      }
+    }
     if (ride?.driverId) {
       const stored = localStorage.getItem(`campusride_driver_profile_${ride.driverId}`);
       if (stored) {
@@ -798,12 +807,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       if (activeRide.status === 'requested' || activeRide.status === 'searching') {
         setPoolingState('forming');
       } else if (activeRide.status === 'accepted' || activeRide.status === 'arriving') {
-        // If they have selected cash, or confirmed transfer, proceed to transit page!
-        if (activeRide.paymentMethod === 'cash' || (activeRide.paymentMethod === 'transfer' && activeRide.paymentConfirmedByRider) || activeRide.paymentMethod === 'wallet') {
-          setPoolingState('transit');
-        } else {
-          setPoolingState('matched');
-        }
+        setPoolingState('matched');
       } else if (activeRide.status === 'in_transit') {
         setPoolingState('transit');
       } else if (activeRide.status === 'completed') {
