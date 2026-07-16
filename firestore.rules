@@ -219,6 +219,16 @@ service cloud.firestore {
         isAdmin()
       );
       allow delete: if isSignedIn() && (existing().passengerId == request.auth.uid || isAdmin());
+
+      // Nested messages subcollection
+      match /messages/{messageId} {
+        allow read, create: if isSignedIn() && (
+          get(/databases/$(database)/documents/rideRequests/$(rideId)).data.passengerId == request.auth.uid ||
+          get(/databases/$(database)/documents/rideRequests/$(rideId)).data.driverId == request.auth.uid ||
+          isDriver() ||
+          isAdmin()
+        );
+      }
     }
 
     match /pendingDrivers/{driverId} {

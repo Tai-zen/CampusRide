@@ -129,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Top Header (Sticky) */}
       <header id="mobile-navigation-bar" className="md:hidden w-full h-16 bg-white border-b border-gray-100 px-4 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 rounded-lg bg-transparent p-0 flex items-center justify-center overflow-hidden shrink-0">
+          <div className={`w-9 h-9 rounded-lg p-0.5 flex items-center justify-center overflow-hidden shrink-0 border ${currentRole === 'driver' ? 'bg-orange-50 border-orange-100 dark:bg-slate-800 dark:border-slate-700' : 'bg-emerald-50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700'}`}>
             <img 
               referrerPolicy="no-referrer"
               src={selectedSchool.logoImage} 
@@ -196,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Upper Branding Section */}
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="w-11 h-11 rounded-xl bg-transparent p-0 flex items-center justify-center overflow-hidden shrink-0">
+            <div className={`w-11 h-11 rounded-xl p-0.5 flex items-center justify-center overflow-hidden shrink-0 border ${currentRole === 'driver' ? 'bg-orange-50 border-orange-100 dark:bg-slate-800 dark:border-slate-700' : 'bg-emerald-50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700'}`}>
               <img 
                 referrerPolicy="no-referrer"
                 src={selectedSchool.logoImage} 
@@ -213,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* User Status Profile Card */}
-          <div className="bg-[#F9FAFB] p-3 rounded-xl border border-gray-100 flex items-center space-x-3">
+          <div className={`p-3 rounded-xl border flex items-center space-x-3 ${currentRole === 'driver' ? 'bg-orange-50/50 border-orange-100 dark:bg-slate-800 dark:border-slate-700' : 'bg-emerald-50/50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700'}`}>
             <img 
               referrerPolicy="no-referrer"
               src={userProfile.avatar} 

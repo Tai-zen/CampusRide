@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, setDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, setDoc, doc, getDoc, updateDoc, addDoc, onSnapshot } from 'firebase/firestore';
 import { isSupabaseConfigured, uploadFile, uploadLogoFromUrl } from '../lib/supabase';
 import { 
   UserProfile, 
@@ -497,15 +497,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   // Trigger payment method popup when ride gets accepted (matched)
   useEffect(() => {
-    if (poolingState === 'matched' && activeRide && !activeRide.paymentMethod) {
+    const activeReq = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+    if (poolingState === 'matched' && activeReq && !activeReq.paymentMethod) {
       setShowPaymentSelection(true);
       setPaymentStep('select');
     }
-  }, [poolingState, activeRide?.id, activeRide?.paymentMethod]);
+  }, [poolingState, activeRide?.id, activeRide?.paymentMethod, joinedPoolId, activePools]);
 
   const getDriverBankDetails = () => {
-    if (activeRide?.driverId) {
-      const stored = localStorage.getItem(`campusride_driver_profile_${activeRide.driverId}`);
+    const ride = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+    if (ride?.driverId) {
+      const stored = localStorage.getItem(`campusride_driver_profile_${ride.driverId}`);
       if (stored) {
         try {
           const profile = JSON.parse(stored);
@@ -522,14 +524,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     return {
       bankName: 'Access Bank Nigeria',
       accountNumber: '2088392102',
-      accountName: activeRide?.driverName || 'David Alao'
+      accountName: ride?.driverName || 'David Alao'
     };
   };
 
   const handleSelectCashPayment = () => {
-    if (!activeRide) return;
+    const ride = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+    if (!ride) return;
     const updatedRide: RideRequest = {
-      ...activeRide,
+      ...ride,
       paymentMethod: 'cash',
       paymentConfirmedByRider: true,
       paymentValidatedByDriver: false,
@@ -538,24 +541,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     onUpdateRide(updatedRide);
     setShowPaymentSelection(false);
     
-    // Add chat message indicating payment method selection
-    const chatId = joinedPoolId || activeRide.id;
+    // Add chat message indicating payment method selection to Firestore
+    const chatId = ride.id;
     if (chatId) {
-      const msg = {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      addDoc(messagesColl, {
         sender: 'System',
-        text: `${userProfile.name || 'Rider'} has selected Cash Payment for this ride (₦${activeRide.cost}). Please pay the driver physically upon arrival.`,
+        text: `${userProfile.name || 'Rider'} has selected Cash Payment for this ride (₦${ride.cost}). Please pay the driver physically upon arrival.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isUser: false
-      };
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      const msgs = stored ? JSON.parse(stored) : [];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, msg]));
+        senderId: 'system',
+        createdAt: Date.now()
+      }).catch(e => console.error("Error writing payment system message", e));
     }
 
     onAddNotification({
       id: `notif-${Date.now()}`,
       title: 'Cash Payment Selected',
-      message: `You selected Cash Payment for your ride. Please hand ₦${activeRide.cost} to your driver upon arrival.`,
+      message: `You selected Cash Payment for your ride. Please hand ₦${ride.cost} to your driver upon arrival.`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       date: 'Today',
       isRead: false,
@@ -564,9 +566,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   const handleConfirmTransferPayment = () => {
-    if (!activeRide) return;
+    const ride = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+    if (!ride) return;
     const updatedRide: RideRequest = {
-      ...activeRide,
+      ...ride,
       paymentMethod: 'transfer',
       paymentConfirmedByRider: true,
       paymentValidatedByDriver: false,
@@ -575,24 +578,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     onUpdateRide(updatedRide);
     setShowPaymentSelection(false);
 
-    // Add chat message indicating payment method selection
-    const chatId = joinedPoolId || activeRide.id;
+    // Add chat message indicating payment method selection to Firestore
+    const chatId = ride.id;
     if (chatId) {
-      const msg = {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      addDoc(messagesColl, {
         sender: 'System',
-        text: `${userProfile.name || 'Rider'} has completed the bank transfer of ₦${activeRide.cost} and is waiting for driver validation.`,
+        text: `${userProfile.name || 'Rider'} has completed the bank transfer of ₦${ride.cost} and is waiting for driver validation.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isUser: false
-      };
-      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-      const msgs = stored ? JSON.parse(stored) : [];
-      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, msg]));
+        senderId: 'system',
+        createdAt: Date.now()
+      }).catch(e => console.error("Error writing payment system message", e));
     }
 
     onAddNotification({
       id: `notif-${Date.now()}`,
       title: 'Transfer Payment Confirmed',
-      message: `Your transfer of ₦${activeRide.cost} has been submitted for validation. The driver will confirm receipt on their device.`,
+      message: `Your transfer of ₦${ride.cost} has been submitted for validation. The driver will confirm receipt on their device.`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       date: 'Today',
       isRead: false,
@@ -601,21 +603,22 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   const handleSelectWalletPayment = () => {
-    if (!activeRide) return;
-    if (userProfile.walletBalance < activeRide.cost) {
+    const ride = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+    if (!ride) return;
+    if (userProfile.walletBalance < ride.cost) {
       alert("Insufficient wallet balance! Please reload your wallet or choose another payment method.");
       return;
     }
     
     // Deduct balance
-    const updatedBalance = userProfile.walletBalance - activeRide.cost;
+    const updatedBalance = userProfile.walletBalance - ride.cost;
     onUpdateProfile({ walletBalance: updatedBalance });
 
     // Add transaction
     const newTxn: Transaction = {
       id: `TXN-${Math.floor(10000 + Math.random() * 90000)}`,
-      description: `Ride Payment: ${activeRide.pickup} to ${activeRide.dropoff}`,
-      amount: -activeRide.cost,
+      description: `Ride Payment: ${ride.pickup} to ${ride.dropoff}`,
+      amount: -ride.cost,
       date: 'Today',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       method: 'Wallet Balance',
@@ -625,7 +628,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     onAddTransaction(newTxn);
 
     const updatedRide: RideRequest = {
-      ...activeRide,
+      ...ride,
       paymentMethod: 'wallet',
       paymentConfirmedByRider: true,
       paymentValidatedByDriver: true,
@@ -634,10 +637,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     onUpdateRide(updatedRide);
     setShowPaymentSelection(false);
 
+    // Add chat message indicating payment completed to Firestore
+    const chatId = ride.id;
+    if (chatId) {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      addDoc(messagesColl, {
+        sender: 'System',
+        text: `${userProfile.name || 'Rider'} has completed the payment of ₦${ride.cost} via student wallet.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: 'system',
+        createdAt: Date.now()
+      }).catch(e => console.error("Error writing payment system message", e));
+    }
+
     onAddNotification({
       id: `notif-${Date.now()}`,
       title: 'Wallet Payment Completed',
-      message: `₦${activeRide.cost} has been successfully deducted from your wallet for your ride.`,
+      message: `₦${ride.cost} has been successfully deducted from your wallet for your ride.`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       date: 'Today',
       isRead: false,
@@ -723,7 +739,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     };
   }, [joinedPoolId, poolingState]);
 
-  // Synchronize real-time chat messages from localStorage
+  // Synchronize real-time chat messages from Firestore with localStorage fallback
   useEffect(() => {
     const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
     if (!chatId) {
@@ -731,33 +747,50 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       return;
     }
 
-    const loadChat = () => {
+    // Load initial welcome or localStorage messages first as a visual layout placeholder
+    const loadLocalFallback = () => {
       const stored = localStorage.getItem(`campusride_chat_${chatId}`);
       if (stored) {
         try {
-          const msgs = JSON.parse(stored);
-          setChatMessages(msgs);
-        } catch (e) {
-          console.error("Error parsing chat messages", e);
-        }
-      } else {
-        // If empty, set a system message welcome
-        const welcomeMsg = [
-          { sender: 'System', text: `Welcome to the active transit chat room! Discuss route details safely with your companions and driver.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
-        ];
-        localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(welcomeMsg));
-        setChatMessages(welcomeMsg);
+          return JSON.parse(stored);
+        } catch (e) {}
       }
+      return [
+        { sender: 'System', text: `Welcome to the active transit chat room! Discuss route details safely with your companions and driver.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+      ];
     };
+    setChatMessages(loadLocalFallback());
 
-    loadChat();
-    window.addEventListener('storage', loadChat);
-    const interval = setInterval(loadChat, 1500);
+    // Subscribe to Firestore nested messages subcollection
+    const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+    const unsubscribe = onSnapshot(messagesColl, (snapshot) => {
+      if (!snapshot.empty) {
+        const msgs = snapshot.docs.map(docVal => {
+          const data = docVal.data();
+          return {
+            sender: data.sender || 'System',
+            text: data.text || '',
+            time: data.time || '',
+            isUser: data.senderId === userProfile.id,
+            senderId: data.senderId || '',
+            createdAt: data.createdAt || 0
+          };
+        });
+        // Sort by createdAt ascending
+        msgs.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        setChatMessages(msgs);
+      } else {
+        setChatMessages(loadLocalFallback());
+      }
+    }, (err) => {
+      console.error("Firestore onSnapshot error, using local fallback:", err);
+      setChatMessages(loadLocalFallback());
+    });
+
     return () => {
-      window.removeEventListener('storage', loadChat);
-      clearInterval(interval);
+      unsubscribe();
     };
-  }, [joinedPoolId, activeRide?.id]);
+  }, [joinedPoolId, activeRide?.id, userProfile.id]);
 
   // Sync poolingState reactively based on Firestore activeRide status
   useEffect(() => {
@@ -1018,7 +1051,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   // Chat message submission
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
@@ -1026,50 +1059,67 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
     if (!chatId) return;
 
-    const newMsg = {
-      sender: userProfile.name || 'Me',
-      text: currentInput,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: true,
-      senderId: userProfile.id
-    };
-
-    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-    let msgs = [];
-    if (stored) {
-      try {
-        msgs = JSON.parse(stored);
-      } catch (err) {}
-    }
-    const updated = [...msgs, newMsg];
-    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-    setChatMessages(updated);
     setChatInput('');
+
+    try {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      await addDoc(messagesColl, {
+        sender: userProfile.name || 'Me',
+        text: currentInput,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: userProfile.id,
+        createdAt: Date.now()
+      });
+    } catch (err) {
+      console.error("Error saving chat message to Firestore:", err);
+      // Fallback
+      const newMsg = {
+        sender: userProfile.name || 'Me',
+        text: currentInput,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isUser: true,
+        senderId: userProfile.id
+      };
+      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+      let msgs = [];
+      if (stored) {
+        try { msgs = JSON.parse(stored); } catch (e) {}
+      }
+      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, newMsg]));
+    }
   };
 
   // Quick reply messages
-  const sendQuickReply = (text: string) => {
+  const sendQuickReply = async (text: string) => {
     const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
     if (!chatId) return;
 
-    const newMsg = {
-      sender: userProfile.name || 'Me',
-      text: text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: true,
-      senderId: userProfile.id
-    };
-
-    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-    let msgs = [];
-    if (stored) {
-      try {
-        msgs = JSON.parse(stored);
-      } catch (err) {}
+    try {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      await addDoc(messagesColl, {
+        sender: userProfile.name || 'Me',
+        text: text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: userProfile.id,
+        createdAt: Date.now()
+      });
+    } catch (err) {
+      console.error("Error saving quick reply to Firestore:", err);
+      // Fallback
+      const newMsg = {
+        sender: userProfile.name || 'Me',
+        text: text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isUser: true,
+        senderId: userProfile.id
+      };
+      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+      let msgs = [];
+      if (stored) {
+        try { msgs = JSON.parse(stored); } catch (e) {}
+      }
+      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, newMsg]));
     }
-    const updated = [...msgs, newMsg];
-    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-    setChatMessages(updated);
   };
 
   // Trigger driver transit start
@@ -1560,6 +1610,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       alert(`Success! Refilled wallet with ${currencySymbol}${finalAmount}.`);
     }, 2000);
   };
+
+  const activeReq = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
 
   return (
     <div id="student-portal-viewport" className="flex-1 flex flex-col bg-slate-50 text-slate-800">
@@ -3645,7 +3697,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
           {/* TRUST-BASED RIDE PAYMENT SELECTION MODAL */}
           <AnimatePresence>
-            {showPaymentSelection && activeRide && (
+            {showPaymentSelection && activeReq && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-md">
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -3673,11 +3725,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-4">
                         <div className="text-center pb-2">
                           <p className="text-sm text-slate-600">
-                            Your driver <span className="font-extrabold text-[#00875A]">{activeRide.driverName || 'David Alao'}</span> has accepted your request. How would you like to pay for this trip?
+                            Your driver <span className="font-extrabold text-[#00875A]">{activeReq.driverName || 'David Alao'}</span> has accepted your request. How would you like to pay for this trip?
                           </p>
                           <div className="mt-3 inline-block bg-[#00875A]/10 border border-[#00875A]/20 px-4 py-1.5 rounded-full">
                             <span className="text-xs text-slate-500 uppercase tracking-wider font-bold">Total Fare: </span>
-                            <span className="text-base font-black text-[#00875A]">{currencySymbol}{activeRide.cost}</span>
+                            <span className="text-base font-black text-[#00875A]">{currencySymbol}{activeReq.cost}</span>
                           </div>
                         </div>
 
@@ -3697,7 +3749,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                 <span className="text-[10px] font-mono text-slate-500 shrink-0">Bal: ₦{userProfile.walletBalance.toLocaleString()}</span>
                               </div>
                               <p className="text-xs text-slate-500 leading-relaxed">
-                                Instantly pay ₦{activeRide.cost} using your secure preloaded student wallet balance.
+                                Instantly pay ₦{activeReq.cost} using your secure preloaded student wallet balance.
                               </p>
                             </div>
                           </button>
@@ -3714,7 +3766,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             <div className="space-y-1">
                               <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Pay physically with Cash</h5>
                               <p className="text-xs text-slate-500 leading-relaxed">
-                                Hand over physical cash of {currencySymbol}{activeRide.cost} to the driver after you safely reach your destination.
+                                Hand over physical cash of {currencySymbol}{activeReq.cost} to the driver after you safely reach your destination.
                               </p>
                             </div>
                           </button>
@@ -3742,7 +3794,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-5">
                         <div className="bg-[#00875A]/5 border border-[#00875A]/15 p-4 rounded-2xl text-center">
                           <span className="text-xs text-slate-500 font-bold block uppercase tracking-wider">Amount to Transfer</span>
-                          <span className="text-3xl font-black text-[#00875A] tracking-tight">{currencySymbol}{activeRide.cost}</span>
+                          <span className="text-3xl font-black text-[#00875A] tracking-tight">{currencySymbol}{activeReq.cost}</span>
                         </div>
 
                         {/* Bank Details Display */}
@@ -3985,7 +4037,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               )}
 
               {isSupabaseConfigured && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   {/* Avatar Upload Block */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
                     <div className="flex items-start space-x-3">
@@ -4021,47 +4073,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         className="hidden" 
                       />
                     </label>
-                  </div>
-
-                  {/* University Logo Upload/Mirror Block */}
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
-                    <div className="flex items-start space-x-3">
-                      <img 
-                        referrerPolicy="no-referrer"
-                        src={selectedSchool.logoImage} 
-                        alt="School Logo" 
-                        className="w-12 h-12 object-contain shrink-0 p-1 bg-white rounded-xl border border-slate-200"
-                      />
-                      <div className="text-left">
-                        <span className="text-xs font-bold block text-slate-800 font-sans">University Portal Logo</span>
-                        <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
-                          Save Redeemer's official logo to Supabase, or upload a custom alternative.
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="h-10 bg-white border border-slate-200 hover:border-[#00875A] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs">
-                        <UploadCloud className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{uploadingLogo ? '...' : 'Upload Logo'}</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleLogoUpload} 
-                          disabled={uploadingLogo} 
-                          className="hidden" 
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleMirrorDefaultLogo}
-                        disabled={uploadingLogo}
-                        className="h-10 bg-white border border-slate-200 hover:border-[#00875A] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs"
-                      >
-                        <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{uploadingLogo ? '...' : 'Mirror Logo'}</span>
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}

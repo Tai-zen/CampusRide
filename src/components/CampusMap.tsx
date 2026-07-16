@@ -57,26 +57,6 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   
   // Local state for simulated drivers
   const [drivers, setDrivers] = useState<SimulatedDriver[]>([]);
-  const [mapError, setMapError] = useState<string | null>(null);
-  const [mapMode, setMapMode] = useState<'google' | 'schematic'>(hasValidKey ? 'google' : 'schematic');
-
-  // Capture Google Maps auth and billing errors reactively
-  useEffect(() => {
-    const originalAuthFailure = (window as any).gm_authFailure;
-    (window as any).gm_authFailure = () => {
-      console.warn("Google Maps Auth/Billing Failure detected. Falling back to high-fidelity schematic map.");
-      setMapError("BillingNotEnabledMapError");
-      setMapMode("schematic");
-      if (originalAuthFailure) {
-        try {
-          originalAuthFailure();
-        } catch (e) {}
-      }
-    };
-    return () => {
-      (window as any).gm_authFailure = originalAuthFailure;
-    };
-  }, []);
   
   // Selected stops coordinates
   const pickupStop = stops.find((s) => s.id === pickupId);
@@ -278,42 +258,11 @@ export const CampusMap: React.FC<CampusMapProps> = ({
             <span className="text-[10px] text-gray-500 font-mono block">GPS Feed: {selectedSchool.name} Campus Network</span>
           </div>
         </div>
-
-        {/* Map Mode Switcher */}
-        {hasValidKey && (
-          <div className="flex bg-slate-200/80 p-0.5 rounded-xl border border-slate-200">
-            <button
-              onClick={() => {
-                if (mapError) return;
-                setMapMode('google');
-              }}
-              disabled={!!mapError}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                mapMode === 'google' && !mapError
-                  ? 'bg-white text-slate-800 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 disabled:opacity-40 disabled:cursor-not-allowed'
-              }`}
-              title={mapError ? "Google Maps disabled due to API/billing error" : "Switch to Google Satellite Map"}
-            >
-              Satellite
-            </button>
-            <button
-              onClick={() => setMapMode('schematic')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                mapMode === 'schematic' || mapError
-                  ? 'bg-white text-slate-800 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Schematic {mapError && "⚠️"}
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Main Map Stage */}
       <div className="relative w-full h-[320px] md:h-[400px] bg-slate-100 flex items-center justify-center overflow-hidden">
-        {hasValidKey && mapMode === 'google' && !mapError ? (
+        {hasValidKey ? (
           /* GOOGLE MAPS COMPONENT (Only renders if key is authentic starting with AIzaSy) */
           <APIProvider apiKey={API_KEY} version="weekly">
             <Map
@@ -391,152 +340,14 @@ export const CampusMap: React.FC<CampusMapProps> = ({
             </Map>
           </APIProvider>
         ) : (
-          /* HIGH-FIDELITY SCHEMATIC INTERACTIVE MAP FALLBACK */
-          <div className="relative w-full h-full bg-[#F8FAFC] overflow-hidden flex items-center justify-center select-none">
-            {/* Subtle tech grid mesh */}
-            <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#BE5912_1.5px,transparent_1.5px)] [background-size:20px_20px]"></div>
-
-            {/* Simulated Campus Boundary lines */}
-            <div className="absolute w-[92%] h-[92%] rounded-[40px] border border-dashed border-slate-200 pointer-events-none"></div>
-
-            {/* Campus Road Networks */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none">
-              {stops.map((stop, index) => {
-                const nextStop = stops[(index + 1) % stops.length];
-                const start = getCoordinates(stop.lat, stop.lng);
-                const end = getCoordinates(nextStop.lat, nextStop.lng);
-                return (
-                  <line
-                    key={`road-${index}`}
-                    x1={start.x}
-                    y1={start.y}
-                    x2={end.x}
-                    y2={end.y}
-                    className="stroke-slate-200/90 stroke-[5] stroke-linecap-round"
-                  />
-                );
-              })}
-              
-              {/* Active travel route line */}
-              {pickupCoords && dropoffCoords && (
-                <path
-                  d={`M ${pickupCoords.xNum}% ${pickupCoords.yNum}% L ${dropoffCoords.xNum}% ${dropoffCoords.yNum}%`}
-                  fill="none"
-                  stroke="#BE5912"
-                  strokeWidth="3"
-                  strokeDasharray="6 4"
-                />
-              )}
-            </svg>
-
-            {/* Clickable and Interactive Campus Stops */}
-            {stops.map((stop) => {
-              const isPickup = stop.id === pickupId;
-              const isDropoff = stop.id === dropoffId;
-              const coords = getCoordinates(stop.lat, stop.lng);
-
-              return (
-                <button
-                  key={stop.id}
-                  onClick={() => {
-                    if (onSelectPickup && !pickupId) {
-                      onSelectPickup(stop.id);
-                    } else if (onSelectDropoff && pickupId && !dropoffId) {
-                      onSelectDropoff(stop.id);
-                    }
-                  }}
-                  style={{ left: coords.x, top: coords.y }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 z-10 focus:outline-hidden group"
-                >
-                  {isPickup ? (
-                    <div className="relative flex items-center justify-center">
-                      <span className="absolute w-8 h-8 rounded-full bg-[#BE5912]/20 animate-ping"></span>
-                      <div className="w-7 h-7 bg-[#BE5912] text-white rounded-full border-2 border-white shadow-md flex items-center justify-center hover:scale-110 transition-transform duration-200">
-                        <MapPin className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="absolute top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-950 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-sm z-20">
-                        Pickup: {stop.name}
-                      </span>
-                    </div>
-                  ) : isDropoff ? (
-                    <div className="relative flex items-center justify-center">
-                      <div className="w-7 h-7 bg-slate-900 text-white rounded-full border-2 border-white shadow-md flex items-center justify-center hover:scale-110 transition-transform duration-200">
-                        <Navigation className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="absolute top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-950 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-sm z-20">
-                        Dropoff: {stop.name}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="relative flex items-center justify-center">
-                      <div className="w-5 h-5 bg-white border-2 border-slate-300 text-slate-500 rounded-full shadow-xs flex items-center justify-center hover:border-[#BE5912] hover:scale-110 transition-all duration-200">
-                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full group-hover:bg-[#BE5912]"></div>
-                      </div>
-                      
-                      {/* Interactive stop text tooltips */}
-                      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
-                        {stop.name}
-                      </div>
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-
-            {/* Drivers Live Simulation Markers */}
-            {drivers.map((drv) => {
-              const isMatchedDriver = (poolingState !== 'idle' && drv.name === matchedDriverName);
-              const coords = getCoordinates(drv.lat, drv.lng);
-
-              return (
-                <div
-                  key={drv.id}
-                  style={{ left: coords.x, top: coords.y }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-1000 z-20 group"
-                >
-                  <div 
-                    className={`p-2 rounded-xl flex items-center justify-center shadow-md border-2 transition-transform duration-300 ${
-                      isMatchedDriver 
-                        ? 'bg-[#BE5912] border-white scale-110 text-white animate-pulse' 
-                        : 'bg-white border-[#BE5912] text-[#BE5912] scale-95'
-                    }`}
-                    style={{ transform: `rotate(${drv.angle}deg)` }}
-                  >
-                    <div style={{ transform: `rotate(${-drv.angle}deg)` }}>
-                      {getVehicleIcon(drv.vehicleType)}
-                    </div>
-                  </div>
-
-                  {/* Driver Name Label */}
-                  <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-white border border-slate-150 px-1.5 py-0.5 rounded text-[8px] font-black text-slate-600 whitespace-nowrap shadow-xs pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    {drv.name}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Instruction Banner if Key is Missing or has Error */}
-            {mapError ? (
-              <div className="absolute bottom-4 left-4 right-4 bg-amber-950/95 text-white p-3.5 rounded-2xl border border-amber-500/30 flex items-start space-x-3 shadow-xl backdrop-blur-xs z-30 animate-fadeIn">
-                <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 block">Google Maps Billing Required</span>
-                  <p className="text-[10px] text-gray-200 leading-normal">
-                    The provided Google Maps key lacks enabled billing (<code>BillingNotEnabledMapError</code>). We have seamlessly switched you to our high-fidelity schematic campus map!
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 text-white p-3.5 rounded-2xl border border-slate-700/50 flex items-start space-x-3 shadow-xl backdrop-blur-xs z-30 animate-fadeIn pointer-events-none">
-                <Info className="w-5 h-5 text-[#BE5912] shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-[#BE5912] block">Interactive Map Feed Loaded</span>
-                  <p className="text-[10px] text-gray-300 leading-normal">
-                    To connect with real satellite view & detailed paths, enter your <code>GOOGLE_MAPS_PLATFORM_KEY</code> in <strong>Settings</strong> (⚙️ top-right) → <strong>Secrets</strong>.
-                  </p>
-                </div>
-              </div>
-            )}
+          <div className="flex flex-col items-center justify-center text-center p-6 space-y-4">
+            <Info className="w-12 h-12 text-[#BE5912] animate-bounce" />
+            <div className="space-y-1 max-w-sm">
+              <h4 className="text-sm font-black uppercase tracking-wider text-slate-800">Google Maps API Key Required</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                To load the interactive Google Maps view, please enter your valid <code>GOOGLE_MAPS_PLATFORM_KEY</code> in the Settings or Secrets panel.
+              </p>
+            </div>
           </div>
         )}
       </div>

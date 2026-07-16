@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriverState, RideRequest, AppNotification, Transaction } from '../types';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, setDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, setDoc, doc, getDoc, addDoc } from 'firebase/firestore';
 import { isSupabaseConfigured, uploadFile, uploadLogoFromUrl } from '../lib/supabase';
 import { 
   Car, 
@@ -212,31 +212,49 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       return;
     }
     const chatId = activeRide.id;
-    const loadChat = () => {
+
+    // Load initial welcome or localStorage messages first as a visual layout placeholder
+    const loadLocalFallback = () => {
       const stored = localStorage.getItem(`campusride_chat_${chatId}`);
       if (stored) {
         try {
-          const msgs = JSON.parse(stored);
-          setChatMessages(msgs);
-        } catch (e) {
-          console.error("Error parsing chat messages", e);
-        }
-      } else {
-        // If empty, set welcome system msg
-        const welcome = [
-          { sender: 'System', text: `Welcome to the active transit chat room! Discuss route details safely with your companions and driver.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
-        ];
-        localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(welcome));
-        setChatMessages(welcome);
+          return JSON.parse(stored);
+        } catch (e) {}
       }
+      return [
+        { sender: 'System', text: `Welcome to the active transit chat room! Discuss route details safely with your companions and driver.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isUser: false }
+      ];
     };
+    setChatMessages(loadLocalFallback());
 
-    loadChat();
-    window.addEventListener('storage', loadChat);
-    const interval = setInterval(loadChat, 1500);
+    // Subscribe to Firestore nested messages subcollection
+    const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+    const unsubscribe = onSnapshot(messagesColl, (snapshot) => {
+      if (!snapshot.empty) {
+        const msgs = snapshot.docs.map(docVal => {
+          const data = docVal.data();
+          return {
+            sender: data.sender || 'System',
+            text: data.text || '',
+            time: data.time || '',
+            isUser: data.senderId === driverProfile.id,
+            senderId: data.senderId || '',
+            createdAt: data.createdAt || 0
+          };
+        });
+        // Sort by createdAt ascending
+        msgs.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        setChatMessages(msgs);
+      } else {
+        setChatMessages(loadLocalFallback());
+      }
+    }, (err) => {
+      console.error("Firestore onSnapshot error, using local fallback:", err);
+      setChatMessages(loadLocalFallback());
+    });
+
     return () => {
-      window.removeEventListener('storage', loadChat);
-      clearInterval(interval);
+      unsubscribe();
     };
   }, [activeRide?.id]);
 
@@ -249,51 +267,72 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     }
   }, [chatMessages, isChatOverlayOpen]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || !activeRide) return;
 
     const chatId = activeRide.id;
-    const newMsg = {
-      sender: `${driverProfile.name} (Driver)`,
-      text: chatInput,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: false
-    };
-
-    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-    let msgs = [];
-    if (stored) {
-      try {
-        msgs = JSON.parse(stored);
-      } catch (err) {}
-    }
-    const updated = [...msgs, newMsg];
-    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-    setChatMessages(updated);
+    const currentInput = chatInput;
     setChatInput('');
+
+    try {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      await addDoc(messagesColl, {
+        sender: `${driverProfile.name} (Driver)`,
+        text: currentInput,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: driverProfile.id,
+        createdAt: Date.now()
+      });
+    } catch (err) {
+      console.error("Error saving chat message to Firestore:", err);
+      // Fallback
+      const newMsg = {
+        sender: `${driverProfile.name} (Driver)`,
+        text: currentInput,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isUser: true,
+        senderId: driverProfile.id
+      };
+      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+      let msgs = [];
+      if (stored) {
+        try { msgs = JSON.parse(stored); } catch (e) {}
+      }
+      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, newMsg]));
+    }
   };
 
-  const sendQuickReply = (text: string) => {
+  const sendQuickReply = async (text: string) => {
     if (!activeRide) return;
     const chatId = activeRide.id;
-    const newMsg = {
-      sender: `${driverProfile.name} (Driver)`,
-      text: text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isUser: false
-    };
 
-    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-    let msgs = [];
-    if (stored) {
-      try {
-        msgs = JSON.parse(stored);
-      } catch (err) {}
+    try {
+      const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+      await addDoc(messagesColl, {
+        sender: `${driverProfile.name} (Driver)`,
+        text: text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: driverProfile.id,
+        createdAt: Date.now()
+      });
+    } catch (err) {
+      console.error("Error saving quick reply to Firestore:", err);
+      // Fallback
+      const newMsg = {
+        sender: `${driverProfile.name} (Driver)`,
+        text: text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isUser: true,
+        senderId: driverProfile.id
+      };
+      const stored = localStorage.getItem(`campusride_chat_${chatId}`);
+      let msgs = [];
+      if (stored) {
+        try { msgs = JSON.parse(stored); } catch (e) {}
+      }
+      localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, newMsg]));
     }
-    const updated = [...msgs, newMsg];
-    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify(updated));
-    setChatMessages(updated);
   };
 
   // Local Trust-Transfer Bank details state
@@ -780,7 +819,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Completed Travels</span>
                 <span className="text-2xl font-extrabold text-[#BE5912] block">{driverProfile.completedTripsCount}</span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-orange-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center">
                 <Car className="w-5 h-5" />
               </div>
             </div>
@@ -922,18 +961,17 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                                   };
                                   onUpdateRide(updated);
 
-                                  // Add system chat notification
+                                  // Add system chat notification to Firestore
                                   const chatId = activeRide.id;
                                   if (chatId) {
-                                    const msg = {
+                                    const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+                                    addDoc(messagesColl, {
                                       sender: 'System',
                                       text: `Driver ${driverProfile.name} has validated receipt of the ₦${activeRide.cost} bank transfer. Trip paid in full.`,
                                       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                      isUser: false
-                                    };
-                                    const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-                                    const msgs = stored ? JSON.parse(stored) : [];
-                                    localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, msg]));
+                                      senderId: 'system',
+                                      createdAt: Date.now()
+                                    }).catch(e => console.error("Error writing system message to Firestore", e));
                                   }
 
                                   onAddNotification({
@@ -975,18 +1013,17 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                                 };
                                 onUpdateRide(updated);
 
-                                // Add system chat notification
+                                // Add system chat notification to Firestore
                                 const chatId = activeRide.id;
                                 if (chatId) {
-                                  const msg = {
+                                  const messagesColl = collection(db, 'rideRequests', chatId, 'messages');
+                                  addDoc(messagesColl, {
                                     sender: 'System',
                                     text: `Driver ${driverProfile.name} has confirmed receiving the ₦${activeRide.cost} physical cash payment.`,
                                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                    isUser: false
-                                  };
-                                  const stored = localStorage.getItem(`campusride_chat_${chatId}`);
-                                  const msgs = stored ? JSON.parse(stored) : [];
-                                  localStorage.setItem(`campusride_chat_${chatId}`, JSON.stringify([...msgs, msg]));
+                                    senderId: 'system',
+                                    createdAt: Date.now()
+                                  }).catch(e => console.error("Error writing system message to Firestore", e));
                                 }
 
                                 onAddNotification({
@@ -1517,7 +1554,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             )}
 
             {isSupabaseConfigured && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 {/* Avatar Upload Block */}
                 <div className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col justify-between space-y-4">
                   <div className="flex items-start space-x-3">
@@ -1553,47 +1590,6 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       className="hidden" 
                     />
                   </label>
-                </div>
-
-                {/* University Logo Upload/Mirror Block */}
-                <div className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col justify-between space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <img 
-                      referrerPolicy="no-referrer"
-                      src={UNIVERSITIES.find(u => u.id === (selectedSchoolId || 'run'))?.logoImage || UNIVERSITIES[0].logoImage} 
-                      alt="School Logo" 
-                      className="w-12 h-12 object-contain shrink-0 p-1 bg-white rounded-xl border border-gray-150"
-                    />
-                    <div className="text-left">
-                      <span className="text-xs font-bold block text-slate-800 font-sans">University Portal Logo</span>
-                      <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
-                        Save Redeemer's official logo to Supabase, or upload a custom alternative.
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="h-10 bg-white border border-gray-150 hover:border-[#BE5912] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs">
-                      <UploadCloud className="w-3.5 h-3.5 text-gray-500" />
-                      <span>{uploadingLogo ? '...' : 'Upload Logo'}</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleLogoUpload} 
-                        disabled={uploadingLogo} 
-                        className="hidden" 
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleMirrorDefaultLogo}
-                      disabled={uploadingLogo}
-                      className="h-10 bg-white border border-gray-150 hover:border-[#BE5912] rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-xs"
-                    >
-                      <ImageIcon className="w-3.5 h-3.5 text-gray-500" />
-                      <span>{uploadingLogo ? '...' : 'Mirror Logo'}</span>
-                    </button>
-                  </div>
                 </div>
               </div>
             )}

@@ -153,6 +153,20 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["logoImage"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Represents a single chat message sent in the transit chat room.",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string", "maxLength": 100 },
+        "text": { "type": "string", "maxLength": 1000 },
+        "time": { "type": "string", "maxLength": 50 },
+        "isUser": { "type": "boolean" },
+        "senderId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["sender", "text", "senderId", "createdAt"]
     }
   },
   "firestore": {
@@ -179,6 +193,10 @@
     "/rideRequests/{rideId}": {
       "schema": "RideRequest",
       "description": "Public ride request listings."
+    },
+    "/rideRequests/{rideId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Nested chat messages for a ride pool/request."
     },
     "/pendingDrivers/{driverId}": {
       "schema": "PendingDriver",
