@@ -56,6 +56,7 @@ interface DriverPortalProps {
   onNavigate?: (view: string) => void;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
+  onResetSystem?: () => void;
 }
 
 export const DriverPortal: React.FC<DriverPortalProps> = ({
@@ -74,6 +75,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   onNavigate,
   isDarkMode = false,
   onToggleDarkMode,
+  onResetSystem,
 }) => {
   // Local Shift States
   const [shiftOnline, setShiftOnline] = useState<boolean>(() => driverProfile?.status !== 'Offline');
@@ -83,12 +85,17 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   const [scheduledRides, setScheduledRides] = useState<any[]>([]);
   const [liveDistance, setLiveDistance] = useState<number>(0);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [cancellationNotice, setCancellationNotice] = useState<string | null>(null);
 
   // Supabase Media & Logo Upload states for Drivers
   const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
   const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
   const [supabaseSuccess, setSupabaseSuccess] = useState<string | null>(null);
+
+  const [appNotificationsEnabled, setAppNotificationsEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('app_notifications_enabled') !== 'false';
+  });
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -528,16 +535,38 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 
   // Monitor active trip cancellation or status changes from Firestore in real-time
   const prevActiveRideIdRef = useRef<string | null>(null);
+  const prevActiveRideStatusRef = useRef<string | null>(null);
   useEffect(() => {
     if (activeRide) {
       prevActiveRideIdRef.current = activeRide.id;
+      prevActiveRideStatusRef.current = activeRide.status;
     } else if (prevActiveRideIdRef.current) {
       // Transitioned from active ride to no active ride!
-      // This means the trip was completed or cancelled by the student
+      const cancelledId = prevActiveRideIdRef.current;
+      const statusAtCancel = prevActiveRideStatusRef.current;
       prevActiveRideIdRef.current = null;
+      prevActiveRideStatusRef.current = null;
+
+      // Check if the ride is in driverPastRides with status 'canceled'
+      const wasCanceled = driverPastRides?.some(r => r.id === cancelledId && r.status === 'canceled');
+
+      if (wasCanceled && statusAtCancel !== 'completed' && statusAtCancel !== 'canceled') {
+        const message = "The student passenger has cancelled your active ride request. You have been placed back into the idle queue to receive new dispatches.";
+        setCancellationNotice(message);
+        onAddNotification({
+          id: `driver-cancel-${Date.now()}`,
+          title: 'Active Ride Cancelled',
+          message: 'The student passenger has cancelled the active ride request. Your status has been returned to Idle.',
+          date: 'Jun 19, 2026',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isRead: false,
+          type: 'warning'
+        });
+      }
+
       onUpdateDriverProfile({ status: 'Idle' });
     }
-  }, [activeRide, onUpdateDriverProfile]);
+  }, [activeRide, driverPastRides, onUpdateDriverProfile, onAddNotification]);
 
   // Toggle shift Online / Offline
   const handleToggleShift = () => {
@@ -836,7 +865,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/25 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider block font-mono">Average Rating</span>
-                <span className="text-2xl font-extrabold text-[#BE5912] block">★ {driverProfile.rating}</span>
+                <span className="text-2xl font-extrabold text-[#BE5912] block">★ {driverProfile.ratingsCount > 0 ? (driverProfile.rating || 5.0).toFixed(1) : '0.0'}</span>
                 <span className="text-[9px] text-[#BE5912] font-bold bg-[#BE5912]/10 px-2 rounded-full inline-block">
                   {driverProfile.ratingsCount} reviews
                 </span>
@@ -1191,7 +1220,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     <p className="text-[10px] text-gray-400">Verbatim comments from Redeemer's campus commuters.</p>
                   </div>
                   <span className="text-[10px] bg-[#BE5912]/10 text-[#BE5912] font-bold px-2.5 py-1 rounded-lg font-mono">
-                    ★ {driverProfile.rating || '5.0'} Avg
+                    ★ {driverProfile.ratingsCount > 0 ? (driverProfile.rating || 5.0).toFixed(1) : '0.0'} Avg
                   </span>
                 </div>
 
@@ -1708,6 +1737,26 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#BE5912]"></div>
               </label>
             </div>
+
+            <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+              <div>
+                <span className="text-xs font-bold block text-slate-800">In-App Notification Alerts</span>
+                <span className="text-[10px] text-gray-400 block">Turn on/off real-time popups and audible/visual notification updates</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={appNotificationsEnabled} 
+                  onChange={() => {
+                    const newVal = !appNotificationsEnabled;
+                    setAppNotificationsEnabled(newVal);
+                    localStorage.setItem('app_notifications_enabled', String(newVal));
+                  }} 
+                  className="sr-only peer" 
+                />
+                <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#BE5912]"></div>
+              </label>
+            </div>
           </div>
 
           <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
@@ -1975,6 +2024,37 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           </motion.div>
         );
       })()}
+
+      {/* CANCELLATION NOTICE OVERLAY MODAL */}
+      <AnimatePresence>
+        {cancellationNotice && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl border border-red-100 space-y-4"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-extrabold text-red-600">Active Ride Cancelled</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {cancellationNotice}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancellationNotice(null)}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wide transition-all shadow-sm cursor-pointer"
+              >
+                Acknowledge & Dismiss
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

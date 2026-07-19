@@ -44,6 +44,9 @@ import {
 } from 'firebase/firestore';
 
 const showNativeNotification = async (title: string, body: string) => {
+  const enabled = localStorage.getItem('app_notifications_enabled') !== 'false';
+  if (!enabled) return;
+
   if (!('Notification' in window)) return;
   if (Notification.permission === 'granted') {
     if ('serviceWorker' in navigator) {
@@ -144,6 +147,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
   const [driverPastRides, setDriverPastRides] = useState<RideRequest[]>([]);
+  const [studentPastRides, setStudentPastRides] = useState<RideRequest[]>([]);
 
   // Helper to get active user ID
   const getActiveUid = () => {
@@ -330,10 +334,14 @@ export default function App() {
       unsubRide = onSnapshot(q, (snapshot) => {
         let active: RideRequest | null = null;
         let latestRide: RideRequest | null = null;
+        const past: RideRequest[] = [];
         snapshot.forEach(doc => {
           const r = doc.data() as RideRequest;
           if (!latestRide || (r.createdAt || 0) > (latestRide.createdAt || 0)) {
             latestRide = r;
+          }
+          if (r.status === 'completed' || r.status === 'canceled') {
+            past.push(r);
           }
         });
         if (latestRide) {
@@ -344,6 +352,7 @@ export default function App() {
           }
         }
         setActiveRide(active);
+        setStudentPastRides(past.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
       }, (error) => {
         console.error("Firestore error reading student active ride", error);
       });
@@ -801,6 +810,96 @@ export default function App() {
     }
   };
 
+  const handleResetSystemToStateZero = async () => {
+    try {
+      // 1. Delete all rideRequests from Firestore
+      const rideRequestsSnap = await getDocs(collection(db, 'rideRequests'));
+      const rideBatch = writeBatch(db);
+      let rideCount = 0;
+      rideRequestsSnap.forEach(docSnap => {
+        rideBatch.delete(docSnap.ref);
+        rideCount++;
+      });
+      if (rideCount > 0) {
+        await rideBatch.commit();
+      }
+
+      // 2. Clear all local storage keys related to pools and pooling states
+      localStorage.removeItem('campusride_active_pools');
+      
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith('campusride_joined_pool_id_') || 
+          key.startsWith('campusride_pooling_state_') || 
+          key.startsWith('campusride_chat_')
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      // 3. Reset Firestore Users:
+      // Update any user in Firestore to a clean slate (Offline, empty ride request, ₦2500 walletBalance)
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const userBatch = writeBatch(db);
+      let userCount = 0;
+      usersSnap.forEach(userDocSnap => {
+        const data = userDocSnap.data();
+        if (data.role === 'student') {
+          userBatch.update(userDocSnap.ref, {
+            walletBalance: 2500,
+            tripsThisWeek: 0,
+            carpoolRides: 0,
+            savedThisMonth: 0,
+            activeRide: null,
+            joinedPoolId: null
+          });
+          userCount++;
+        } else if (data.role === 'driver') {
+          userBatch.update(userDocSnap.ref, {
+            status: 'Offline',
+            todayEarnings: 0,
+            completedTripsCount: 0,
+            hoursOnline: 0,
+            activeRide: null
+          });
+          userCount++;
+        }
+      });
+      if (userCount > 0) {
+        await userBatch.commit();
+      }
+
+      // 4. Update the local states in App.tsx
+      setActiveRide(null);
+      setNotifications([]);
+      setTransactions([]);
+      setDriverPastRides([]);
+      setStudentPastRides([]);
+
+      // Reset local student/driver profile state if current user is logged in
+      const uid = getActiveUid();
+      if (uid) {
+        const freshDoc = await getDoc(doc(db, 'users', uid));
+        if (freshDoc.exists()) {
+          const profile = freshDoc.data();
+          if (profile.role === 'student') {
+            setUserProfile(profile as UserProfile);
+          } else if (profile.role === 'driver') {
+            setDriverProfile(profile as DriverState);
+          }
+        }
+      }
+
+      alert("System successfully reset to State Zero: all ride requests and active pools are deleted, and accounts are set to default offline / zero states.");
+    } catch (err: any) {
+      console.error("Error resetting system to state zero:", err);
+      alert("Failed to reset database: " + (err.message || err));
+    }
+  };
+
   // 1. If checking cached auth, show loader
   if (loadingAuth) {
     return (
@@ -846,6 +945,7 @@ export default function App() {
         onChangeRole={handleChangeRole}
         userProfile={activeSidebarProfile}
         selectedSchoolId={selectedSchoolId || undefined}
+        onResetSystem={handleResetSystemToStateZero}
       />
 
       {/* Main Viewport Content block */}
@@ -896,6 +996,7 @@ export default function App() {
             notifications={notifications}
             transactions={transactions}
             activeRide={activeRide}
+            studentPastRides={studentPastRides}
             onNavigate={setActiveView}
             onUpdateProfile={handleUpdateProfile}
             onAddTransaction={handleAddTransaction}
@@ -909,6 +1010,7 @@ export default function App() {
             onDeleteAccount={handleDeleteAccount}
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+            onResetSystem={handleResetSystemToStateZero}
           />
         )}
 
@@ -929,6 +1031,7 @@ export default function App() {
             onNavigate={setActiveView}
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+            onResetSystem={handleResetSystemToStateZero}
           />
         )}
 
@@ -941,6 +1044,7 @@ export default function App() {
             notifications={notifications}
             onMarkNotificationsRead={handleMarkNotificationsRead}
             onClearNotifications={handleClearNotifications}
+            onResetSystem={handleResetSystemToStateZero}
           />
         )}
       </main>

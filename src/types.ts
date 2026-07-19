@@ -49,12 +49,16 @@ export interface RideRequest {
   driverAvatar?: string;
   driverVehicle?: string;
   driverRating?: number;
+  driverPlateNumber?: string;
+  driverBankName?: string;
+  driverBankAccountNumber?: string;
+  driverBankAccountName?: string;
   cost: number;
   etaMinutes: number;
   date: string;
   time: string;
   createdAt?: number;
-  paymentMethod?: 'cash' | 'transfer';
+  paymentMethod?: 'cash' | 'transfer' | 'wallet';
   paymentConfirmedByRider?: boolean;
   paymentValidatedByDriver?: boolean;
   riderPaid?: boolean;

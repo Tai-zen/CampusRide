@@ -55,6 +55,7 @@ interface AdminCentralProps {
   notifications?: AppNotification[];
   onMarkNotificationsRead?: () => void;
   onClearNotifications?: () => void;
+  onResetSystem?: () => void;
 }
 
 // Initial mock driver roster list for admin control panels
@@ -67,7 +68,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
   selectedSchoolId,
   notifications = [],
   onMarkNotificationsRead,
-  onClearNotifications
+  onClearNotifications,
+  onResetSystem
 }) => {
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const mapImage = selectedSchool.mapImage;
@@ -693,6 +695,22 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
         </div>
 
         <div className="mt-3 sm:mt-0 flex items-center space-x-3.5 relative">
+          {/* Reset System to State Zero */}
+          {onResetSystem && (
+            <button
+              onClick={() => {
+                if (window.confirm("Are you sure you want to reset all accounts and active pools/rides to state zero? This will purge all active rides, clear pools, and reset wallet balances.")) {
+                  onResetSystem();
+                }
+              }}
+              className="p-2.5 text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-xl transition duration-150 relative cursor-pointer shadow-sm bg-white flex items-center justify-center gap-1.5 text-xs font-bold"
+              title="Reset System to State Zero"
+            >
+              <Trash2 className="w-4 h-4 text-red-500 animate-pulse" />
+              <span className="hidden md:inline">Reset System</span>
+            </button>
+          )}
+
           {/* Notification Bell Icon */}
           <div className="relative">
             <button

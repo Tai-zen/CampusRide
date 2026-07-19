@@ -40,6 +40,7 @@ interface SidebarProps {
     plateNumber?: string;
   };
   selectedSchoolId?: string;
+  onResetSystem?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -50,7 +51,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   notifications,
   onChangeRole,
   userProfile,
-  selectedSchoolId
+  selectedSchoolId,
+  onResetSystem
 }) => {
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -196,7 +198,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Upper Branding Section */}
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center space-x-3 mb-6">
-            <div className={`w-11 h-11 rounded-xl p-0.5 flex items-center justify-center overflow-hidden shrink-0 border ${currentRole === 'driver' ? 'bg-orange-50 border-orange-100 dark:bg-slate-800 dark:border-slate-700' : 'bg-emerald-50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700'}`}>
+            <div className="w-11 h-11 rounded-xl p-0.5 flex items-center justify-center overflow-hidden shrink-0 border bg-emerald-50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700">
               <img 
                 referrerPolicy="no-referrer"
                 src={selectedSchool.logoImage} 
@@ -213,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* User Status Profile Card */}
-          <div className={`p-3 rounded-xl border flex items-center space-x-3 ${currentRole === 'driver' ? 'bg-orange-50/50 border-orange-100 dark:bg-slate-800 dark:border-slate-700' : 'bg-emerald-50/50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700'}`}>
+          <div className="p-3 rounded-xl border flex items-center space-x-3 bg-emerald-50/50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700">
             <img 
               referrerPolicy="no-referrer"
               src={userProfile.avatar} 
@@ -221,9 +223,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-10 h-10 rounded-full object-cover border border-[#c3c6d7] shadow-sm shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <h4 className={`text-sm font-bold truncate ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>{userProfile.name}</h4>
+              <h4 className="text-sm font-bold truncate text-[#00875A]">{userProfile.name}</h4>
               <div className="flex flex-col space-y-0.5">
-                <span className={`text-[10px] font-extrabold uppercase font-mono tracking-wider ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>
+                <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-[#00875A]">
                   {currentRole === 'student' ? 'Rider' : currentRole === 'driver' ? 'Driver' : 'Admin'}
                 </span>
                 <span className="text-[11px] text-gray-500 font-mono tracking-wide truncate">

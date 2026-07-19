@@ -58,6 +58,9 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   // Local state for simulated drivers
   const [drivers, setDrivers] = useState<SimulatedDriver[]>([]);
   
+  // Map visualization state ('google' or 'vector' schematic board)
+  const [mapMode, setMapMode] = useState<'google' | 'vector'>('vector');
+  
   // Selected stops coordinates
   const pickupStop = stops.find((s) => s.id === pickupId);
   const dropoffStop = stops.find((s) => s.id === dropoffId);
@@ -250,19 +253,44 @@ export const CampusMap: React.FC<CampusMapProps> = ({
       {/* Top Header / Map controls bar */}
       <div className="bg-slate-50 border-b border-slate-150 p-4 flex justify-between items-center gap-3">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#BE5912]/10 flex items-center justify-center text-[#BE5912] animate-pulse">
-            <Compass className="w-4.5 h-4.5" />
-          </div>
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider block">Campus GPS & Location Tracker</h3>
             <span className="text-[10px] text-gray-500 font-mono block">GPS Feed: {selectedSchool.name} Campus Network</span>
           </div>
         </div>
+
+        {/* Map mode switcher */}
+        <div className="flex items-center bg-slate-200/60 p-1 rounded-xl border border-slate-250">
+          <button
+            onClick={() => setMapMode('google')}
+            disabled={!hasValidKey}
+            className={`px-3 py-1 text-[10px] font-extrabold uppercase rounded-lg transition-all ${
+              !hasValidKey
+                ? 'opacity-40 cursor-not-allowed text-slate-400'
+                : mapMode === 'google'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+            title={!hasValidKey ? "Satellite Map requires a Google Maps API Key" : "Switch to Google Satellite Map"}
+          >
+            🛰️ Satellite
+          </button>
+          <button
+            onClick={() => setMapMode('vector')}
+            className={`px-3 py-1 text-[10px] font-extrabold uppercase rounded-lg transition-all ${
+              mapMode === 'vector'
+                ? 'bg-[#BE5912] text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            🎨 2D Vector
+          </button>
+        </div>
       </div>
 
       {/* Main Map Stage */}
       <div className="relative w-full h-[320px] md:h-[400px] bg-slate-100 flex items-center justify-center overflow-hidden">
-        {hasValidKey ? (
+        {mapMode === 'google' && hasValidKey ? (
           /* GOOGLE MAPS COMPONENT (Only renders if key is authentic starting with AIzaSy) */
           <APIProvider apiKey={API_KEY} version="weekly">
             <Map
@@ -340,13 +368,151 @@ export const CampusMap: React.FC<CampusMapProps> = ({
             </Map>
           </APIProvider>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center p-6 space-y-4">
-            <Info className="w-12 h-12 text-[#BE5912] animate-bounce" />
-            <div className="space-y-1 max-w-sm">
-              <h4 className="text-sm font-black uppercase tracking-wider text-slate-800">Google Maps API Key Required</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                To load the interactive Google Maps view, please enter your valid <code>GOOGLE_MAPS_PLATFORM_KEY</code> in the Settings or Secrets panel.
-              </p>
+          /* BEAUTIFUL 2D VECTOR BLUEPRINT MAP FALLBACK */
+          <div className="relative w-full h-full bg-slate-50 flex items-center justify-center overflow-hidden">
+            {/* Ambient stylized map grid representation */}
+            <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1.5px)] [background-size:16px_16px] opacity-70"></div>
+            
+            {/* Path network lines between stops to show streets */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              {stops.map((stop, index) => {
+                const nextStop = stops[(index + 1) % stops.length];
+                const fromCoords = getCoordinates(stop.lat, stop.lng);
+                const toCoords = getCoordinates(nextStop.lat, nextStop.lng);
+                
+                return (
+                  <line
+                    key={`line-${stop.id}`}
+                    x1={fromCoords.x}
+                    y1={fromCoords.y}
+                    x2={toCoords.x}
+                    y2={toCoords.y}
+                    stroke="#cbd5e1"
+                    strokeWidth="2.5"
+                    strokeDasharray="4 4"
+                    className="opacity-50"
+                  />
+                );
+              })}
+
+              {/* Active Route path between Selected Pickup and Dropoff */}
+              {pickupStop && dropoffStop && pickupCoords && dropoffCoords && (
+                <line
+                  x1={pickupCoords.x}
+                  y1={pickupCoords.y}
+                  x2={dropoffCoords.x}
+                  y2={dropoffCoords.y}
+                  stroke="#BE5912"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  className="animate-pulse"
+                />
+              )}
+            </svg>
+
+            {/* School Campus Outline background watermark */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-[0.06] pointer-events-none select-none">
+              <img 
+                referrerPolicy="no-referrer"
+                src={selectedSchool.logoImage} 
+                alt="" 
+                className="w-56 h-56 object-contain filter grayscale"
+              />
+            </div>
+
+            {/* Interactive Stop Badges */}
+            {stops.map((stop) => {
+              const coords = getCoordinates(stop.lat, stop.lng);
+              const isPickup = stop.id === pickupId;
+              const isDropoff = stop.id === dropoffId;
+              
+              return (
+                <button
+                  key={`vector-stop-${stop.id}`}
+                  onClick={() => {
+                    if (onSelectPickup && !pickupId) {
+                      onSelectPickup(stop.id);
+                    } else if (onSelectDropoff && pickupId && !dropoffId) {
+                      onSelectDropoff(stop.id);
+                    }
+                  }}
+                  style={{ left: coords.x, top: coords.y }}
+                  className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-20 cursor-pointer focus:outline-hidden"
+                  title={stop.name}
+                >
+                  {isPickup ? (
+                    <div className="relative flex items-center justify-center scale-110">
+                      <span className="absolute w-8 h-8 rounded-full bg-[#BE5912]/30 animate-ping"></span>
+                      <div className="w-8 h-8 bg-[#BE5912] text-white rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <div className="absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-wider z-30">
+                        Pick Up
+                      </div>
+                    </div>
+                  ) : isDropoff ? (
+                    <div className="relative flex items-center justify-center scale-110">
+                      <span className="absolute w-8 h-8 rounded-full bg-slate-900/20 animate-pulse"></span>
+                      <div className="w-8 h-8 bg-slate-900 text-white rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+                        <Navigation className="w-4 h-4 rotate-45" />
+                      </div>
+                      <div className="absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-wider z-30">
+                        Drop Off
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative flex items-center justify-center">
+                      <div className="w-5 h-5 bg-white hover:bg-slate-100 border-2 border-slate-300 hover:border-[#BE5912] rounded-full transition shadow-xs flex items-center justify-center">
+                        <div className="w-2 h-2 bg-slate-400 rounded-full group-hover:bg-[#BE5912]"></div>
+                      </div>
+                      <div className="absolute hidden group-hover:block bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-md whitespace-nowrap z-30">
+                        {stop.name}
+                      </div>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Dynamic Simulated Drivers moving on 2D board */}
+            {drivers.map((drv) => {
+              const coords = getCoordinates(drv.lat, drv.lng);
+              const isMatchedDriver = (poolingState !== 'idle' && drv.name === matchedDriverName);
+              
+              return (
+                <div
+                  key={`vector-drv-${drv.id}`}
+                  style={{ left: coords.x, top: coords.y, transform: `translate(-50%, -50%) rotate(${drv.angle}deg)` }}
+                  className="absolute transition-all duration-1000 ease-linear z-30 pointer-events-none"
+                >
+                  <div 
+                    style={{ transform: `rotate(${-drv.angle}deg)` }}
+                    className={`p-1.5 rounded-xl flex items-center justify-center shadow-lg border-2 transform transition-all ${
+                      isMatchedDriver 
+                        ? 'bg-[#BE5912] border-white scale-115 text-white ring-4 ring-[#BE5912]/20' 
+                        : 'bg-white border-[#BE5912] text-[#BE5912] scale-90'
+                    }`}
+                    title={`${drv.name} (${drv.vehicleName})`}
+                  >
+                    {getVehicleIcon(drv.vehicleType)}
+                    {isMatchedDriver && (
+                      <span className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-[#BE5912] text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded shadow whitespace-nowrap uppercase tracking-wider z-40">
+                        Your Driver
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Informational fallback/notice overlay */}
+            <div className="absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur-xs px-3 py-2 rounded-xl border border-slate-200 shadow-sm text-[10px] text-gray-500 pointer-events-auto leading-relaxed flex items-center gap-2">
+              <Info className="w-4 h-4 text-[#BE5912] shrink-0" />
+              <span>
+                {hasValidKey 
+                  ? "Toggle Satellite or 2D Map view anytime. If Satellite fails to load, use this 2D Vector view."
+                  : "Showing premium offline 2D Vector Map representation (missing Google Maps key)."}
+              </span>
             </div>
           </div>
         )}

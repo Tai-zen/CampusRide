@@ -91,9 +91,10 @@ service cloud.firestore {
              data.title is string && data.title.size() <= 100 &&
              data.message is string && data.message.size() <= 500 &&
              data.isRead is bool &&
-             data.type is string && (data.type == 'info' || data.type == 'success' || data.type == 'receipt' || data.type == 'alert') &&
+             data.type is string && (data.type == 'info' || data.type == 'success' || data.type == 'receipt' || data.type == 'alert' || data.type == 'warning') &&
              (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
-             (!('time' in data) || (data.time is string && data.time.size() <= 50));
+             (!('time' in data) || (data.time is string && data.time.size() <= 50)) &&
+             (!('timestamp' in data) || (data.timestamp is string && data.timestamp.size() <= 100));
     }
 
     function isValidReview(data) {
@@ -130,14 +131,21 @@ service cloud.firestore {
              (!('driverAvatar' in data) || (data.driverAvatar is string && data.driverAvatar.size() <= 1000)) &&
              (!('driverVehicle' in data) || (data.driverVehicle is string && data.driverVehicle.size() <= 200)) &&
              (!('driverRating' in data) || (data.driverRating is number)) &&
+             (!('driverPlateNumber' in data) || (data.driverPlateNumber is string && data.driverPlateNumber.size() <= 50)) &&
+             (!('driverBankName' in data) || (data.driverBankName is string && data.driverBankName.size() <= 100)) &&
+             (!('driverBankAccountNumber' in data) || (data.driverBankAccountNumber is string && data.driverBankAccountNumber.size() <= 20)) &&
+             (!('driverBankAccountName' in data) || (data.driverBankAccountName is string && data.driverBankAccountName.size() <= 100)) &&
              (!('etaMinutes' in data) || (data.etaMinutes is number)) &&
              (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
              (!('time' in data) || (data.time is string && data.time.size() <= 50)) &&
              (!('createdAt' in data) || (data.createdAt is number)) &&
-             (!('paymentMethod' in data) || (data.paymentMethod is string && (data.paymentMethod == 'cash' || data.paymentMethod == 'transfer'))) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && (data.paymentMethod == 'cash' || data.paymentMethod == 'transfer' || data.paymentMethod == 'wallet'))) &&
              (!('paymentConfirmedByRider' in data) || (data.paymentConfirmedByRider is bool)) &&
              (!('paymentValidatedByDriver' in data) || (data.paymentValidatedByDriver is bool)) &&
-             (!('riderPaid' in data) || (data.riderPaid is bool));
+             (!('riderPaid' in data) || (data.riderPaid is bool)) &&
+             (!('passengerRated' in data) || (data.passengerRated is bool)) &&
+             (!('driverConcluded' in data) || (data.driverConcluded is bool)) &&
+             (!('driverCredited' in data) || (data.driverCredited is bool));
     }
 
     function isValidPendingDriver(data) {
@@ -207,13 +215,15 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         // Case 1: Student updates status/payment
         (existing().passengerId == request.auth.uid && incoming().passengerId == existing().passengerId && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentMethod', 'paymentConfirmedByRider', 'riderPaid'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentMethod', 'paymentConfirmedByRider', 'riderPaid', 'passengerRated', 'paymentValidatedByDriver'])
         )) ||
         // Case 2: Driver claims/updates status of ride
-        (isDriver() && (
+        ((existing().driverId == request.auth.uid || (incoming().driverId == request.auth.uid && !('driverId' in existing()))) && (
           incoming().diff(existing()).affectedKeys().hasOnly([
             'status', 'driverId', 'driverName', 'driverAvatar', 'driverVehicle',
-            'driverRating', 'etaMinutes', 'paymentValidatedByDriver'
+            'driverRating', 'etaMinutes', 'paymentValidatedByDriver',
+            'driverPlateNumber', 'driverBankName', 'driverBankAccountNumber', 'driverBankAccountName',
+            'driverConcluded', 'driverCredited'
           ])
         )) ||
         isAdmin()
@@ -222,12 +232,7 @@ service cloud.firestore {
 
       // Nested messages subcollection
       match /messages/{messageId} {
-        allow read, create: if isSignedIn() && (
-          get(/databases/$(database)/documents/rideRequests/$(rideId)).data.passengerId == request.auth.uid ||
-          get(/databases/$(database)/documents/rideRequests/$(rideId)).data.driverId == request.auth.uid ||
-          isDriver() ||
-          isAdmin()
-        );
+        allow read, create: if isSignedIn();
       }
     }
 

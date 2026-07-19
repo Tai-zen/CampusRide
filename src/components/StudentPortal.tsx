@@ -82,6 +82,7 @@ interface StudentPortalProps {
   notifications: AppNotification[];
   transactions: Transaction[];
   activeRide: RideRequest | null;
+  studentPastRides?: RideRequest[];
   onNavigate: (view: string) => void;
   onUpdateProfile: (updates: Partial<UserProfile>) => void;
   onAddTransaction: (txn: Transaction) => void;
@@ -95,6 +96,7 @@ interface StudentPortalProps {
   onDeleteAccount?: () => void;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
+  onResetSystem?: () => void;
 }
 
 // Interface for dynamic pooling simulation
@@ -113,6 +115,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   notifications,
   transactions,
   activeRide,
+  studentPastRides = [],
   onNavigate,
   onUpdateProfile,
   onAddTransaction,
@@ -126,6 +129,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   onDeleteAccount,
   isDarkMode = false,
   onToggleDarkMode,
+  onResetSystem,
 }) => {
   // Current School Details
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
@@ -467,12 +471,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [safetySharing, setSafetySharing] = useState<boolean>(true);
   const [sameGenderOnly, setSameGenderOnly] = useState<boolean>(false);
   const [lowBalanceAlert, setLowBalanceAlert] = useState<boolean>(true);
+  const [appNotificationsEnabled, setAppNotificationsEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('app_notifications_enabled') !== 'false';
+  });
 
   // Trust-based payment states for riders
   const [showPaymentSelection, setShowPaymentSelection] = useState<boolean>(false);
   const [paymentStep, setPaymentStep] = useState<'select' | 'transfer_details'>('select');
   const [isSimulatingRedirect, setIsSimulatingRedirect] = useState<boolean>(false);
   const [rideTransferCopied, setRideTransferCopied] = useState<boolean>(false);
+  const [showInlinePaymentChoice, setShowInlinePaymentChoice] = useState<boolean>(false);
   
   // Messenger-style chat overlay states
   const [isChatOverlayOpen, setIsChatOverlayOpen] = useState<boolean>(false);
@@ -748,6 +756,43 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     };
   }, [joinedPoolId, poolingState]);
 
+  // Periodically clean up timed-out pools from local storage
+  useEffect(() => {
+    const cleanupTimedOutPools = () => {
+      const stored = localStorage.getItem('campusride_active_pools');
+      if (!stored) return;
+      try {
+        const parsed = JSON.parse(stored) as ActivePool[];
+        let hasChanges = false;
+        
+        const filtered = parsed.filter(pool => {
+          // Only clean up pools that are active/not accepted yet
+          if (pool.status === 'active' && !pool.driverAccepted) {
+            const elapsed = pool.createdAt ? Math.floor((Date.now() - pool.createdAt) / 1000) : 0;
+            const remaining = Math.max(0, (pool.driverAcceptCountdown ?? 60) - elapsed);
+            if (remaining <= 0) {
+              hasChanges = true;
+              return false; // Remove this pool
+            }
+          }
+          return true;
+        });
+
+        if (hasChanges) {
+          localStorage.setItem('campusride_active_pools', JSON.stringify(filtered));
+          setActivePools(filtered);
+        }
+      } catch (e) {
+        console.error("Error cleaning up timed out pools", e);
+      }
+    };
+
+    // Run cleanup every 1 second
+    cleanupTimedOutPools();
+    const interval = setInterval(cleanupTimedOutPools, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Synchronize real-time chat messages from Firestore with localStorage fallback
   useEffect(() => {
     const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
@@ -1001,6 +1046,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       });
     } else {
       // Create pool flow (standard pool lobby search)
+      const alreadyCreatedPool = activePools.some(p => 
+        (p.hostName === (userProfile.name || 'Temi Adeyemi')) && (p.status === 'active' || p.status === 'transit')
+      );
+      if (alreadyCreatedPool) {
+        alert("You are not allowed to create another pool if there is already an active pool created by you. Please complete or delete your existing pool first.");
+        return;
+      }
+
       const newPoolId = `POOL-${Math.floor(1000 + Math.random() * 9000)}`;
       const newPool: ActivePool = {
         id: newPoolId,
@@ -2395,7 +2448,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <div className="bg-amber-500/5 border border-amber-500/25 p-4 rounded-2xl space-y-2 text-left">
                   <span className="text-xs font-extrabold text-[#BE5912] uppercase block tracking-wider">Ride Guidelines & Cancellation Policy</span>
                   <ul className="text-[11px] text-slate-600 list-disc pl-4 space-y-1 leading-relaxed">
-                    <li><strong>Match Vehicle Plate:</strong> Verify vehicle corresponds to <span className="font-mono bg-slate-100 px-1 py-0.5 rounded font-black text-slate-800">RUN-918-LA</span> before boarding.</li>
+                    <li><strong>Match Vehicle Plate:</strong> Verify vehicle corresponds to <span className="font-mono bg-slate-100 px-1 py-0.5 rounded font-black text-slate-800">{activeRide?.driverPlateNumber || 'RUN-918-LA'}</span> before boarding.</li>
                     <li><strong>Logistics Liability:</strong> Cancellations after driver accepts cause gridlocks. Avoid repetitive cancellations to maintain a high rating.</li>
                     <li><strong>Payment Timing:</strong> Please wait for driver arrival confirmation, then select your payment option on this screen to release lock.</li>
                   </ul>
@@ -2406,18 +2459,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div className="flex items-center space-x-4 text-left">
                     <img 
                       referrerPolicy="no-referrer"
-                      src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80" 
-                      alt="David Alao" 
+                      src={activeRide?.driverAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80"} 
+                      alt={activeRide?.driverName || "Driver"} 
                       className="w-14 h-14 rounded-2xl object-cover border border-slate-150 shadow-xs shadow-md"
                     />
                     <div>
                       <h3 className="text-base font-black text-[#00875A] flex items-center gap-1.5">
-                        David Alao 
+                        {activeRide?.driverName || 'David Alao'} 
                         <span className="text-xs font-mono text-amber-500 bg-[#00875A]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                          ★ 4.9
+                          ★ {activeRide?.driverRating || '4.9'}
                         </span>
                       </h3>
-                      <p className="text-xs text-slate-500 font-bold font-mono">Toyota Corolla (Silver) • RUN-918-LA</p>
+                      <p className="text-xs text-slate-500 font-bold font-mono">{activeRide?.driverVehicle || 'Toyota Corolla (Silver) • RUN-918-LA'}</p>
                       <p className="text-[10px] text-gray-500 mt-0.5 text-left">Mobile: +234 812 345 6789</p>
                     </div>
                   </div>
@@ -2466,8 +2519,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           </span>
                           <button
                             onClick={() => {
-                              setPaymentStep('select');
-                              setShowPaymentSelection(true);
+                              setShowInlinePaymentChoice(true);
                             }}
                             className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer"
                           >
@@ -2476,19 +2528,87 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </div>
                       ) : (
                         <div className="flex flex-col items-end gap-1">
-                          <button
-                            onClick={() => {
-                              setPaymentStep('select');
-                              setShowPaymentSelection(true);
-                            }}
-                            className="bg-[#00875A] hover:bg-[#00875A]/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow-sm animate-pulse"
-                          >
-                            Pay Fare (₦{activeRide?.cost})
-                          </button>
+                          {!showInlinePaymentChoice ? (
+                            <button
+                              onClick={() => {
+                                setShowInlinePaymentChoice(true);
+                              }}
+                              className="bg-[#00875A] hover:bg-[#00875A]/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow-sm animate-pulse"
+                            >
+                              Pay Fare (₦{activeRide?.cost})
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setShowInlinePaymentChoice(false);
+                              }}
+                              className="text-[10px] text-slate-500 hover:text-slate-800 font-bold px-2 py-1 bg-slate-100 rounded-lg cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
+
+                  {/* Inline Option Panel */}
+                  {showInlinePaymentChoice && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left space-y-4"
+                    >
+                      <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider block">Choose Your Payment Option:</span>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSelectCashPayment();
+                            setShowInlinePaymentChoice(false);
+                          }}
+                          className="p-3 bg-white hover:bg-amber-50/40 border border-slate-200 hover:border-amber-400 rounded-xl transition-all text-left flex items-start gap-2.5 cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                            <Wallet className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-slate-800 block">Handover Cash</span>
+                            <span className="text-[10px] text-slate-500">Pay physically after trip</span>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Automatically select Transfer payment method so details are loaded below!
+                            const ride = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
+                            if (ride) {
+                              const updatedRide: RideRequest = {
+                                ...ride,
+                                paymentMethod: 'transfer',
+                                paymentConfirmedByRider: false,
+                                paymentValidatedByDriver: false,
+                                riderPaid: false
+                              };
+                              onUpdateRide(updatedRide);
+                            }
+                            setShowInlinePaymentChoice(false);
+                          }}
+                          className="p-3 bg-white hover:bg-blue-50/40 border border-slate-200 hover:border-blue-400 rounded-xl transition-all text-left flex items-start gap-2.5 cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-slate-800 block">Bank Transfer</span>
+                            <span className="text-[10px] text-slate-500">Transfer & copy details</span>
+                          </div>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {activeRide?.paymentMethod === 'transfer' && (
                     <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-150 text-left space-y-3">
@@ -3226,19 +3346,29 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           <h1 className="text-2xl font-black text-[#00875A] tracking-tight">RIDER PORTAL SUMMARY</h1>
           
           {/* Quick Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Pooling savings (Month)</span>
-              <div className="text-2xl font-black text-slate-800 font-mono mt-1">+{currencySymbol}{(transactions.filter(t => t.type === 'charge').reduce((acc, t) => acc + Math.round(Math.abs(t.amount) * 1.5), 0)).toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
-              <p className="text-[10px] text-emerald-600 mt-0.5">Saved split cost by sharing rides</p>
-            </div>
+          {(() => {
+            const completedRides = studentPastRides.filter(r => r.status === 'completed');
+            const tripsCount = completedRides.length > 0 ? completedRides.length : transactions.filter(t => t.type === 'charge').length;
+            const savingsAmount = completedRides.length > 0
+              ? completedRides.reduce((acc, r) => acc + Math.round((r.cost || 0) * 1.5), 0)
+              : transactions.filter(t => t.type === 'charge').reduce((acc, t) => acc + Math.round(Math.abs(t.amount) * 1.5), 0);
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Trips completed</span>
-              <div className="text-2xl font-black text-slate-800 font-mono mt-1">{transactions.filter(t => t.type === 'charge').length}</div>
-              <p className="text-[10px] text-slate-500 mt-0.5">Reliable campus commutes logged</p>
-            </div>
-          </div>
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Pooling savings (Month)</span>
+                  <div className="text-2xl font-black text-slate-800 font-mono mt-1">+{currencySymbol}{savingsAmount.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
+                  <p className="text-[10px] text-emerald-600 mt-0.5">Saved split cost by sharing rides</p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Trips completed</span>
+                  <div className="text-2xl font-black text-slate-800 font-mono mt-1">{tripsCount}</div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Reliable campus commutes logged</p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Interactive Custom SVG Chart */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
@@ -3259,28 +3389,44 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 // Last 7 days chart array
                 const chartData = Array.from({ length: 7 }, (_, i) => {
                   const idx = (currentDayIdx - 6 + i + 7) % 7;
-                  return { day: daysOfWeek[idx], split: 0, solo: 0 };
+                  return { day: daysOfWeek[idx], split: 0, solo: 0, dateObj: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000) };
                 });
 
-                // Match active charges
-                const charges = transactions.filter(t => t.type === 'charge');
-                if (charges.length === 0) {
-                  // Default mock-fallback only if they don't have any actual charges yet, so the chart is styled beautifully
-                  chartData[0] = { day: 'Mon', split: 350, solo: 700 };
-                  chartData[1] = { day: 'Tue', split: 175, solo: 700 };
-                  chartData[2] = { day: 'Wed', split: 117, solo: 700 };
-                  chartData[3] = { day: 'Thu', split: 350, solo: 700 };
-                  chartData[4] = { day: 'Fri', split: 88,  solo: 700 };
-                  chartData[5] = { day: 'Sat', split: 0,   solo: 0 };
-                  chartData[6] = { day: 'Sun', split: 117, solo: 700 };
-                } else {
-                  charges.forEach(txn => {
-                    const amt = Math.abs(txn.amount);
-                    // Distribute charges deterministically across past days using a hash to create a realistic chart
-                    const hashIdx = Math.abs(txn.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 7;
-                    chartData[hashIdx].split += amt;
-                    chartData[hashIdx].solo += Math.round(amt * 2.5);
+                const completedRides = studentPastRides.filter(r => r.status === 'completed');
+
+                if (completedRides.length > 0) {
+                  completedRides.forEach(ride => {
+                    const cost = ride.cost || 0;
+                    const date = ride.createdAt ? new Date(ride.createdAt) : new Date();
+                    
+                    chartData.forEach(data => {
+                      if (data.dateObj.toDateString() === date.toDateString()) {
+                        data.split += cost;
+                        const isSolo = ride.id.toLowerCase().includes('solo') || !ride.maxRiders || ride.maxRiders === 1;
+                        data.solo += isSolo ? cost : Math.round(cost * 2.5);
+                      }
+                    });
                   });
+                } else {
+                  // Match active charges from transactions as fallback
+                  const charges = transactions.filter(t => t.type === 'charge');
+                  if (charges.length === 0) {
+                    // Default mock-fallback only if they don't have any actual charges or rides yet
+                    chartData[0].split = 350; chartData[0].solo = 700;
+                    chartData[1].split = 175; chartData[1].solo = 700;
+                    chartData[2].split = 117; chartData[2].solo = 700;
+                    chartData[3].split = 350; chartData[3].solo = 700;
+                    chartData[4].split = 88;  chartData[4].solo = 700;
+                    chartData[5].split = 0;   chartData[5].solo = 0;
+                    chartData[6].split = 117; chartData[6].solo = 700;
+                  } else {
+                    charges.forEach(txn => {
+                      const amt = Math.abs(txn.amount);
+                      const hashIdx = Math.abs(txn.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 7;
+                      chartData[hashIdx].split += amt;
+                      chartData[hashIdx].solo += Math.round(amt * 2.5);
+                    });
+                  }
                 }
 
                 const maxVal = Math.max(...chartData.map(d => d.solo), 700);
@@ -3331,7 +3477,58 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           {/* Historic Trips Log List */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
             <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider">Past Completed Rides</h3>
-            {transactions.length > 0 ? (
+            {studentPastRides.length > 0 ? (
+              <div className="space-y-3">
+                {studentPastRides.map((ride, index) => {
+                  const isCompleted = ride.status === 'completed';
+                  const isSolo = ride.id.toLowerCase().includes('solo') || !ride.maxRiders || ride.maxRiders === 1;
+                  const dateStr = ride.createdAt 
+                    ? new Date(ride.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) 
+                    : 'Recent';
+                  const timeStr = ride.createdAt 
+                    ? new Date(ride.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                    : '';
+                  const vehicleLabel = ride.vehicleType || 'Car';
+                  const pickupName = ride.pickupId ? getStopName(ride.pickupId) : (ride.pickup || 'Campus Station');
+                  const dropoffName = ride.dropoffId ? getStopName(ride.dropoffId) : (ride.dropoff || 'Campus Station');
+                  const title = `Ride from ${pickupName} to ${dropoffName}`;
+
+                  return (
+                    <div key={ride.id || index} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between hover:border-slate-300 transition-all">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isCompleted ? 'bg-emerald-50 text-[#00875A]' : 'bg-rose-50 text-rose-500'
+                        }`}>
+                          {vehicleLabel === 'Keke' ? (
+                            <Zap className="w-5 h-5" />
+                          ) : (
+                            <Car className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold block text-slate-800">{title}</span>
+                          <span className="text-[10px] text-gray-500 block font-mono">
+                            {dateStr} {timeStr ? `• ${timeStr}` : ''} • <span className="font-sans font-extrabold uppercase text-[9px] text-[#00875A]">{vehicleLabel} ({isSolo ? 'Solo' : 'Pool'})</span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-mono font-black text-slate-800 block">
+                          {currencySymbol}{ride.cost || 0}
+                        </span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-mono tracking-wide font-black ${
+                          isCompleted 
+                            ? 'bg-emerald-100 text-[#00875A]' 
+                            : 'bg-rose-100 text-rose-600'
+                        }`}>
+                          {isCompleted ? 'Paid' : 'Canceled'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : transactions.length > 0 ? (
               <div className="space-y-3">
                 {transactions.map((txn, index) => (
                   <div key={index} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
@@ -4143,6 +4340,26 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     type="checkbox" 
                     checked={lowBalanceAlert} 
                     onChange={() => setLowBalanceAlert(!lowBalanceAlert)} 
+                    className="sr-only peer" 
+                  />
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold block text-slate-800">In-App Notification Alerts</span>
+                  <span className="text-[10px] text-gray-500 block">Turn on/off real-time popups and audible/visual notification updates</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={appNotificationsEnabled} 
+                    onChange={() => {
+                      const newVal = !appNotificationsEnabled;
+                      setAppNotificationsEnabled(newVal);
+                      localStorage.setItem('app_notifications_enabled', String(newVal));
+                    }} 
                     className="sr-only peer" 
                   />
                   <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
