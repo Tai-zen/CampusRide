@@ -174,9 +174,22 @@
         "createdAt": { "type": "number" }
       },
       "required": ["sender", "text", "senderId", "createdAt"]
+    },
+    "IdLookup": {
+      "title": "IdLookup",
+      "description": "Allows secure device-independent sign-in lookup by converting Student IDs, plate numbers, or vehicle IDs to emails.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" }
+      },
+      "required": ["email"]
     }
   },
   "firestore": {
+    "/idLookups/{lookupId}": {
+      "schema": "IdLookup",
+      "description": "Index of sanitized student IDs and driver license plates or vehicle IDs mapped to email addresses for secure login."
+    },
     "/schools/{schoolId}": {
       "schema": "School",
       "description": "Custom configuration metadata and branding for a specific university."

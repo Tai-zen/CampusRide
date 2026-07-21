@@ -255,3 +255,132 @@ html {
   background-color: rgba(9, 13, 22, 0.85) !important;
 }
 
+/* ==========================================================================
+   STRICT LIGHT MODE COLOR OVERRIDES: PURE ORANGE & WHITE FOR DRIVER PORTAL ONLY
+   ========================================================================== */
+:root:not(.dark) #driver-portal-viewport {
+  --color-primary: #BE5912 !important;
+  --color-primary-container: #FFEDD5 !important;
+  --color-surface: #FFFFFF !important;
+  --color-on-surface: #BE5912 !important;
+  --color-sage-dark: #BE5912 !important;
+  --color-sage-medium: #F97316 !important;
+  --color-sage-light: #FFEDD5 !important;
+  --color-sage-bg: #FFFFFF !important;
+}
+
+/* Arbitrary Hex Green to Orange */
+:root:not(.dark) #driver-portal-viewport .text-\[\#00875A\] {
+  color: #BE5912 !important;
+}
+:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\] {
+  background-color: #BE5912 !important;
+}
+:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\] {
+  border-color: #BE5912 !important;
+}
+:root:not(.dark) #driver-portal-viewport .from-\[\#00875A\] {
+  --tw-gradient-from: #BE5912 !important;
+  --tw-gradient-to: #BE5912 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+:root:not(.dark) #driver-portal-viewport .to-\[\#00875A\] {
+  --tw-gradient-to: #BE5912 !important;
+}
+:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\]\/10 {
+  background-color: rgba(190, 89, 18, 0.1) !important;
+}
+:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\]\/15 {
+  background-color: rgba(190, 89, 18, 0.15) !important;
+}
+:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\]\/5 {
+  background-color: rgba(190, 89, 18, 0.05) !important;
+}
+:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\]\/15 {
+  border-color: rgba(190, 89, 18, 0.15) !important;
+}
+:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\]\/20 {
+  border-color: rgba(190, 89, 18, 0.20) !important;
+}
+:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\]\/30 {
+  border-color: rgba(190, 89, 18, 0.30) !important;
+}
+
+/* Emerald mapping */
+:root:not(.dark) #driver-portal-viewport .bg-emerald-50 {
+  background-color: #FFF7ED !important; /* orange-50 */
+}
+:root:not(.dark) #driver-portal-viewport .bg-emerald-100 {
+  background-color: #FFEDD5 !important; /* orange-100 */
+}
+:root:not(.dark) #driver-portal-viewport .bg-emerald-500 {
+  background-color: #F97316 !important; /* orange-500 */
+}
+:root:not(.dark) #driver-portal-viewport .bg-emerald-600 {
+  background-color: #BE5912 !important; /* orange-600 */
+}
+:root:not(.dark) #driver-portal-viewport .bg-emerald-700 {
+  background-color: #9E460B !important; /* orange-700 */
+}
+:root:not(.dark) #driver-portal-viewport .text-emerald-50 {
+  color: #FFF7ED !important;
+}
+:root:not(.dark) #driver-portal-viewport .text-emerald-100 {
+  color: #FFEDD5 !important;
+}
+:root:not(.dark) #driver-portal-viewport .text-emerald-600 {
+  color: #BE5912 !important;
+}
+:root:not(.dark) #driver-portal-viewport .text-emerald-700 {
+  color: #9E460B !important;
+}
+:root:not(.dark) #driver-portal-viewport .text-emerald-800 {
+  color: #7C2D12 !important; /* orange-900 */
+}
+:root:not(.dark) #driver-portal-viewport .border-emerald-100 {
+  border-color: #FFEDD5 !important;
+}
+:root:not(.dark) #driver-portal-viewport .border-emerald-200 {
+  border-color: #FED7AA !important;
+}
+
+/* Teal mapping */
+:root:not(.dark) #driver-portal-viewport .bg-teal-50 { background-color: #FFF7ED !important; }
+:root:not(.dark) #driver-portal-viewport .bg-teal-100 { background-color: #FFEDD5 !important; }
+:root:not(.dark) #driver-portal-viewport .bg-teal-600 { background-color: #BE5912 !important; }
+:root:not(.dark) #driver-portal-viewport .text-teal-600 { color: #BE5912 !important; }
+:root:not(.dark) #driver-portal-viewport .text-teal-700 { color: #9E460B !important; }
+:root:not(.dark) #driver-portal-viewport .text-teal-800 { color: #7C2D12 !important; }
+:root:not(.dark) #driver-portal-viewport .border-teal-100 { border-color: #FFEDD5 !important; }
+:root:not(.dark) #driver-portal-viewport .border-teal-200 { border-color: #FED7AA !important; }
+
+/* Green mapping */
+:root:not(.dark) #driver-portal-viewport .bg-green-50 { background-color: #FFF7ED !important; }
+:root:not(.dark) #driver-portal-viewport .bg-green-100 { background-color: #FFEDD5 !important; }
+:root:not(.dark) #driver-portal-viewport .bg-green-600 { background-color: #BE5912 !important; }
+:root:not(.dark) #driver-portal-viewport .bg-green-700 { background-color: #9E460B !important; }
+:root:not(.dark) #driver-portal-viewport .text-green-600 { color: #BE5912 !important; }
+:root:not(.dark) #driver-portal-viewport .text-green-700 { color: #9E460B !important; }
+:root:not(.dark) #driver-portal-viewport .text-green-800 { color: #7C2D12 !important; }
+
+/* Blue mapping */
+:root:not(.dark) #driver-portal-viewport .bg-blue-50 { background-color: #FFF7ED !important; }
+:root:not(.dark) #driver-portal-viewport .bg-blue-50\/45 { background-color: rgba(254, 215, 170, 0.45) !important; }
+:root:not(.dark) #driver-portal-viewport .bg-blue-50\/40 { background-color: rgba(254, 215, 170, 0.40) !important; }
+:root:not(.dark) #driver-portal-viewport .bg-blue-50\/60 { background-color: rgba(254, 215, 170, 0.60) !important; }
+:root:not(.dark) #driver-portal-viewport .bg-blue-100 { background-color: #FFEDD5 !important; }
+:root:not(.dark) #driver-portal-viewport .bg-blue-500\/10 { background-color: rgba(190, 89, 18, 0.1) !important; }
+:root:not(.dark) #driver-portal-viewport .bg-blue-950\/40 { background-color: rgba(124, 45, 18, 0.4) !important; }
+:root:not(.dark) #driver-portal-viewport .text-blue-400 { color: #FB923C !important; } /* orange-400 */
+:root:not(.dark) #driver-portal-viewport .text-blue-500 { color: #F97316 !important; }
+:root:not(.dark) #driver-portal-viewport .text-blue-600 { color: #BE5912 !important; }
+:root:not(.dark) #driver-portal-viewport .text-blue-750 { color: #9E460B !important; }
+:root:not(.dark) #driver-portal-viewport .text-blue-700 { color: #9E460B !important; }
+:root:not(.dark) #driver-portal-viewport .text-blue-800 { color: #7C2D12 !important; }
+:root:not(.dark) #driver-portal-viewport .border-blue-100 { border-color: #FFEDD5 !important; }
+:root:not(.dark) #driver-portal-viewport .border-blue-150 { border-color: #FED7AA !important; }
+:root:not(.dark) #driver-portal-viewport .border-blue-200 { border-color: #FED7AA !important; }
+:root:not(.dark) #driver-portal-viewport .border-blue-400 { border-color: #F97316 !important; }
+:root:not(.dark) #driver-portal-viewport .border-blue-500\/20 { border-color: rgba(249, 115, 22, 0.2) !important; }
+:root:not(.dark) #driver-portal-viewport .border-blue-900\/30 { border-color: rgba(124, 45, 18, 0.3) !important; }
+

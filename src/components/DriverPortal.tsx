@@ -347,6 +347,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   const [bankAccountNumber, setBankAccountNumber] = useState<string>(driverProfile.bankAccountNumber || '2088392102');
   const [bankAccountName, setBankAccountName] = useState<string>(driverProfile.bankAccountName || driverProfile.name || 'David Alao');
   const [savingBank, setSavingBank] = useState<boolean>(false);
+  const [isConfirmingTransfer, setIsConfirmingTransfer] = useState<boolean>(false);
+  const [isConfirmingCash, setIsConfirmingCash] = useState<boolean>(false);
 
   const handleSaveBankDetails = (e: React.FormEvent) => {
     e.preventDefault();
@@ -814,6 +816,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           <h1 className="text-2xl font-extrabold text-[#BE5912] tracking-tight">
             {activeView === 'driver_dashboard' && 'Core Shift Dashboard'}
             {activeView === 'driver_earnings' && 'Shift Earnings Ledger'}
+            {activeView === 'driver_scheduled' && 'Scheduled Rides'}
+            {activeView === 'notifications' && 'Driver Notifications'}
             {activeView === 'driver_settings' && 'Vehicle Profiles'}
           </h1>
         </div>
@@ -972,7 +976,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                           <span className="text-gray-500 font-medium">Rider Submitted:</span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             activeRide.paymentConfirmedByRider 
-                              ? 'bg-blue-100 text-blue-700' 
+                              ? 'bg-emerald-100 text-emerald-800' 
                               : 'bg-amber-100 text-amber-700'
                           }`}>
                             {activeRide.paymentConfirmedByRider ? 'Transfer Sent (Rider Claim)' : 'Awaiting Transfer'}
@@ -986,12 +990,13 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
                               ✓ Received & Confirmed
                             </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const confirmed = window.confirm(`Confirm you have received the ₦${activeRide.cost} bank transfer from ${activeRide.passengerName || 'the student'}?`);
-                                if (confirmed) {
+                          ) : isConfirmingTransfer ? (
+                            <div className="flex items-center space-x-1">
+                              <span className="text-[10px] text-amber-600 font-bold mr-1">Confirming ₦{activeRide.cost}?</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsConfirmingTransfer(false);
                                   const updated = {
                                     ...activeRide,
                                     paymentValidatedByDriver: true
@@ -1020,9 +1025,26 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                                     isRead: false,
                                     type: 'success'
                                   });
-                                }
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black px-2.5 py-1 rounded-lg cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIsConfirmingTransfer(false)}
+                                className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsConfirmingTransfer(true);
                               }}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-extrabold px-3 py-1 rounded-xl cursor-pointer shadow-xs"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-extrabold px-3 py-1 rounded-xl cursor-pointer shadow-xs animate-pulse"
                             >
                               Confirm Receipt of Fund
                             </button>
@@ -1038,12 +1060,13 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                           <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
                             ✓ Received
                           </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const confirmed = window.confirm(`Confirm that you have received physical cash of ₦${activeRide.cost} from ${activeRide.passengerName}?`);
-                              if (confirmed) {
+                        ) : isConfirmingCash ? (
+                          <div className="flex items-center space-x-1">
+                            <span className="text-[10px] text-[#BE5912] font-bold mr-1">Received cash of ₦{activeRide.cost}?</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsConfirmingCash(false);
                                 const updated = {
                                   ...activeRide,
                                   paymentValidatedByDriver: true
@@ -1072,9 +1095,26 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                                   isRead: false,
                                   type: 'success'
                                 });
-                              }
+                              }}
+                              className="bg-[#BE5912] hover:bg-[#BE5912]/90 text-white text-[10px] font-black px-2.5 py-1 rounded-lg cursor-pointer"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsConfirmingCash(false)}
+                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsConfirmingCash(true);
                             }}
-                            className="bg-[#BE5912] hover:bg-[#BE5912]/90 text-white text-[10px] font-extrabold px-3 py-1 rounded-xl cursor-pointer"
+                            className="bg-[#BE5912] hover:bg-[#BE5912]/90 text-white text-[10px] font-extrabold px-3 py-1 rounded-xl cursor-pointer animate-pulse"
                           >
                             Mark Cash Received
                           </button>
@@ -1294,11 +1334,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 
                 {/* Column 1: Weekly Shift Revenue Graph */}
-                <div className="md:col-span-7 bg-slate-900 rounded-2xl overflow-hidden relative p-6 flex flex-col justify-between text-white h-72">
+                <div className="md:col-span-7 bg-white/55 dark:bg-slate-900 border border-slate-150 dark:border-transparent rounded-2xl overflow-hidden relative p-6 flex flex-col justify-between text-slate-800 dark:text-white h-72">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
-                      <span className="text-lg font-extrabold">Weekly Shift Revenue Graph</span>
+                      <span className="text-[10px] text-slate-500 dark:text-gray-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
+                      <span className="text-lg font-extrabold text-slate-800 dark:text-white">Weekly Shift Revenue Graph</span>
                     </div>
                     <span className="text-xs bg-[#BE5912] text-white font-bold px-3 py-1 rounded-full">+12.5% vs Last Week</span>
                   </div>
@@ -1315,48 +1355,48 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       { day: 'Sun', amt: 0 }
                     ].map((item, id) => (
                       <div key={id} className="flex-1 flex flex-col items-center group cursor-pointer">
-                        <span className="text-[9px] font-mono text-orange-500 invisible group-hover:visible mb-1">₦{item.amt}</span>
+                        <span className="text-[9px] font-mono text-[#BE5912] dark:text-orange-400 invisible group-hover:visible mb-1">₦{item.amt}</span>
                         <div 
-                          className="w-full bg-[#BE5912] rounded-t-md transition-all group-hover:bg-amber-400 shadow-sm shadow-amber-900/10" 
+                          className="w-full bg-[#BE5912] rounded-t-md transition-all group-hover:bg-[#BE5912]/80 dark:group-hover:bg-amber-400 shadow-xs dark:shadow-sm dark:shadow-amber-900/10" 
                           style={{ height: `${Math.max(item.amt / 224 * 100, 5)}%` }}
                         ></div>
-                        <span className="text-[10px] text-gray-400 mt-2 font-mono">{item.day}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-gray-400 mt-2 font-mono">{item.day}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Column 2: Active Metrics & Today's Earnings */}
-                <div className="md:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white flex flex-col justify-between shadow-xs h-72">
+                <div className="md:col-span-5 bg-white/55 dark:bg-gradient-to-br dark:from-slate-900 dark:to-slate-800 border border-slate-150 dark:border-transparent rounded-2xl p-5 text-slate-800 dark:text-white flex flex-col justify-between shadow-xs h-72">
                   <div>
-                    <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest block">Active Metrics</span>
-                    <h4 className="text-sm font-bold mt-1">Earning Insights</h4>
+                    <span className="text-[10px] text-slate-500 dark:text-gray-400 uppercase font-mono tracking-widest block">Active Metrics</span>
+                    <h4 className="text-sm font-bold mt-1 text-slate-800 dark:text-white">Earning Insights</h4>
                   </div>
                   
                   <div className="my-4 space-y-3">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-400">Completed Shifts:</span>
-                      <span className="font-extrabold text-orange-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
+                      <span className="text-slate-500 dark:text-gray-400">Completed Shifts:</span>
+                      <span className="font-extrabold text-orange-600 dark:text-orange-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-400">Average Fare per Ride:</span>
-                      <span className="font-extrabold text-teal-400 font-mono">
+                      <span className="text-slate-500 dark:text-gray-400">Average Fare per Ride:</span>
+                      <span className="font-extrabold text-[#00875A] dark:text-teal-400 font-mono">
                         ₦{driverPastRides.filter(r => r.status === 'completed').length > 0 
                           ? Math.round(driverPastRides.filter(r => r.status === 'completed').reduce((acc, curr) => acc + (curr.cost || 0), 0) / driverPastRides.filter(r => r.status === 'completed').length) 
                           : 0}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-400">Shift Status:</span>
-                      <span className={`font-black uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full ${shiftOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                      <span className="text-slate-500 dark:text-gray-400">Shift Status:</span>
+                      <span className={`font-black uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full ${shiftOnline ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-400'}`}>
                         {shiftOnline ? 'ONLINE' : 'OFFLINE'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-right border-t border-white/10 pt-3">
-                    <span className="text-[10px] text-gray-400 block font-mono">TODAY'S LEDGER</span>
-                    <span className="text-xl font-black text-[#00875A] font-mono">₦{driverProfile.todayEarnings}</span>
+                  <div className="text-right border-t border-slate-150 dark:border-white/10 pt-3">
+                    <span className="text-[10px] text-slate-500 dark:text-gray-400 block font-mono">TODAY'S LEDGER</span>
+                    <span className="text-xl font-black text-[#00875A] dark:text-[#34D399] font-mono">₦{driverProfile.todayEarnings}</span>
                   </div>
                 </div>
 
@@ -1438,7 +1478,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                         <div className="flex items-center justify-between border-b border-gray-50 pb-3">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-800 font-mono">{ride.id}</span>
-                            <span className="text-[9px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                            <span className="text-[9px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
                               {ride.mode === 'solo' ? 'Solo' : 'Pool'}
                             </span>
                           </div>
@@ -1523,36 +1563,6 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 
           {/* Supabase Media & Profile Picture Settings */}
           <div className="space-y-4 pt-4 border-t border-gray-150">
-            <h3 className="text-xs font-black text-[#BE5912] uppercase tracking-wider border-b border-gray-100 pb-2">Supabase Storage Configuration</h3>
-            
-            {/* Supabase Status Banner */}
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
-              isSupabaseConfigured 
-                ? 'bg-orange-50/50 border-orange-100 text-orange-800' 
-                : 'bg-amber-50/50 border-amber-150 text-amber-800'
-            }`}>
-              <div className="flex items-start gap-3">
-                <div className={`p-2 rounded-xl shrink-0 ${isSupabaseConfigured ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
-                  <Server className="w-5 h-5 animate-none" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold block text-left">
-                    Supabase Storage Connection: {isSupabaseConfigured ? 'ACTIVE' : 'NOT CONFIGURATED'}
-                  </span>
-                  <span className="text-[10px] text-gray-500 block text-left leading-relaxed">
-                    {isSupabaseConfigured 
-                      ? 'Connected securely! High fidelity file transfers are fully validated.' 
-                      : 'Define VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your workspace Secrets configuration to enable media uploads.'}
-                  </span>
-                </div>
-              </div>
-              {isSupabaseConfigured && (
-                <span className="bg-orange-100 text-orange-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest font-mono self-start sm:self-auto">
-                  ONLINE
-                </span>
-              )}
-            </div>
-
             {supabaseError && (
               <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs flex items-start gap-2 text-left">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1796,6 +1806,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 onClick={() => {
                   if (confirm("Are you sure you want to clear your notification history?")) {
                     onClearNotifications?.();
+                    alert('Notification history cleared.');
                   }
                 }}
                 className="text-xs text-rose-600 hover:underline font-bold cursor-pointer"

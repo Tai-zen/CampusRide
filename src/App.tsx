@@ -196,6 +196,44 @@ export default function App() {
               setActiveView('admin_operations');
             }
 
+            // Self-heal: ensure lookup keys exist in idLookups
+            try {
+              if (profile.role === 'student' && profile.idNumber) {
+                const key = profile.idNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+                const lookupRef = doc(db, 'idLookups', key);
+                const lookupSnap = await getDoc(lookupRef);
+                if (!lookupSnap.exists()) {
+                  await setDoc(lookupRef, { email: profile.email });
+                }
+              } else if (profile.role === 'driver') {
+                if (profile.plateNumber) {
+                  const key = profile.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+                  const lookupRef = doc(db, 'idLookups', key);
+                  const lookupSnap = await getDoc(lookupRef);
+                  if (!lookupSnap.exists()) {
+                    await setDoc(lookupRef, { email: profile.email });
+                  }
+                }
+                if (profile.vehicleId) {
+                  const key = profile.vehicleId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+                  const lookupRef = doc(db, 'idLookups', key);
+                  const lookupSnap = await getDoc(lookupRef);
+                  if (!lookupSnap.exists()) {
+                    await setDoc(lookupRef, { email: profile.email });
+                  }
+                }
+              } else if (profile.role === 'admin' && profile.idNumber) {
+                const key = profile.idNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+                const lookupRef = doc(db, 'idLookups', key);
+                const lookupSnap = await getDoc(lookupRef);
+                if (!lookupSnap.exists()) {
+                  await setDoc(lookupRef, { email: profile.email });
+                }
+              }
+            } catch (healErr) {
+              console.warn("Self-healing lookup warning:", healErr);
+            }
+
             const schoolId = localStorage.getItem(`campusride_selected_school_${uid}`);
             setSelectedSchoolId(schoolId);
           } else {
@@ -219,6 +257,10 @@ export default function App() {
                 role: 'student' as UserRole
               };
               await setDoc(userDocRef, defaultProfile);
+              // Save lookup key for student ID
+              const lookupKey = defaultProfile.idNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+              await setDoc(doc(db, 'idLookups', lookupKey), { email: defaultProfile.email }).catch(console.error);
+
               setCurrentUser({
                 email: firebaseUser.email || defaultProfile.email,
                 name: defaultProfile.name,
@@ -395,24 +437,39 @@ export default function App() {
     
     let targetEmail = loginId.toLowerCase().trim();
 
-    // Support logging in by Student ID or plate number or vehicle ID
+    // Support logging in by Student ID or plate number or vehicle ID securely
     if (!targetEmail.includes('@')) {
-      const q = query(collection(db, 'users'), where('idNumber', '==', loginId.trim()));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        targetEmail = querySnapshot.docs[0].data().email;
-      } else {
-        const qPlate = query(collection(db, 'users'), where('plateNumber', '==', loginId.trim()));
-        const snapshotPlate = await getDocs(qPlate);
-        if (!snapshotPlate.empty) {
-          targetEmail = snapshotPlate.docs[0].data().email;
+      const lookupKey = loginId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+      try {
+        const lookupDoc = await getDoc(doc(db, 'idLookups', lookupKey));
+        if (lookupDoc.exists()) {
+          targetEmail = lookupDoc.data().email;
         } else {
           // Fallback check: hardcode the admin email if they input the admin ID number
           if (loginId.toUpperCase() === 'ADM-2026-0001') {
             targetEmail = 'wywsk64571@minitts.net';
           } else {
-            throw new Error(`No account found with this ID Number: "${loginId}".`);
+            // Secondary fallback query
+            const q = query(collection(db, 'users'), where('idNumber', '==', loginId.trim()));
+            const querySnapshot = await getDocs(q).catch(() => ({ empty: true, docs: [] as any }));
+            if (!querySnapshot.empty) {
+              targetEmail = querySnapshot.docs[0].data().email;
+            } else {
+              const qPlate = query(collection(db, 'users'), where('plateNumber', '==', loginId.trim()));
+              const snapshotPlate = await getDocs(qPlate).catch(() => ({ empty: true, docs: [] as any }));
+              if (!snapshotPlate.empty) {
+                targetEmail = snapshotPlate.docs[0].data().email;
+              } else {
+                throw new Error(`No account found with this ID or Plate Number: "${loginId}".`);
+              }
+            }
           }
+        }
+      } catch (err: any) {
+        if (loginId.toUpperCase() === 'ADM-2026-0001') {
+          targetEmail = 'wywsk64571@minitts.net';
+        } else {
+          throw new Error(err.message || `Failed to resolve ID/Plate "${loginId}".`);
         }
       }
     }
@@ -517,7 +574,8 @@ export default function App() {
     email: string, 
     password?: string, 
     driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string }, 
-    idNumber?: string
+    idNumber?: string,
+    gender?: string
   ) => {
     if (!password) {
       throw new Error("Password is required for registration.");
@@ -526,6 +584,24 @@ export default function App() {
     isSigningUpRef.current = true;
     try {
       const emailKey = email.toLowerCase().trim();
+
+      // Check if there is already an approved driver profile in Firestore with this email
+      let existingDriverDocId: string | null = null;
+      let existingDriverData: any = null;
+      try {
+        const qUser = query(collection(db, 'users'), where('email', '==', emailKey));
+        const userSnap = await getDocs(qUser);
+        if (!userSnap.empty) {
+          // Find if there is a driver profile
+          const match = userSnap.docs.find(d => d.data().role === 'driver');
+          if (match) {
+            existingDriverDocId = match.id;
+            existingDriverData = match.data();
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check existing driver email match in Firestore:", err);
+      }
 
       // Create user in Firebase Auth
       let userCredential;
@@ -548,14 +624,16 @@ export default function App() {
           ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuCZAeU3AaKhGBOYd8WMMUOl8a1m-xWN35t0rtWjLanUleuFZFHDp1c7WY9NLhM3pYbj2P7WUN3LNb6nUbqSDLYMSuFD2oOAm38lvRS5LU4HXxClTVCnj3gr5GNw1_TapyvZgtt3Ilgpk3CPGXRWcZK_PWKrcSc6DmaNnSJiptAiQTXXYbsKwdI7gIxemY3OT3h2nlNCHSaiqU6lnU5TAfInxGhQJsNf0mvu15eYhrMNIpjN9uk4-WTaYEPMfjRlIgdc3E2QvlCvJDI'
           : 'https://lh3.googleusercontent.com/aida-public/AB6AXuBGwF-7RkJYmJLhwPyGL113SVjQjkGzPYiyCbockhwN_N-tmnr2TGTNX51wlUftwSlOTqZndRT9aYqxb4Xoe6vY-oG4ObF-GVwq7b-BBpT-mcv6b7NOqLnhKEJK_XDbLSLeLkdRLSCnWMA3zzhCNHZiq3lpbXnMqZymUvkZe2-A3zW6Kwue6jeQxFf825_Vo5NZcTIr0uB7XnuLmVmEHWZf6d6fnvwKxXn6TZk4OyjyYrejK4iTXYRpZKFXWxlmtq5nSa1DMrwkdNY',
         createdAt: new Date().toISOString(),
-        isApproved: role === 'driver' ? false : true
+        isApproved: role === 'driver' ? (existingDriverData ? true : false) : true,
+        gender: gender || 'Male'
       };
 
       if (role === 'student') {
+        const studentId = idNumber || 'RUN/2022/10432';
         const studentProfile = {
           ...INITIAL_STUDENT_PROFILE,
           ...profileData,
-          idNumber: idNumber || 'RUN/2022/10432',
+          idNumber: studentId,
           walletBalance: 2500,
           tripsThisWeek: 0,
           carpoolRides: 0,
@@ -564,49 +642,76 @@ export default function App() {
         };
         try {
           await setDoc(doc(db, 'users', uid), studentProfile);
+          
+          // Save lookup key for student ID
+          const lookupKey = studentId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+          await setDoc(doc(db, 'idLookups', lookupKey), { email: emailKey });
         } catch (dbErr) {
           handleFirestoreError(dbErr, OperationType.WRITE, `users/${uid}`);
         }
         setUserProfile(studentProfile);
       } else if (role === 'driver') {
+        const finalPlateNumber = existingDriverData?.plateNumber || driverInfo?.plateNumber || '4P-928X';
+        const finalVehicleId = existingDriverData?.vehicleId || driverInfo?.vehicleId || 'DRV-2024-8839';
+        const finalCarBrand = existingDriverData?.carBrand || driverInfo?.carBrand || 'Toyota Camry';
+        const finalCarType = existingDriverData?.carType || driverInfo?.carType || 'car';
+        
         const vehicleDetails = driverInfo 
           ? `${driverInfo.carBrand} (${driverInfo.carType.toUpperCase()}) • ${driverInfo.plateNumber}${driverInfo.vehicleId ? ` [ID: ${driverInfo.vehicleId}]` : ''}` 
-          : 'Toyota Camry (Silver) • 4P-928X';
+          : (existingDriverData?.vehicle || 'Toyota Camry (Silver) • 4P-928X');
 
         const dProfile = {
           ...INITIAL_DRIVER_PROFILE,
+          ...existingDriverData, // Merge existing admin-created profile data if any
           ...profileData,
           vehicle: vehicleDetails,
-          todayEarnings: 0,
-          completedTripsCount: 0,
+          todayEarnings: existingDriverData?.todayEarnings || 0,
+          completedTripsCount: existingDriverData?.completedTripsCount || 0,
           status: 'Offline',
-          isApproved: false,
-          carBrand: driverInfo?.carBrand || 'Toyota Camry',
-          plateNumber: driverInfo?.plateNumber || '4P-928X',
-          carType: driverInfo?.carType || 'car',
-          vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
+          isApproved: existingDriverDocId ? true : false,
+          carBrand: finalCarBrand,
+          plateNumber: finalPlateNumber,
+          carType: finalCarType,
+          vehicleId: finalVehicleId,
         };
         try {
           await setDoc(doc(db, 'users', uid), dProfile);
+          
+          // Save lookup keys for plate number and vehicle ID
+          if (finalPlateNumber) {
+            const plateKey = finalPlateNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+            await setDoc(doc(db, 'idLookups', plateKey), { email: emailKey });
+          }
+          if (finalVehicleId) {
+            const vehicleKey = finalVehicleId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+            await setDoc(doc(db, 'idLookups', vehicleKey), { email: emailKey });
+          }
+
+          // Clean up the temporary driver doc if we linked one
+          if (existingDriverDocId && existingDriverDocId !== uid) {
+            await deleteDoc(doc(db, 'users', existingDriverDocId)).catch(console.error);
+          }
         } catch (dbErr) {
           handleFirestoreError(dbErr, OperationType.WRITE, `users/${uid}`);
         }
         setDriverProfile(dProfile);
 
-        // Save to pending drivers
-        try {
-          await setDoc(doc(db, 'pendingDrivers', uid), {
-            id: uid,
-            name,
-            email: emailKey,
-            carBrand: driverInfo?.carBrand || 'Toyota Camry',
-            carType: driverInfo?.carType || 'car',
-            plateNumber: driverInfo?.plateNumber || '4P-928X',
-            vehicleId: driverInfo?.vehicleId || 'DRV-2024-8839',
-            createdAt: new Date().toISOString()
-          });
-        } catch (dbErr) {
-          handleFirestoreError(dbErr, OperationType.WRITE, `pendingDrivers/${uid}`);
+        // Save to pending drivers only if they are not already approved
+        if (!dProfile.isApproved) {
+          try {
+            await setDoc(doc(db, 'pendingDrivers', uid), {
+              id: uid,
+              name,
+              email: emailKey,
+              carBrand: finalCarBrand,
+              carType: finalCarType,
+              plateNumber: finalPlateNumber,
+              vehicleId: finalVehicleId,
+              createdAt: new Date().toISOString()
+            });
+          } catch (dbErr) {
+            handleFirestoreError(dbErr, OperationType.WRITE, `pendingDrivers/${uid}`);
+          }
         }
       }
 
@@ -758,6 +863,7 @@ export default function App() {
   };
 
   const handleMarkNotificationsRead = async () => {
+    setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
     const uid = getActiveUid();
     if (uid) {
       try {
@@ -774,6 +880,7 @@ export default function App() {
   };
 
   const handleClearNotifications = async () => {
+    setNotifications([]);
     const uid = getActiveUid();
     if (uid) {
       try {
@@ -905,7 +1012,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-[#00875A] border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-12 h-12 border-4 border-[#BE5912] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-semibold text-gray-500 animate-pulse">Syncing CampusRide with Firestore...</p>
         </div>
       </div>
@@ -932,6 +1039,34 @@ export default function App() {
     plateNumber: currentRole === 'driver' ? (driverProfile.vehicle ? (driverProfile.vehicle.includes(' • ') ? driverProfile.vehicle.split(' • ')[1] : '4P-928X') : '4P-928X') : '',
   };
 
+  const getViewTitle = () => {
+    if (currentRole === 'student') {
+      switch (activeView) {
+        case 'booking': return 'Request Ride';
+        case 'browse_pools': return 'Browse Active Pools';
+        case 'dashboard': return 'Activity Dashboard';
+        case 'notifications': return 'Notifications';
+        case 'profile': return 'Student Profile';
+        case 'settings': return 'App Settings';
+        default: return 'Request Ride';
+      }
+    } else if (currentRole === 'driver') {
+      switch (activeView) {
+        case 'driver_dashboard': return 'Driver Dashboard';
+        case 'driver_past_rides': return 'Completed Trips';
+        case 'driver_settings': return 'Driver Settings';
+        case 'notifications': return 'Driver Notifications';
+        default: return 'Driver Console';
+      }
+    } else {
+      switch (activeView) {
+        case 'admin_dashboard': return 'Admin Central';
+        case 'admin_operations': return 'Admin Operations';
+        default: return 'Administrator';
+      }
+    }
+  };
+
   return (
     <div id="application-layout-context" className={`flex flex-col md:flex-row min-h-screen bg-[#F9FAFB] ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'} font-sans antialiased`}>
       
@@ -951,9 +1086,27 @@ export default function App() {
       {/* Main Viewport Content block */}
       <main id="main-viewport-body" className="flex-1 flex flex-col relative min-w-0 pb-20 md:pb-0">
         
+        {/* Desktop Top Header Bar */}
+        <header className="hidden md:flex items-center justify-end px-8 py-4 bg-white border-b border-gray-100 z-10 shrink-0 select-none">
+          <div className="flex items-center space-x-6">
+            {/* Notification Bell Button */}
+            <button
+              type="button"
+              onClick={() => setActiveView(currentRole === 'student' || currentRole === 'driver' ? 'notifications' : 'admin_operations')}
+              className={`p-2 hover:bg-gray-50 rounded-xl transition-all relative cursor-pointer ${currentRole === 'driver' ? 'text-[#BE5912]' : 'text-[#00875A]'}`}
+              title="View Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              {notifications.filter(n => !n.isRead).length > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+              )}
+            </button>
+          </div>
+        </header>
+        
         {/* Native Web Push Notifications Consent Banner */}
         {notificationPermission === 'default' && !dismissedNotificationBanner && (
-          <div className="bg-gradient-to-r from-[#00875A] to-teal-600 text-white p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 animate-fade-in relative z-20">
+          <div className="bg-gradient-to-r from-[#BE5912] to-orange-500 text-white p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 animate-fade-in relative z-20">
             <div className="flex items-start md:items-center space-x-3 text-left">
               <div className="bg-white/15 p-2 rounded-xl text-white mt-0.5 md:mt-0 flex-shrink-0 animate-pulse">
                 <Bell className="w-5 h-5 stroke-[2.5]" />
@@ -963,7 +1116,7 @@ export default function App() {
                   Enable System Notifications
                   <span className="bg-white/20 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-widest font-mono">Outside Browser</span>
                 </h4>
-                <p className="text-[11px] sm:text-xs text-emerald-50 max-w-2xl leading-relaxed">
+                <p className="text-[11px] sm:text-xs text-orange-50 max-w-2xl leading-relaxed">
                   Stay updated instantly! Receive real-time alerts for driver arrivals, newly formed ride pools, and group chats—even when you close this tab or put it in the background.
                 </p>
               </div>
@@ -979,7 +1132,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleRequestNotificationPermission}
-                className="bg-white text-[#00875A] hover:bg-emerald-50 font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                className="bg-white text-[#BE5912] hover:bg-orange-50 font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle className="w-3.5 h-3.5 stroke-[3]" />
                 Enable Alerts

@@ -250,44 +250,6 @@ export const CampusMap: React.FC<CampusMapProps> = ({
 
   return (
     <div className="w-full bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col animate-fadeIn">
-      {/* Top Header / Map controls bar */}
-      <div className="bg-slate-50 border-b border-slate-150 p-4 flex justify-between items-center gap-3">
-        <div className="flex items-center space-x-2.5">
-          <div>
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider block">Campus GPS & Location Tracker</h3>
-            <span className="text-[10px] text-gray-500 font-mono block">GPS Feed: {selectedSchool.name} Campus Network</span>
-          </div>
-        </div>
-
-        {/* Map mode switcher */}
-        <div className="flex items-center bg-slate-200/60 p-1 rounded-xl border border-slate-250">
-          <button
-            onClick={() => setMapMode('google')}
-            disabled={!hasValidKey}
-            className={`px-3 py-1 text-[10px] font-extrabold uppercase rounded-lg transition-all ${
-              !hasValidKey
-                ? 'opacity-40 cursor-not-allowed text-slate-400'
-                : mapMode === 'google'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-            title={!hasValidKey ? "Satellite Map requires a Google Maps API Key" : "Switch to Google Satellite Map"}
-          >
-            🛰️ Satellite
-          </button>
-          <button
-            onClick={() => setMapMode('vector')}
-            className={`px-3 py-1 text-[10px] font-extrabold uppercase rounded-lg transition-all ${
-              mapMode === 'vector'
-                ? 'bg-[#BE5912] text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            🎨 2D Vector
-          </button>
-        </div>
-      </div>
-
       {/* Main Map Stage */}
       <div className="relative w-full h-[320px] md:h-[400px] bg-slate-100 flex items-center justify-center overflow-hidden">
         {mapMode === 'google' && hasValidKey ? (
@@ -410,15 +372,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
               )}
             </svg>
 
-            {/* School Campus Outline background watermark */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.06] pointer-events-none select-none">
-              <img 
-                referrerPolicy="no-referrer"
-                src={selectedSchool.logoImage} 
-                alt="" 
-                className="w-56 h-56 object-contain filter grayscale"
-              />
-            </div>
+
 
             {/* Interactive Stop Badges */}
             {stops.map((stop) => {

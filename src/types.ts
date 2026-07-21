@@ -14,6 +14,7 @@ export interface UserProfile {
   tripsThisWeek: number;
   carpoolRides: number;
   savedThisMonth: number;
+  gender?: string;
 }
 
 export interface DriverState {
@@ -28,6 +29,7 @@ export interface DriverState {
   hoursOnline: number;
   status: 'On Trip' | 'Idle' | 'Break' | 'Offline';
   avatar: string;
+  gender?: string;
 }
 
 export type RideStatus = 'requested' | 'accepted' | 'arriving' | 'in_transit' | 'completed' | 'canceled';

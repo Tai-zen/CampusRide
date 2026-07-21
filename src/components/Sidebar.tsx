@@ -75,6 +75,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsOpen(false);
   };
 
+  const isDriver = currentRole === 'driver';
+  
+  // Dynamic color classes based on role
+  const brandTextColor = isDriver ? 'text-[#BE5912]' : 'text-[#00875A]';
+  const brandBgLight = isDriver ? 'bg-orange-50' : 'bg-emerald-50';
+  const brandBorderLight = isDriver ? 'border-orange-100' : 'border-emerald-100';
+  const brandTextActive = isDriver ? 'text-orange-600' : 'text-[#00875A]';
+  const brandBgActive = isDriver ? (isDriver ? 'bg-orange-600 shadow-orange-500/20' : 'bg-[#00875A] shadow-[#00875A]/20') : 'bg-[#00875A] shadow-[#00875A]/20';
+  const brandHoverBorder = isDriver ? 'hover:border-orange-500/20 hover:bg-orange-50' : 'hover:border-[#00875A]/20 hover:bg-emerald-50';
+  const brandButtonBorder = isDriver ? 'text-orange-600' : 'text-[#00875A]';
+  const brandBadgeBg = isDriver ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-[#00875A]';
+
   // Define Navigation Items based on active role
   const getNavItems = () => {
     if (currentRole === 'student') {
@@ -82,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'booking', label: 'Request Ride', icon: Car, badge: null },
         { id: 'browse_pools', label: 'Browse Active Pools', icon: Compass, badge: null },
         { id: 'dashboard', label: 'Activity Dashboard', icon: LayoutDashboard, badge: null },
+        { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
         { id: 'profile', label: 'Student Profile', icon: User, badge: null },
         { id: 'settings', label: 'App Settings', icon: Settings, badge: null },
       ];
@@ -90,6 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'driver_dashboard', label: 'Shift Dashboard', icon: Gauge, badge: null },
         { id: 'driver_earnings', label: 'Shift Earnings Ledger', icon: TrendingUp, badge: null },
         { id: 'driver_scheduled', label: 'Scheduled Rides', icon: Calendar, badge: null },
+        { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
         { id: 'driver_settings', label: 'Driver Settings', icon: Settings, badge: null },
       ];
     } else {
@@ -131,25 +145,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Top Header (Sticky) */}
       <header id="mobile-navigation-bar" className="md:hidden w-full h-16 bg-white border-b border-gray-100 px-4 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center space-x-2.5">
-          <div className={`w-9 h-9 rounded-lg p-0.5 flex items-center justify-center overflow-hidden shrink-0 border ${currentRole === 'driver' ? 'bg-orange-50 border-orange-100 dark:bg-slate-800 dark:border-slate-700' : 'bg-emerald-50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700'}`}>
+          <div className="w-9 h-9 flex items-center justify-center shrink-0">
             <img 
               referrerPolicy="no-referrer"
               src={selectedSchool.logoImage} 
               alt={`${selectedSchool.name} Logo`} 
-              className="w-full h-full object-cover rounded-lg"
+              className="w-full h-full object-contain"
             />
           </div>
           <div>
-            <span className="font-extrabold tracking-tight text-[#00875A] text-xs leading-tight block">{selectedSchool.name}</span>
-            <span className="text-[9px] text-primary font-bold uppercase tracking-wider font-mono">CampusRide Portal</span>
+            <span className={`font-extrabold tracking-tight ${brandTextColor} text-xs leading-tight block`}>{selectedSchool.name}</span>
+            <span className={`text-[9px] ${brandTextColor} font-bold uppercase tracking-wider font-mono`}>CampusRide Portal</span>
           </div>
         </div>
 
         <div className="flex items-center space-x-2.5">
           {/* Quick toggle mobile indicator */}
-          <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full font-mono bg-[#F9FAFB] ${currentRole === 'student' ? 'text-[#00875A]' : currentRole === 'driver' ? 'text-orange-600' : 'text-amber-700'}`}>
+          <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full font-mono bg-[#F9FAFB] ${brandTextActive}`}>
             {currentRole}
           </span>
+          {/* Mobile notification bell */}
+          <button
+            onClick={() => {
+              if (currentRole === 'student') {
+                navigateTo('notifications');
+              } else if (currentRole === 'driver') {
+                navigateTo('notifications');
+              } else {
+                navigateTo('admin_operations');
+              }
+            }}
+            className={`p-1.5 rounded-xl hover:bg-gray-50 transition-all cursor-pointer relative ${brandTextColor}`}
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+            )}
+          </button>
           <button 
             onClick={onLogout}
             title="Log Out"
@@ -170,18 +203,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={item.id}
               onClick={() => navigateTo(item.id)}
               className={`flex flex-col items-center justify-center flex-1 py-1.5 relative transition-all cursor-pointer ${
-                isActive ? (currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]') : 'text-gray-400 hover:text-gray-600'
+                isActive ? brandTextActive : 'text-gray-400 hover:text-gray-600'
               }`}
             >
               <div className="relative">
-                <IconComponent className={`w-5 h-5 transition-transform duration-200 ${isActive ? `scale-110 ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}` : 'text-gray-400'}`} />
+                <IconComponent className={`w-5 h-5 transition-transform duration-200 ${isActive ? `scale-110 ${brandTextActive}` : 'text-gray-400'}`} />
                 {item.badge !== null && (
                   <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[8px] font-black h-3.5 min-w-[14px] px-1 rounded-full flex items-center justify-center border border-white animate-pulse">
                     {item.badge}
                   </span>
                 )}
               </div>
-              <span className={`text-[9px] mt-1 tracking-tight text-center truncate max-w-[64px] ${isActive ? `font-bold ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}` : 'font-medium text-gray-500'}`}>
+              <span className={`text-[9px] mt-1 tracking-tight text-center truncate max-w-[64px] ${isActive ? `font-bold ${brandTextActive}` : 'font-medium text-gray-500'}`}>
                 {getMobileLabel(item.id, item.label)}
               </span>
             </button>
@@ -198,16 +231,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Upper Branding Section */}
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="w-11 h-11 rounded-xl p-0.5 flex items-center justify-center overflow-hidden shrink-0 border bg-emerald-50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700">
+            <div className="w-14 h-14 flex items-center justify-center shrink-0">
               <img 
                 referrerPolicy="no-referrer"
                 src={selectedSchool.logoImage} 
                 alt={`${selectedSchool.name} Logo`} 
-                className="w-full h-full object-cover rounded-xl"
+                className="w-full h-full object-contain"
               />
             </div>
             <div>
-              <span className="font-extrabold tracking-tight text-sm text-[#00875A] leading-tight block">
+              <span className={`font-extrabold tracking-tight text-sm ${brandTextColor} leading-tight block`}>
                 {selectedSchool.name}
               </span>
               <span className="text-[9px] uppercase tracking-wider text-[#737686] font-bold block mt-0.5">CampusRide Transit</span>
@@ -215,7 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* User Status Profile Card */}
-          <div className="p-3 rounded-xl border flex items-center space-x-3 bg-emerald-50/50 border-emerald-100 dark:bg-slate-800 dark:border-slate-700">
+          <div className="p-3 rounded-xl border flex items-center space-x-3 bg-white border-gray-200 dark:bg-slate-800/50 dark:border-slate-700">
             <img 
               referrerPolicy="no-referrer"
               src={userProfile.avatar} 
@@ -223,9 +256,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-10 h-10 rounded-full object-cover border border-[#c3c6d7] shadow-sm shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <h4 className="text-sm font-bold truncate text-[#00875A]">{userProfile.name}</h4>
+              <h4 className={`text-sm font-bold truncate ${brandTextColor}`}>{userProfile.name}</h4>
               <div className="flex flex-col space-y-0.5">
-                <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-[#00875A]">
+                <span className={`text-[10px] font-extrabold uppercase font-mono tracking-wider ${brandTextColor}`}>
                   {currentRole === 'student' ? 'Rider' : currentRole === 'driver' ? 'Driver' : 'Admin'}
                 </span>
                 <span className="text-[11px] text-gray-500 font-mono tracking-wide truncate">
@@ -255,7 +288,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => navigateTo(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group cursor-pointer ${
                   isActive 
-                    ? `${currentRole === 'driver' ? 'bg-orange-600 shadow-orange-500/20' : 'bg-primary shadow-sage-medium/20'} text-white shadow-md` 
+                    ? `${brandBgActive} text-white shadow-md` 
                     : 'text-gray-600 hover:text-gray-900 hover:bg-[#F9FAFB]'
                 }`}
               >
@@ -267,7 +300,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 {item.badge !== null && (
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] ${
-                    isActive ? 'bg-white/20 text-white' : `${currentRole === 'driver' ? 'bg-orange-50 text-orange-600' : 'bg-primary-container text-[#00875A]'}`
+                    isActive ? 'bg-white/20 text-white' : brandBadgeBg
                   }`}>
                     {item.badge}
                   </span>
@@ -282,11 +315,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Log Out Button */}
           <button
             onClick={onLogout}
-            className={`w-full h-11 border rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition bg-white cursor-pointer ${
-              currentRole === 'driver' 
-                ? 'border-gray-200 hover:border-orange-500/20 hover:bg-orange-50 text-orange-600' 
-                : 'border-gray-200 hover:border-[#00875A]/20 hover:bg-[#00875A]/10 text-[#00875A]'
-            }`}
+            className={`w-full h-11 border rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition bg-white cursor-pointer border-gray-200 ${brandHoverBorder} ${brandButtonBorder}`}
           >
             <LogOut className="w-4 h-4" />
             <span>Log Out</span>

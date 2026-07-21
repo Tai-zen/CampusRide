@@ -548,6 +548,16 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
       await setDoc(doc(db, 'users', uid), dProfile, { merge: true });
 
+      // Save lookup keys for plate number and vehicle ID
+      if (dProfile.plateNumber) {
+        const plateKey = dProfile.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+        await setDoc(doc(db, 'idLookups', plateKey), { email: emailKey }).catch(console.error);
+      }
+      if (dProfile.vehicleId) {
+        const vehicleKey = dProfile.vehicleId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+        await setDoc(doc(db, 'idLookups', vehicleKey), { email: emailKey }).catch(console.error);
+      }
+
       // Add a registration notification
       const notifId = 'welcome-' + Date.now();
       await setDoc(doc(db, 'users', uid, 'notifications', notifId), {
@@ -617,6 +627,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
       };
 
       await setDoc(doc(db, 'users', uid), adminProfile, { merge: true });
+
+      // Save lookup key for admin ID
+      if (adminProfile.idNumber) {
+        const adminKey = adminProfile.idNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().trim();
+        await setDoc(doc(db, 'idLookups', adminKey), { email: emailKey }).catch(console.error);
+      }
 
       // Reset form
       setNewAdminName('');
@@ -1119,12 +1135,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-gray-150/80 shadow-sm flex items-center space-x-3.5">
-                <div className="p-2 rounded-xl bg-blue-50 text-blue-600 shrink-0">
+                <div className="p-2 rounded-xl bg-emerald-50 text-[#00875A] shrink-0">
                   <User className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Student Riders</p>
-                  <p className="text-lg font-extrabold text-blue-600 leading-none mt-1">{studentCount}</p>
+                  <p className="text-lg font-extrabold text-[#00875A] leading-none mt-1">{studentCount}</p>
                 </div>
               </div>
 
@@ -1139,12 +1155,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-gray-150/80 shadow-sm flex items-center space-x-3.5">
-                <div className="p-2 rounded-xl bg-purple-50 text-purple-600 shrink-0">
+                <div className="p-2 rounded-xl bg-emerald-50 text-[#00875A] shrink-0">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Admins Authorized</p>
-                  <p className="text-lg font-extrabold text-purple-600 leading-none mt-1">{adminCount}</p>
+                  <p className="text-lg font-extrabold text-[#00875A] leading-none mt-1">{adminCount}</p>
                 </div>
               </div>
             </div>
@@ -1193,8 +1209,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
                   <button
                     onClick={downloadRidersCSV}
-                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition border border-blue-150 cursor-pointer"
-                    title="Export all student riders as CSV"
+                    className="bg-emerald-50 hover:bg-emerald-100 text-[#00875A] font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition border border-emerald-150 cursor-pointer"
+                    title="Export all student student riders as CSV"
                   >
                     <Download className="w-4 h-4" />
                     <span>Export Riders CSV</span>
@@ -1271,8 +1287,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                             {/* Role Badge */}
                             <td className="py-4 px-4">
                               {user.role === 'admin' && (
-                                <span className="bg-purple-50 text-purple-700 border border-purple-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
-                                  <ShieldCheck className="w-3.5 h-3.5 text-purple-500" />
+                                <span className="bg-emerald-50 text-[#00875A] border border-emerald-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-[#00875A]" />
                                   <span>Administrator</span>
                                 </span>
                               )}
@@ -1283,8 +1299,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                                 </span>
                               )}
                               {(user.role === 'student' || user.role === 'rider') && (
-                                <span className="bg-blue-50 text-blue-700 border border-blue-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
-                                  <User className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="bg-emerald-50 text-[#00875A] border border-emerald-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
+                                  <User className="w-3.5 h-3.5 text-[#00875A]" />
                                   <span>Student Rider</span>
                                 </span>
                               )}
@@ -1384,13 +1400,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400 font-semibold text-[10px] uppercase">Authorized Role:</span>
                             {user.role === 'admin' && (
-                              <span className="text-purple-700 font-bold text-[10px]">Administrator</span>
+                              <span className="text-[#00875A] font-bold text-[10px]">Administrator</span>
                             )}
                             {user.role === 'driver' && (
                               <span className="text-orange-700 font-bold text-[10px]">Verified Driver</span>
                             )}
                             {(user.role === 'student' || user.role === 'rider') && (
-                              <span className="text-blue-700 font-bold text-[10px]">Student Rider</span>
+                              <span className="text-[#00875A] font-bold text-[10px]">Student Rider</span>
                             )}
                           </div>
 
@@ -2067,7 +2083,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             >
               <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-5 h-5 shrink-0 text-purple-400" />
+                  <ShieldCheck className="w-5 h-5 shrink-0 text-[#00875A]" />
                   <span className="font-extrabold text-sm tracking-tight">Add System Administrator</span>
                 </div>
                 <button

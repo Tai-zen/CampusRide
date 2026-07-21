@@ -392,7 +392,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       name: userProfile.name || 'Temi Adeyemi',
       avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
       major: userProfile.major || 'Software Eng',
-      gender: 'Female',
+      gender: userProfile.gender || 'Female',
       rating: 4.8
     }
   ]);
@@ -1020,7 +1020,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           name: userProfile.name || 'Temi Adeyemi',
           avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
           major: userProfile.major || 'Software Eng',
-          gender: 'Female',
+          gender: userProfile.gender || 'Female',
           rating: 4.8,
           confirmedStart: true
         }
@@ -1061,7 +1061,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         hostAvatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
         hostMajor: userProfile.major || 'B.S. Software Engineering',
         hostRating: 4.8,
-        hostGender: 'Female',
+        hostGender: userProfile.gender || 'Female',
         pickupId: pickup,
         dropoffId: dropoff,
         vehicleType: activeVehicleConfig.id as any, // Preserve exact model (Corolla, Sienna, Shuttle, Keke)
@@ -1071,7 +1071,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
             major: userProfile.major || 'Software Eng',
             rating: 4.8,
-            gender: 'Female',
+            gender: userProfile.gender || 'Female',
             confirmedStart: true
           }
         ],
@@ -1372,7 +1372,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
       major: userProfile.major || 'Software Eng',
       rating: 4.8,
-      gender: 'Female',
+      gender: userProfile.gender || 'Female',
       confirmedStart: false
     };
 
@@ -1542,6 +1542,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     await onUpdateRide(updatedRide);
     setPoolingState('arrived');
 
+    // Close and cleanup the joined pool from active pools
+    if (joinedPoolId) {
+      const updated = activePools.map(pool => {
+        if (pool.id === joinedPoolId) {
+          return { ...pool, status: 'closed' as const };
+        }
+        return pool;
+      });
+      setActivePools(updated);
+      localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+    }
+
     onAddNotification({
       id: `notif-${Date.now()}`,
       title: 'Ride Completed!',
@@ -1626,6 +1638,24 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
     setPoolingState('idle');
     onUpdateRide(null); // Clear active ride to allow new bookings
+
+    // Ensure the pool is closed and local storage cleared
+    if (joinedPoolId) {
+      const updated = activePools.map(pool => {
+        if (pool.id === joinedPoolId) {
+          return { ...pool, status: 'closed' as const };
+        }
+        return pool;
+      });
+      setActivePools(updated);
+      localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
+      const uid = userProfile.id;
+      if (uid) {
+        localStorage.removeItem(`campusride_joined_pool_id_${uid}`);
+      }
+      setJoinedPoolId(null);
+    }
+
     alert(`Thank you for rating your ride! You rated the driver ${ratingScore} stars.`);
   };
 
@@ -1705,47 +1735,37 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <div className="bg-white p-6 rounded-3xl shadow-xs space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <h2 className="text-lg font-black tracking-tight text-[#00875A]">
-                      BOOK OR SCHEDULE A RIDE
+                      BOOK A CAMPUS RIDE
                     </h2>
-                    
-                    {/* Schedule vs Now Selector */}
-                    <div className="relative flex bg-slate-100 p-1 rounded-xl z-0 overflow-hidden">
+                  </div>
+                  
+                  <form onSubmit={handleRequestPool} className="space-y-5">
+                    {/* Choose bookingMode selection: Book Now vs Schedule Ride */}
+                    <div className="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl">
                       <button
                         type="button"
                         onClick={() => setBookingMode('now')}
-                        className="relative px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer z-10"
+                        className={`py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer ${
+                          bookingMode === 'now'
+                            ? 'bg-[#00875A] text-white shadow-md'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
                       >
-                        {bookingMode === 'now' && (
-                          <motion.div 
-                            layoutId="activeBookingModeBg"
-                            className="absolute inset-0 bg-[#00875A] rounded-lg shadow-sm -z-10"
-                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                          />
-                        )}
-                        <span className={`transition-colors duration-200 ${bookingMode === 'now' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}>
-                          Book Now
-                        </span>
+                        Book Now
                       </button>
                       <button
                         type="button"
                         onClick={() => setBookingMode('schedule')}
-                        className="relative px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer z-10"
+                        className={`py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer ${
+                          bookingMode === 'schedule'
+                            ? 'bg-[#00875A] text-white shadow-md'
+                            : 'text-slate-600 hover:text-slate-800'
+                        }`}
                       >
-                        {bookingMode === 'schedule' && (
-                          <motion.div 
-                            layoutId="activeBookingModeBg"
-                            className="absolute inset-0 bg-[#00875A] rounded-lg shadow-sm -z-10"
-                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                          />
-                        )}
-                        <span className={`transition-colors duration-200 ${bookingMode === 'schedule' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}>
-                          Schedule Ride
-                        </span>
+                        Schedule Ride
                       </button>
                     </div>
-                  </div>
-                  
-                  <form onSubmit={handleRequestPool} className="space-y-5">
+
                     {/* Location Choice Section */}
                     <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Pickup Spot Selector */}
@@ -2112,7 +2132,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                 {/* Scheduled rides section if any exist */}
                 {scheduledRides.length > 0 && (
-                  <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-xs space-y-4 animate-fadeIn text-left">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-150 shadow-xs space-y-4 animate-fadeIn text-left mt-6">
                     <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider flex items-center gap-1.5">
                       <Calendar className="w-4.5 h-4.5" /> Your Scheduled Rides ({scheduledRides.length})
                     </h3>
@@ -2123,7 +2143,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-black text-slate-800 font-mono tracking-tight">{ride.id}</span>
-                              <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                              <span className="text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
                                 {ride.mode === 'solo' ? 'Solo' : 'Pool'}
                               </span>
                             </div>
@@ -2151,7 +2171,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   alert('Scheduled ride cancelled.');
                                 }
                               }}
-                              className="text-[10px] text-red-600 hover:text-red-700 font-bold uppercase tracking-wider cursor-pointer"
+                              className="text-[10px] text-rose-600 hover:text-rose-700 font-bold uppercase tracking-wider cursor-pointer hover:underline"
                             >
                               Cancel
                             </button>
@@ -2596,9 +2616,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             }
                             setShowInlinePaymentChoice(false);
                           }}
-                          className="p-3 bg-white hover:bg-blue-50/40 border border-slate-200 hover:border-blue-400 rounded-xl transition-all text-left flex items-start gap-2.5 cursor-pointer"
+                          className="p-3 bg-white hover:bg-emerald-50/40 border border-slate-200 hover:border-[#00875A] rounded-xl transition-all text-left flex items-start gap-2.5 cursor-pointer"
                         >
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+                          <div className="w-8 h-8 rounded-lg bg-[#00875A]/10 text-[#00875A] flex items-center justify-center shrink-0">
                             <ArrowRightLeft className="w-4 h-4" />
                           </div>
                           <div>
@@ -2611,14 +2631,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   )}
 
                   {activeRide?.paymentMethod === 'transfer' && (
-                    <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-150 text-left space-y-3">
+                    <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-150 text-left space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-blue-700 font-extrabold uppercase tracking-wider">Driver Bank Details (Transfer)</span>
+                        <span className="text-[10px] text-[#00875A] font-extrabold uppercase tracking-wider">Driver Bank Details (Transfer)</span>
                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold font-mono ${
                           activeRide.paymentValidatedByDriver
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                             : activeRide.paymentConfirmedByRider
-                              ? 'bg-blue-100 text-blue-800 animate-pulse'
+                              ? 'bg-emerald-100 text-emerald-800 animate-pulse'
                               : 'bg-amber-100 text-amber-800'
                         }`}>
                           {activeRide.paymentValidatedByDriver
@@ -2629,7 +2649,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </span>
                       </div>
 
-                      <div className="bg-white border border-blue-100 p-3 rounded-xl space-y-2 text-xs text-slate-700">
+                      <div className="bg-white border border-emerald-100 p-3 rounded-xl space-y-2 text-xs text-slate-700">
                         <div className="flex justify-between">
                           <span className="text-slate-500 font-medium">Bank Name:</span>
                           <span className="font-extrabold text-slate-800">{getDriverBankDetails().bankName}</span>
@@ -2800,8 +2820,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {poolingState === 'transit' && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
                 <div className="flex justify-between items-center">
-                  <span className="bg-[#00875A]/15 text-blue-400 text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
-                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
+                  <span className="bg-[#00875A]/15 text-[#00875A] text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-[#00875A] animate-ping"></span>
                     RIDE IN TRANSIT
                   </span>
                   <span className="text-xs font-mono text-slate-500">ETA: {etaRemaining} Minutes</span>
@@ -2812,7 +2832,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Active Trip Info details */}
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-950/40 border border-blue-900/30 flex items-center justify-center text-blue-400">
+                    <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600">
                       <Shield className="w-5 h-5" />
                     </div>
                     <div>
@@ -3093,12 +3113,94 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             )}
           </div>
 
+          {/* User's Own Active Pool / Lobby Card (Always Accessible) */}
+          {(() => {
+            const myPool = activePools.find(pool => 
+              (pool.hostName === (userProfile.name || 'Temi Adeyemi') || 
+               pool.currentRiders.some(r => r.name === (userProfile.name || 'Temi Adeyemi'))) &&
+              pool.status !== 'closed'
+            );
+
+            if (!myPool) return null;
+
+            const isHost = myPool.hostName === (userProfile.name || 'Temi Adeyemi');
+
+            return (
+              <div className="bg-emerald-50 border-2 border-[#00875A]/20 p-6 rounded-3xl space-y-4 animate-fadeIn">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-3 bg-[#00875A]/10 text-[#00875A] rounded-2xl shrink-0">
+                      <Car className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#00875A]/10 text-[#00875A] px-2 py-0.5 rounded-md font-mono">
+                        {isHost ? 'Your Created Pool Lobby' : 'Your Joined Pool Lobby'}
+                      </span>
+                      <h3 className="text-base font-extrabold text-slate-800 mt-1">
+                        Active Ride: {getStopName(myPool.pickupId)} ➔ {getStopName(myPool.dropoffId)}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">
+                        Status: <span className="font-extrabold text-[#00875A] uppercase">{myPool.status}</span> • {myPool.currentRiders.length}/{myPool.maxRiders} Seats Filled
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <button
+                      onClick={() => {
+                        setJoinedPoolId(myPool.id);
+                        if (myPool.status === 'transit') {
+                          setPoolingState('transit');
+                        } else {
+                          setPoolingState('forming');
+                        }
+                        onNavigate('booking');
+                      }}
+                      className="px-5 py-3 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#00875A]/10 shrink-0"
+                    >
+                      <Compass className="w-4 h-4" />
+                      <span>Enter Live Lobby</span>
+                    </button>
+
+                    {isHost ? (
+                      <button
+                        onClick={() => handleDeletePool(myPool.id)}
+                        className="p-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-2xl transition-colors cursor-pointer shrink-0"
+                        title="Delete Pool"
+                      >
+                        <Trash2 className="w-4.5 h-4.5" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleLeavePool(myPool.id)}
+                        className="p-3 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-2xl transition-colors cursor-pointer shrink-0"
+                        title="Leave Pool"
+                      >
+                        <LogOut className="w-4.5 h-4.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Pools Grid */}
           {activePools.filter(pool => {
+            // Only show active pools
+            if (pool.status !== 'active') return false;
+
+            // Do not show demo/simulation pools in the general browse list
+            if (pool.id.startsWith('pool-sim-')) return false;
+
+            // Exclude pools whose countdown timer has run down
             const elapsed = pool.createdAt ? Math.floor((Date.now() - pool.createdAt) / 1000) : 0;
             const remaining = Math.max(0, (pool.driverAcceptCountdown ?? 60) - elapsed);
             if (remaining <= 0) return false;
-            if (pool.status === 'closed' || pool.status === 'transit') return false;
+
+            // Stale check (greater than 1 hour is considered stale/past)
+            if (elapsed > 3600) return false;
+
             if (browseFilterPickup !== 'all' && pool.pickupId !== browseFilterPickup) return false;
             if (browseFilterDropoff !== 'all' && pool.dropoffId !== browseFilterDropoff) return false;
             if (browseFilterVehicle !== 'all' && pool.vehicleType !== browseFilterVehicle) return false;
@@ -3106,10 +3208,20 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           }).length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activePools.filter(pool => {
+                // Only show active pools
+                if (pool.status !== 'active') return false;
+
+                // Do not show demo/simulation pools in the general browse list
+                if (pool.id.startsWith('pool-sim-')) return false;
+
+                // Exclude pools whose countdown timer has run down
                 const elapsed = pool.createdAt ? Math.floor((Date.now() - pool.createdAt) / 1000) : 0;
                 const remaining = Math.max(0, (pool.driverAcceptCountdown ?? 60) - elapsed);
                 if (remaining <= 0) return false;
-                if (pool.status === 'closed' || pool.status === 'transit') return false;
+
+                // Stale check (greater than 1 hour is considered stale/past)
+                if (elapsed > 3600) return false;
+
                 if (browseFilterPickup !== 'all' && pool.pickupId !== browseFilterPickup) return false;
                 if (browseFilterDropoff !== 'all' && pool.dropoffId !== browseFilterDropoff) return false;
                 if (browseFilterVehicle !== 'all' && pool.vehicleType !== browseFilterVehicle) return false;
@@ -3225,7 +3337,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           ? 'bg-sage-bg/30 border border-sage-light text-[#00875A]'
                           : pool.vehicleType === 'Keke'
                             ? 'bg-amber-50 border border-amber-200 text-amber-600'
-                            : 'bg-blue-50 border border-blue-200 text-blue-600'
+                            : 'bg-orange-50 border border-orange-200 text-orange-600'
                       }`}>
                         {pool.vehicleType.toUpperCase()}
                       </span>
@@ -3253,21 +3365,55 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                     {/* Join / Leave / Delete button */}
                     {pool.hostName === (userProfile.name || 'Temi Adeyemi') ? (
-                      <button
-                        onClick={() => handleDeletePool(pool.id)}
-                        className="w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 shadow-xs"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Delete Pool (Created by You)</span>
-                      </button>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                          onClick={() => {
+                            setJoinedPoolId(pool.id);
+                            if (pool.status === 'transit') {
+                              setPoolingState('transit');
+                            } else {
+                              setPoolingState('forming');
+                            }
+                            onNavigate('booking');
+                          }}
+                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-[#00875A] hover:bg-[#00875A]/95 text-white shadow-xs"
+                        >
+                          <Compass className="w-4 h-4" />
+                          <span>Enter Lobby</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeletePool(pool.id)}
+                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 shadow-xs"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete Pool</span>
+                        </button>
+                      </div>
                     ) : pool.currentRiders.some(r => r.name === (userProfile.name || 'Temi Adeyemi')) ? (
-                      <button
-                        onClick={() => handleLeavePool(pool.id)}
-                        className="w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-xs"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Leave Pool</span>
-                      </button>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                          onClick={() => {
+                            setJoinedPoolId(pool.id);
+                            if (pool.status === 'transit') {
+                              setPoolingState('transit');
+                            } else {
+                              setPoolingState('forming');
+                            }
+                            onNavigate('booking');
+                          }}
+                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-[#00875A] hover:bg-[#00875A]/95 text-white shadow-xs"
+                        >
+                          <Compass className="w-4 h-4" />
+                          <span>Enter Lobby</span>
+                        </button>
+                        <button
+                          onClick={() => handleLeavePool(pool.id)}
+                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-xs"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Leave Pool</span>
+                        </button>
+                      </div>
                     ) : (
                       <button
                         onClick={() => {
@@ -3601,7 +3747,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   className={`p-5 rounded-2xl border transition-all ${
                     notif.isRead 
                       ? 'bg-white border-slate-200 opacity-70' 
-                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-blue-500/10'
+                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-orange-500/10'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -3610,7 +3756,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         notif.type === 'success' 
                           ? 'bg-[#00875A]/10 text-sage-medium' 
                           : notif.type === 'receipt' 
-                            ? 'bg-[#00875A]/10 text-blue-450' 
+                            ? 'bg-[#00875A]/10 text-[#00875A]' 
                             : 'bg-slate-200 text-slate-500'
                       }`}>
                         <BellRing className="w-5 h-5" />
@@ -3813,7 +3959,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   className="bg-white text-slate-900 max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl border border-gray-200"
                 >
                   {/* Paystack Styled header */}
-                  <div className="p-6 bg-gradient-to-r from-teal-500 to-[#00875A] text-white flex justify-between items-center">
+                  <div className="p-6 bg-gradient-to-r from-emerald-500 to-[#00875A] text-white flex justify-between items-center">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-bold tracking-widest block uppercase opacity-75">Paystack Secure Checkout</span>
                       <h4 className="text-base font-black">Refill {currencySymbol}{(Number(customFundAmount) || fundAmount).toLocaleString()}</h4>
@@ -3978,7 +4124,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             onClick={() => setPaymentStep('transfer_details')}
                             className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
                           >
-                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 flex items-center justify-center shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] flex items-center justify-center shrink-0">
                               <ArrowRightLeft className="w-5 h-5" />
                             </div>
                             <div className="space-y-1">
@@ -4193,36 +4339,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             
             {/* Supabase Media & Profile Picture Settings */}
             <div className="space-y-4">
-              <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider border-b border-slate-200 pb-2">Supabase Storage Configuration</h3>
               
-              {/* Supabase Status Banner */}
-              <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
-                isSupabaseConfigured 
-                  ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800' 
-                  : 'bg-amber-50/50 border-amber-150 text-amber-800'
-              }`}>
-                <div className="flex items-start gap-3">
-                  <div className={`p-2 rounded-xl shrink-0 ${isSupabaseConfigured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    <Server className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold block text-left">
-                      Supabase Storage Connection: {isSupabaseConfigured ? 'ACTIVE' : 'NOT CONFIGURATED'}
-                    </span>
-                    <span className="text-[10px] text-gray-500 block text-left leading-relaxed">
-                      {isSupabaseConfigured 
-                        ? 'Connected securely! High fidelity file transfers are fully validated.' 
-                        : 'Define VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your workspace Secrets configuration to enable media uploads.'}
-                    </span>
-                  </div>
-                </div>
-                {isSupabaseConfigured && (
-                  <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest font-mono self-start sm:self-auto">
-                    ONLINE
-                  </span>
-                )}
-              </div>
-
               {supabaseError && (
                 <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs flex items-start gap-2 text-left">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -4364,46 +4481,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   />
                   <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
                 </label>
-              </div>
-
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200 gap-3">
-                <div className="text-left">
-                  <span className="text-xs font-bold block text-slate-800">System Notification Permissions</span>
-                  <span className="text-[10px] text-gray-500 block">Receive real-time alerts outside the browser when drivers arrive or riders join your pool</span>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {'Notification' in window ? (
-                    Notification.permission === 'granted' ? (
-                      <span className="bg-emerald-100 text-emerald-850 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
-                        ✓ Enabled
-                      </span>
-                    ) : Notification.permission === 'denied' ? (
-                      <span className="bg-red-100 text-red-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
-                        Blocked
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const p = await Notification.requestPermission();
-                          if (p === 'granted') {
-                            alert("System notifications enabled successfully!");
-                            window.location.reload();
-                          } else {
-                            alert("Notification permission was not granted.");
-                          }
-                        }}
-                        className="bg-[#00875A] hover:bg-[#00875A]/90 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-xs font-mono"
-                      >
-                        Enable
-                      </button>
-                    )
-                  ) : (
-                    <span className="bg-slate-100 text-slate-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
-                      Not Supported
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
 

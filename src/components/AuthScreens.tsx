@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface AuthScreensProps {
   onLogin: (role: UserRole, email: string, password?: string) => Promise<void> | void;
-  onSignUp: (role: UserRole, name: string, email: string, password?: string, driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string }, idNumber?: string) => Promise<void> | void;
+  onSignUp: (role: UserRole, name: string, email: string, password?: string, driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string }, idNumber?: string, gender?: string) => Promise<void> | void;
   onGoogleSignIn?: () => Promise<void> | void;
 }
 
@@ -22,6 +22,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   const [plateNumber, setPlateNumber] = useState<string>('');
   const [vehicleId, setVehicleId] = useState<string>('');
   const [carType, setCarType] = useState<'car' | 'keke' | 'shuttle'>('car');
+  const [gender, setGender] = useState<string>('Male');
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [driverSuccessDetails, setDriverSuccessDetails] = useState<{ name: string; email: string; vehicleId: string } | null>(null);
@@ -121,7 +122,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         })
         .finally(() => setLoading(false));
     } else {
-      Promise.resolve(onSignUp(finalRole, name, email, password, { carBrand, plateNumber, carType, vehicleId }, idNumber))
+      Promise.resolve(onSignUp(finalRole, name, email, password, { carBrand, plateNumber, carType, vehicleId }, idNumber, gender))
         .then(() => {
           if (finalRole === 'driver') {
             setDriverSuccessDetails({
@@ -398,20 +399,42 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="space-y-1 overflow-hidden"
+                  className="space-y-4 overflow-hidden"
                 >
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Full Name</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                      <UserPlus className="w-4 h-4" />
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Full Name</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <UserPlus className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Alex Mercer"
+                        className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                      />
                     </div>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Alex Mercer"
-                      className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
-                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Gender</label>
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl">
+                      {(['Male', 'Female', 'Other'] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setGender(g)}
+                          className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                            gender === g 
+                              ? (selectedRole === 'driver' ? 'bg-orange-600 text-white shadow-sm' : 'bg-[#00875A] text-white shadow-sm') 
+                              : 'text-gray-500 hover:text-gray-900 bg-transparent'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </motion.div>
               )}
