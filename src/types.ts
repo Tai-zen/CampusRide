@@ -32,7 +32,7 @@ export interface DriverState {
   gender?: string;
 }
 
-export type RideStatus = 'requested' | 'accepted' | 'arriving' | 'in_transit' | 'completed' | 'canceled';
+export type RideStatus = 'requested' | 'pending_driver_acceptance' | 'accepted' | 'arriving' | 'in_transit' | 'completed' | 'canceled';
 
 export interface RideRequest {
   id: string;
@@ -67,6 +67,9 @@ export interface RideRequest {
   passengerRated?: boolean;
   driverConcluded?: boolean;
   driverCredited?: boolean;
+  mode?: 'solo' | 'pool' | 'create' | string;
+  isScheduled?: boolean;
+  fare?: number;
 }
 
 export type TransactionType = 'charge' | 'reload';

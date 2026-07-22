@@ -60,6 +60,19 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   
   // Map visualization state ('google' or 'vector' schematic board)
   const [mapMode, setMapMode] = useState<'google' | 'vector'>('vector');
+  const [mapError, setMapError] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Catch Google Maps billing/auth errors gracefully
+    const originalAuthFailure = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn("Google Maps API auth/billing error detected. Falling back to vector schematic map.");
+      setMapError(true);
+      if (typeof originalAuthFailure === 'function') {
+        try { originalAuthFailure(); } catch (e) {}
+      }
+    };
+  }, []);
   
   // Selected stops coordinates
   const pickupStop = stops.find((s) => s.id === pickupId);
@@ -252,7 +265,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
     <div className="w-full bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col animate-fadeIn">
       {/* Main Map Stage */}
       <div className="relative w-full h-[320px] md:h-[400px] bg-slate-100 flex items-center justify-center overflow-hidden">
-        {hasValidKey ? (
+        {hasValidKey && !mapError ? (
           /* GOOGLE MAPS COMPONENT */
           <APIProvider apiKey={API_KEY} version="weekly">
             <Map

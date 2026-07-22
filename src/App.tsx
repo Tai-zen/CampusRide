@@ -55,8 +55,8 @@ const showNativeNotification = async (title: string, body: string) => {
         if (reg) {
           reg.showNotification(title, {
             body,
-            icon: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
-            badge: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
+            icon: '/favicon.svg',
+            badge: '/favicon.svg',
             vibrate: [200, 100, 200],
             tag: 'campusride-update',
             renotify: true

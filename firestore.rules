@@ -118,7 +118,7 @@ service cloud.firestore {
              data.passengerId is string && data.passengerId.size() <= 128 &&
              data.pickup is string && data.pickup.size() <= 200 &&
              data.dropoff is string && data.dropoff.size() <= 200 &&
-             data.status is string && (data.status == 'requested' || data.status == 'accepted' || data.status == 'arriving' || data.status == 'in_transit' || data.status == 'completed' || data.status == 'canceled') &&
+             data.status is string && (data.status == 'requested' || data.status == 'accepted' || data.status == 'arriving' || data.status == 'in_transit' || data.status == 'completed' || data.status == 'canceled' || data.status == 'pending_driver_acceptance') &&
              data.cost is number &&
              (!('passengerName' in data) || (data.passengerName is string && data.passengerName.size() <= 100)) &&
              (!('passengerAvatar' in data) || (data.passengerAvatar is string && data.passengerAvatar.size() <= 1000)) &&
@@ -126,15 +126,15 @@ service cloud.firestore {
              (!('passengerType' in data) || (data.passengerType is string && (data.passengerType == 'Student' || data.passengerType == 'Staff' || data.passengerType == 'Faculty'))) &&
              (!('vehicleType' in data) || (data.vehicleType is string && (data.vehicleType == 'Car' || data.vehicleType == 'Keke' || data.vehicleType == 'Shuttle'))) &&
              (!('verifyPeer' in data) || (data.verifyPeer is bool)) &&
-             (!('driverId' in data) || (data.driverId is string && data.driverId.size() <= 128)) &&
-             (!('driverName' in data) || (data.driverName is string && data.driverName.size() <= 100)) &&
-             (!('driverAvatar' in data) || (data.driverAvatar is string && data.driverAvatar.size() <= 1000)) &&
-             (!('driverVehicle' in data) || (data.driverVehicle is string && data.driverVehicle.size() <= 200)) &&
-             (!('driverRating' in data) || (data.driverRating is number)) &&
-             (!('driverPlateNumber' in data) || (data.driverPlateNumber is string && data.driverPlateNumber.size() <= 50)) &&
-             (!('driverBankName' in data) || (data.driverBankName is string && data.driverBankName.size() <= 100)) &&
-             (!('driverBankAccountNumber' in data) || (data.driverBankAccountNumber is string && data.driverBankAccountNumber.size() <= 20)) &&
-             (!('driverBankAccountName' in data) || (data.driverBankAccountName is string && data.driverBankAccountName.size() <= 100)) &&
+             (!('driverId' in data) || (data.driverId is string && data.driverId.size() <= 128) || data.driverId == null) &&
+             (!('driverName' in data) || (data.driverName is string && data.driverName.size() <= 100) || data.driverName == null) &&
+             (!('driverAvatar' in data) || (data.driverAvatar is string && data.driverAvatar.size() <= 1000) || data.driverAvatar == null) &&
+             (!('driverVehicle' in data) || (data.driverVehicle is string && data.driverVehicle.size() <= 200) || data.driverVehicle == null) &&
+             (!('driverRating' in data) || (data.driverRating is number) || data.driverRating == null) &&
+             (!('driverPlateNumber' in data) || (data.driverPlateNumber is string && data.driverPlateNumber.size() <= 50) || data.driverPlateNumber == null) &&
+             (!('driverBankName' in data) || (data.driverBankName is string && data.driverBankName.size() <= 100) || data.driverBankName == null) &&
+             (!('driverBankAccountNumber' in data) || (data.driverBankAccountNumber is string && data.driverBankAccountNumber.size() <= 20) || data.driverBankAccountNumber == null) &&
+             (!('driverBankAccountName' in data) || (data.driverBankAccountName is string && data.driverBankAccountName.size() <= 100) || data.driverBankAccountName == null) &&
              (!('etaMinutes' in data) || (data.etaMinutes is number)) &&
              (!('date' in data) || (data.date is string && data.date.size() <= 50)) &&
              (!('time' in data) || (data.time is string && data.time.size() <= 50)) &&
@@ -145,7 +145,11 @@ service cloud.firestore {
              (!('riderPaid' in data) || (data.riderPaid is bool)) &&
              (!('passengerRated' in data) || (data.passengerRated is bool)) &&
              (!('driverConcluded' in data) || (data.driverConcluded is bool)) &&
-             (!('driverCredited' in data) || (data.driverCredited is bool));
+             (!('driverCredited' in data) || (data.driverCredited is bool)) &&
+             (!('pickupId' in data) || (data.pickupId is string && data.pickupId.size() <= 100)) &&
+             (!('dropoffId' in data) || (data.dropoffId is string && data.dropoffId.size() <= 100)) &&
+             (!('fare' in data) || (data.fare is number)) &&
+             (!('mode' in data) || (data.mode is string && data.mode.size() <= 50));
     }
 
     function isValidPendingDriver(data) {
@@ -217,24 +221,18 @@ service cloud.firestore {
 
     match /rideRequests/{rideId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && incoming().passengerId == request.auth.uid && isValidRideRequest(incoming());
-      allow update: if isSignedIn() && (
-        // Case 1: Student updates status/payment
-        (existing().passengerId == request.auth.uid && incoming().passengerId == existing().passengerId && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentMethod', 'paymentConfirmedByRider', 'riderPaid', 'passengerRated', 'paymentValidatedByDriver'])
-        )) ||
-        // Case 2: Driver claims/updates status of ride
-        ((existing().driverId == request.auth.uid || (incoming().driverId == request.auth.uid && !('driverId' in existing()))) && (
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'status', 'driverId', 'driverName', 'driverAvatar', 'driverVehicle',
-            'driverRating', 'etaMinutes', 'paymentValidatedByDriver',
-            'driverPlateNumber', 'driverBankName', 'driverBankAccountNumber', 'driverBankAccountName',
-            'driverConcluded', 'driverCredited'
-          ])
-        )) ||
+      allow create: if isSignedIn() && (
+        incoming().passengerId == request.auth.uid ||
+        (incoming().driverId != null && incoming().driverId == request.auth.uid) ||
         isAdmin()
-      );
-      allow delete: if isSignedIn() && (existing().passengerId == request.auth.uid || isAdmin());
+      ) && isValidRideRequest(incoming());
+      allow update: if isSignedIn() && (
+        existing().passengerId == request.auth.uid ||
+        existing().driverId == request.auth.uid ||
+        incoming().driverId == request.auth.uid ||
+        isAdmin()
+      ) && isValidRideRequest(incoming());
+      allow delete: if isSignedIn() && (existing().passengerId == request.auth.uid || existing().driverId == request.auth.uid || isAdmin());
 
       // Nested messages subcollection
       match /messages/{messageId} {
