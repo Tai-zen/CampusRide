@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { UserRole } from '../types';
-import { KeyRound, Mail, UserPlus, LogIn, Car, ClipboardCheck, Clock, Check } from 'lucide-react';
+import { KeyRound, Mail, UserPlus, LogIn, Car, ClipboardCheck, Clock, Check, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { LOGIN_BG_IMAGE } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 interface AuthScreensProps {
   onLogin: (role: UserRole, email: string, password?: string) => Promise<void> | void;
@@ -26,6 +28,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [driverSuccessDetails, setDriverSuccessDetails] = useState<{ name: string; email: string; vehicleId: string } | null>(null);
+
+  // Forgot Password Screen State
+  const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
+  const [resetEmail, setResetEmail] = useState<string>('');
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState<boolean>(false);
 
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role);
@@ -199,7 +208,146 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         </div>
 
         <div className="max-w-md w-full mx-auto space-y-8">
-          {driverSuccessDetails ? (
+          {showForgotPassword ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6 text-slate-800 text-left"
+            >
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setResetSuccess(null);
+                    setResetError(null);
+                  }}
+                  className="inline-flex items-center space-x-1.5 text-xs font-bold text-gray-500 hover:text-gray-800 transition cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back to Sign In</span>
+                </button>
+
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm mt-2">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+
+                <div>
+                  <h2 className={`text-2xl font-extrabold tracking-tight ${selectedRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>
+                    Reset Your Password
+                  </h2>
+                  <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
+                    Enter your registered account email. We will send you an official password reset link.
+                  </p>
+                </div>
+              </div>
+
+              {resetError && (
+                <div className="bg-red-50 text-red-700 text-xs p-3.5 rounded-xl border border-red-100 font-medium flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                  <span>{resetError}</span>
+                </div>
+              )}
+
+              {resetSuccess ? (
+                <div className="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-5 space-y-3.5 text-emerald-900 shadow-sm">
+                  <div className="flex items-center space-x-2 text-emerald-800 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+                    <span>Password Reset Link Dispatched!</span>
+                  </div>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    We've sent a password reset email to <strong className="font-mono underline">{resetEmail}</strong>. Check your inbox and follow the link to complete your password update.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setIsLogin(true);
+                      setEmail(resetEmail);
+                    }}
+                    className="w-full py-2.5 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer transition"
+                  >
+                    Return to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setResetError(null);
+                    setResetSuccess(null);
+
+                    if (!resetEmail) {
+                      setResetError('Please enter your email address.');
+                      return;
+                    }
+                    if (!validateEmail(resetEmail)) {
+                      setResetError('Please enter a valid email address.');
+                      return;
+                    }
+
+                    setResetLoading(true);
+                    try {
+                      await sendPasswordResetEmail(auth, resetEmail.trim().toLowerCase());
+                      setResetSuccess(`Password reset email sent to ${resetEmail}.`);
+                    } catch (err: any) {
+                      console.error('Password reset error:', err);
+                      let msg = 'Failed to send password reset email.';
+                      if (err?.code === 'auth/user-not-found') {
+                        msg = 'No user account found with this email address.';
+                      } else if (err?.code === 'auth/invalid-email') {
+                        msg = 'The email address format is invalid.';
+                      } else if (err?.code === 'auth/too-many-requests') {
+                        msg = 'Too many requests. Please wait a moment before trying again.';
+                      } else if (err?.message) {
+                        msg = err.message;
+                      }
+                      setResetError(msg);
+                    } finally {
+                      setResetLoading(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="name@domain.com"
+                        className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                      />
+                    </div>
+                  </div>
+
+                  <motion.button
+                    type="submit"
+                    disabled={resetLoading}
+                    whileTap={{ scale: 0.98 }}
+                    className={`w-full py-3 rounded-xl text-white font-bold tracking-wide text-xs uppercase flex items-center justify-center space-x-2 shadow-lg transition-colors cursor-pointer ${
+                      resetLoading ? 'opacity-70 cursor-not-allowed bg-gray-500' :
+                      selectedRole === 'student' ? 'bg-primary hover:bg-[#00875A]' : 'bg-orange-600 hover:bg-orange-700'
+                    }`}
+                  >
+                    {resetLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <Mail className="w-4 h-4" />
+                    )}
+                    <span>{resetLoading ? 'Sending...' : 'Send Password Reset Email'}</span>
+                  </motion.button>
+                </form>
+              )}
+            </motion.div>
+          ) : driverSuccessDetails ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -544,7 +692,16 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Password</label>
                 {isLogin && (
-                  <button type="button" className={`text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer ${selectedRole === 'driver' ? 'text-orange-600' : 'text-primary'}`}>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setShowForgotPassword(true);
+                      setResetEmail(email);
+                      setResetSuccess(null);
+                      setResetError(null);
+                    }}
+                    className={`text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer ${selectedRole === 'driver' ? 'text-orange-600' : 'text-primary'}`}
+                  >
                     Forgot password?
                   </button>
                 )}
@@ -617,32 +774,6 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
               </span>
             </motion.button>
           </form>
-
-          {isLogin && onGoogleSignIn && (
-            <div className="mt-2">
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-gray-100"></div>
-                <span className="flex-shrink mx-4 text-[10px] font-mono text-gray-400 uppercase tracking-widest">or</span>
-                <div className="flex-grow border-t border-gray-100"></div>
-              </div>
-
-              <button
-                type="button"
-                onClick={onGoogleSignIn}
-                className="w-full mt-2 py-3 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition shadow-sm cursor-pointer"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                  <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                    <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.48c0,-0.61 -0.06,-1.2 -0.16,-1.72Z" fill="#4285f4" />
-                    <path d="M12,20.6c2.59,0 4.77,-0.86 6.36,-2.3l-3.3,-2.58c-0.91,0.61 -2.08,0.98 -3.06,0.98c-2.37,0 -4.38,-1.6 -5.1,-3.75H3.5v2.66c1.58,3.14 4.83,5.3 8.5,5.3Z" fill="#34a853" />
-                    <path d="M6.9,13.1c-0.18,-0.55 -0.28,-1.13 -0.28,-1.73s0.1,-1.18 0.28,-1.73V6.98H3.5a8.88,8.88 0 0,0 0,7.84L6.9,13.1Z" fill="#fbbc05" />
-                    <path d="M12,6.38c1.41,0 2.68,0.49 3.68,1.44l2.76,-2.76C16.77,3.52 14.59,3 12,3c-3.67,0 -6.92,2.16 -8.5,5.3l3.4,2.66c0.72,-2.15 2.73,-3.75 5.1,-3.75Z" fill="#ea4335" />
-                  </g>
-                </svg>
-                <span>Continue with Google</span>
-              </button>
-            </div>
-          )}
 
           <div id="auth-switcher-footer" className="text-center pt-2">
             <button

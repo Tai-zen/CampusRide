@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { MapPin, Navigation, Car, Zap, Users, Info, Compass } from 'lucide-react';
 import { UNIVERSITIES } from './SchoolSelection';
+import { db } from '../lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 interface CampusMapProps {
   schoolId: string;
@@ -57,6 +59,29 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   
   // Local state for simulated drivers
   const [drivers, setDrivers] = useState<SimulatedDriver[]>([]);
+  const [actualOnlineDriversCount, setActualOnlineDriversCount] = useState<number>(0);
+
+  // Synchronize actual online drivers from Firestore in real-time
+  useEffect(() => {
+    try {
+      const q = query(collection(db, 'users'), where('role', '==', 'driver'));
+      const unsub = onSnapshot(q, (snapshot) => {
+        let count = 0;
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data && data.status !== 'Offline') {
+            count++;
+          }
+        });
+        setActualOnlineDriversCount(count);
+      }, (err) => {
+        console.warn("Error subscribing to online drivers in Firestore:", err);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.warn("Firestore not available:", err);
+    }
+  }, []);
   
   // Map visualization state ('google' or 'vector' schematic board)
   const [mapMode, setMapMode] = useState<'google' | 'vector'>('vector');
@@ -372,7 +397,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
       <div className="p-4 bg-slate-50 border-t border-slate-150 flex flex-wrap gap-4 items-center justify-between text-xs font-semibold text-slate-600">
         <div className="flex items-center space-x-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>{drivers.length} drivers online on campus</span>
+          <span>{actualOnlineDriversCount} {actualOnlineDriversCount === 1 ? 'driver' : 'drivers'} online on campus</span>
         </div>
 
         <div className="flex gap-4">

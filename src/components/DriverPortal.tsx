@@ -79,6 +79,100 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 }) => {
   // Local Shift States
   const [shiftOnline, setShiftOnline] = useState<boolean>(() => driverProfile?.status !== 'Offline');
+
+  // Real-time background calculation of hours clocked today
+  const [secondsClockedToday, setSecondsClockedToday] = useState<number>(() => {
+    const todayStr = new Date().toDateString();
+    const storageKey = `campusride_hours_clocked_${driverProfile?.id || 'default'}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.date === todayStr && typeof parsed.seconds === 'number') {
+          return parsed.seconds;
+        }
+      } catch (e) {}
+    }
+    return Math.round((driverProfile?.hoursOnline || 0) * 3600);
+  });
+
+  // Check for day rollover on mount and driverProfile changes
+  useEffect(() => {
+    const todayStr = new Date().toDateString();
+    const storageKey = `campusride_hours_clocked_${driverProfile?.id || 'default'}`;
+    const stored = localStorage.getItem(storageKey);
+
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.date !== todayStr) {
+          setSecondsClockedToday(0);
+          localStorage.setItem(storageKey, JSON.stringify({ date: todayStr, seconds: 0 }));
+          onUpdateDriverProfile({ hoursOnline: 0 });
+        }
+      } catch (e) {}
+    } else {
+      localStorage.setItem(storageKey, JSON.stringify({ date: todayStr, seconds: secondsClockedToday }));
+    }
+  }, [driverProfile?.id]);
+
+  // Background timer loop for driver hours clocked
+  useEffect(() => {
+    if (!shiftOnline) return;
+
+    const storageKey = `campusride_hours_clocked_${driverProfile?.id || 'default'}`;
+    let lastTickTime = Date.now();
+    let syncCounter = 0;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const deltaSec = Math.max(1, Math.round((now - lastTickTime) / 1000));
+      lastTickTime = now;
+
+      const todayStr = new Date().toDateString();
+
+      setSecondsClockedToday((prev) => {
+        const currentStored = localStorage.getItem(storageKey);
+        if (currentStored) {
+          try {
+            const parsed = JSON.parse(currentStored);
+            if (parsed.date !== todayStr) {
+              localStorage.setItem(storageKey, JSON.stringify({ date: todayStr, seconds: 0 }));
+              onUpdateDriverProfile({ hoursOnline: 0 });
+              return 0;
+            }
+          } catch (e) {}
+        }
+
+        const newSec = prev + deltaSec;
+        localStorage.setItem(storageKey, JSON.stringify({ date: todayStr, seconds: newSec }));
+
+        syncCounter += deltaSec;
+        if (syncCounter >= 10) {
+          syncCounter = 0;
+          const hrs = Number((newSec / 3600).toFixed(1));
+          onUpdateDriverProfile({ hoursOnline: hrs });
+        }
+
+        return newSec;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      const todayStr = new Date().toDateString();
+      const currentStored = localStorage.getItem(storageKey);
+      if (currentStored) {
+        try {
+          const parsed = JSON.parse(currentStored);
+          if (parsed.date === todayStr) {
+            const finalHrs = Number((parsed.seconds / 3600).toFixed(1));
+            onUpdateDriverProfile({ hoursOnline: finalHrs });
+          }
+        } catch (e) {}
+      }
+    };
+  }, [shiftOnline, driverProfile?.id]);
   const [incomingRequest, setIncomingRequest] = useState<RideRequest | null>(null);
   const [declinedRideIds, setDeclinedRideIds] = useState<Set<string>>(() => new Set());
   const [simTransitLoading, setSimTransitLoading] = useState<boolean>(false);
@@ -874,7 +968,6 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     onUpdateDriverProfile({
       todayEarnings: driverProfile.todayEarnings + fareEarned,
       completedTripsCount: driverProfile.completedTripsCount + 1,
-      hoursOnline: Number((driverProfile.hoursOnline + 0.4).toFixed(1)),
       status: 'Idle',
     });
 
@@ -1072,9 +1165,9 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/20 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Hours Clocked</span>
-                <span className="text-2xl font-extrabold text-[#BE5912] block">{driverProfile.hoursOnline} hrs</span>
-                <span className="text-[9px] text-[#BE5912] font-bold bg-[#BE5912]/10 px-2 rounded-full inline-block">
-                  Active duty state
+                <span className="text-2xl font-extrabold text-[#BE5912] block">{(secondsClockedToday / 3600).toFixed(1)} hrs</span>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${shiftOnline ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'}`}>
+                  {shiftOnline ? 'Active duty state' : 'Shift paused (Offline)'}
                 </span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center">
@@ -1996,7 +2089,6 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               <button
                 onClick={() => {
                   onMarkNotificationsRead?.();
-                  alert('All messages marked as read.');
                 }}
                 className="text-xs text-[#BE5912] hover:underline font-bold cursor-pointer"
               >
@@ -2004,10 +2096,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (confirm("Are you sure you want to clear your notification history?")) {
-                    onClearNotifications?.();
-                    alert('Notification history cleared.');
-                  }
+                  onClearNotifications?.();
                 }}
                 className="text-xs text-rose-600 hover:underline font-bold cursor-pointer"
               >

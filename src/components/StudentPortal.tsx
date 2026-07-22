@@ -3799,7 +3799,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               <button
                 onClick={() => {
                   onMarkNotificationsRead();
-                  alert('All messages marked as read.');
                 }}
                 className="text-xs text-[#00875A] hover:underline font-bold cursor-pointer"
               >
@@ -3808,9 +3807,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               <span className="text-slate-300">|</span>
               <button
                 onClick={() => {
-                  if (confirm("Are you sure you want to clear your notification history?")) {
-                    onClearNotifications?.();
-                  }
+                  onClearNotifications?.();
                 }}
                 className="text-xs text-rose-600 hover:underline font-bold cursor-pointer"
               >

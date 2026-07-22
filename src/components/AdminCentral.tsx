@@ -800,9 +800,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     <div className="p-2.5 border-t border-gray-100 bg-gray-50/50 text-center">
                       <button
                         onClick={() => {
-                          if (confirm('Clear entire notification log history?')) {
-                            onClearNotifications?.();
-                          }
+                          onClearNotifications?.();
                         }}
                         className="text-[10px] text-rose-600 hover:underline font-bold"
                       >
