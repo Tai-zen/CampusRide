@@ -55,8 +55,8 @@ const showNativeNotification = async (title: string, body: string) => {
         if (reg) {
           reg.showNotification(title, {
             body,
-            icon: 'https://upload.wikimedia.org/wikipedia/en/c/cc/Redeemer%27s_University_logo.png',
-            badge: 'https://upload.wikimedia.org/wikipedia/en/c/cc/Redeemer%27s_University_logo.png',
+            icon: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
+            badge: '/logos/Gemini_Generated_Image_rzug5irzug5irzug.png',
             vibrate: [200, 100, 200],
             tag: 'campusride-update',
             renotify: true
@@ -74,7 +74,7 @@ const showNativeNotification = async (title: string, body: string) => {
 export default function App() {
   const isSigningUpRef = useRef<boolean>(false);
   const [currentUser, setCurrentUser] = useState<{ email: string; name: string; uid?: string } | null>(null);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>('run');
   const [currentRole, setCurrentRole] = useState<UserRole>('student');
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
@@ -881,17 +881,24 @@ export default function App() {
 
   const handleClearNotifications = async () => {
     setNotifications([]);
-    const uid = getActiveUid();
-    if (uid) {
+    const uidsToClear = new Set<string>();
+    const activeUid = getActiveUid();
+    if (activeUid) uidsToClear.add(activeUid);
+    if (driverProfile?.id) uidsToClear.add(driverProfile.id);
+    if (userProfile?.id) uidsToClear.add(userProfile.id);
+
+    for (const uid of Array.from(uidsToClear)) {
       try {
-        const batch = writeBatch(db);
-        notifications.forEach(notif => {
-          const ref = doc(db, 'users', uid, 'notifications', notif.id);
-          batch.delete(ref);
-        });
-        await batch.commit();
+        const notifSnap = await getDocs(collection(db, 'users', uid, 'notifications'));
+        if (!notifSnap.empty) {
+          const batch = writeBatch(db);
+          notifSnap.forEach(docSnap => {
+            batch.delete(docSnap.ref);
+          });
+          await batch.commit();
+        }
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `users/${uid}/notifications`);
+        console.warn(`Error deleting notifications for ${uid}:`, error);
       }
     }
   };
@@ -1024,11 +1031,6 @@ export default function App() {
     return <AuthScreens onLogin={handleLogin} onSignUp={handleSignUp} onGoogleSignIn={handleGoogleSignIn} />;
   }
 
-  // School Selection Screen after login
-  if (!selectedSchoolId) {
-    return <SchoolSelection onSelectSchool={handleSelectSchool} onBack={handleLogout} />;
-  }
-
   // Determine which visual details are supplied to sidebar
   const activeSidebarProfile = {
     name: currentRole === 'student' ? userProfile.name : currentRole === 'driver' ? driverProfile.name : INITIAL_ADMIN_PROFILE.name,
@@ -1085,24 +1087,6 @@ export default function App() {
 
       {/* Main Viewport Content block */}
       <main id="main-viewport-body" className="flex-1 flex flex-col relative min-w-0 pb-20 md:pb-0">
-        
-        {/* Desktop Top Header Bar */}
-        <header className="hidden md:flex items-center justify-end px-8 py-4 bg-white border-b border-gray-100 z-10 shrink-0 select-none">
-          <div className="flex items-center space-x-6">
-            {/* Notification Bell Button */}
-            <button
-              type="button"
-              onClick={() => setActiveView(currentRole === 'student' || currentRole === 'driver' ? 'notifications' : 'admin_operations')}
-              className={`p-2 hover:bg-gray-50 rounded-xl transition-all relative cursor-pointer ${currentRole === 'driver' ? 'text-[#BE5912]' : 'text-[#00875A]'}`}
-              title="View Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {notifications.filter(n => !n.isRead).length > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
-              )}
-            </button>
-          </div>
-        </header>
         
         {/* Native Web Push Notifications Consent Banner */}
         {notificationPermission === 'default' && !dismissedNotificationBanner && (

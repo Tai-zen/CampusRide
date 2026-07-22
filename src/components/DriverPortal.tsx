@@ -183,22 +183,60 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   };
 
 
-  // Sync reviews from database
+  // Sync reviews from database + local storage + event listener
   useEffect(() => {
     if (!driverProfile?.id) return;
+
+    const loadLocalReviews = () => {
+      const stored = localStorage.getItem(`campusride_reviews_${driverProfile.id}`);
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {}
+      }
+      return [];
+    };
+
     const q = query(
       collection(db, 'users', driverProfile.id, 'reviews')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: any[] = [];
-      snapshot.forEach(doc => {
-        list.push({ id: doc.id, ...doc.data() });
+      snapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
       });
-      setReviews(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+      const localList = loadLocalReviews();
+      const mergedMap = new Map();
+      [...list, ...localList].forEach(item => mergedMap.set(item.id, item));
+      const combined = Array.from(mergedMap.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setReviews(combined);
     }, (error) => {
-      console.error("Firestore error reading reviews:", error);
+      console.warn("Firestore error reading reviews, using local fallback:", error);
+      setReviews(loadLocalReviews());
     });
-    return () => unsubscribe();
+
+    const handleCustomReviewEvent = (e: any) => {
+      const { driverId, review, notif, newRating, newCount } = e.detail || {};
+      if (driverId === driverProfile.id) {
+        setReviews(prev => {
+          const filtered = prev.filter(r => r.id !== review.id);
+          return [review, ...filtered];
+        });
+        if (newRating && newCount) {
+          onUpdateDriverProfile({ rating: newRating, ratingsCount: newCount });
+        }
+        if (notif) {
+          onAddNotification(notif);
+        }
+      }
+    };
+
+    window.addEventListener('campusride_new_driver_review', handleCustomReviewEvent as EventListener);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('campusride_new_driver_review', handleCustomReviewEvent as EventListener);
+    };
   }, [driverProfile?.id]);
 
   // Sync shift online with driver profile status
@@ -394,39 +432,47 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     };
   }, [activeRide?.status]);
 
-  // Helper to resolve stop names
+  // Helper to resolve stop names across all registered universities & fallback stops
   const getStopName = (stopId: string) => {
-    const stop = CAMPUS_STOPS.find(s => s.id === stopId);
+    if (!stopId) return 'Campus Station';
+    const selectedSchool = UNIVERSITIES.find(u => u.id === (selectedSchoolId || 'run')) || UNIVERSITIES[0];
+    const allUniversityStops = UNIVERSITIES.flatMap(u => u.stops || []);
+    const allStops = [...allUniversityStops, ...(selectedSchool?.stops || []), ...CAMPUS_STOPS];
+    const stop = allStops.find(s => s.id === stopId || s.name === stopId);
     return stop ? stop.name : stopId;
   };
 
-  // Sync scheduled rides
+  // Sync scheduled rides from Firestore + local storage
   React.useEffect(() => {
-    const syncScheduled = () => {
+    const q = query(
+      collection(db, 'scheduledRideRequests'),
+      where('status', '==', 'pending_driver_acceptance')
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setScheduledRides(list);
+    }, (err) => {
+      console.warn("Firestore error syncing scheduled rides for driver, fallback to storage:", err);
       const stored = localStorage.getItem('campusride_global_scheduled_rides');
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
-          setScheduledRides(parsed);
-        } catch (e) {
-          console.error("Error parsing scheduled rides", e);
-        }
-      } else {
-        setScheduledRides([]);
+          const parsed = JSON.parse(stored) as any[];
+          setScheduledRides(parsed.filter((r: any) => r.status === 'pending_driver_acceptance' || !r.status));
+        } catch (e) {}
       }
-    };
+    });
 
-    syncScheduled();
-    window.addEventListener('storage', syncScheduled);
-    const interval = setInterval(syncScheduled, 2000);
-    return () => {
-      window.removeEventListener('storage', syncScheduled);
-      clearInterval(interval);
-    };
+    return () => unsub();
   }, []);
 
-  // Claim a scheduled ride
-  const handleClaimScheduledRide = (ride: any) => {
+  // Claim & Accept a scheduled ride
+  const handleClaimScheduledRide = async (ride: any) => {
+    const driverPlate = driverProfile.plateNumber || (driverProfile.vehicle ? (driverProfile.vehicle.includes(' • ') ? driverProfile.vehicle.split(' • ')[1] : 'RUN-918-LA') : 'RUN-918-LA');
+
     const claimedRide: RideRequest = {
       id: ride.id,
       passengerId: ride.passengerId || 'std-unknown',
@@ -448,20 +494,54 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       driverAvatar: driverProfile.avatar,
       driverVehicle: driverProfile.vehicle,
       driverRating: driverProfile.rating,
-      driverPlateNumber: driverProfile.plateNumber || (driverProfile.vehicle ? (driverProfile.vehicle.includes(' • ') ? driverProfile.vehicle.split(' • ')[1] : 'RUN-918-LA') : 'RUN-918-LA'),
+      driverPlateNumber: driverPlate,
       driverBankName: driverProfile.bankName || 'Access Bank Nigeria',
       driverBankAccountNumber: driverProfile.bankAccountNumber || '2088392102',
       driverBankAccountName: driverProfile.bankAccountName || driverProfile.name || 'David Alao',
     };
 
-    // Remove it from global scheduled rides
+    // Update scheduledRideRequests in Firestore to 'accepted'
+    try {
+      await setDoc(doc(db, 'scheduledRideRequests', ride.id), {
+        ...ride,
+        status: 'accepted',
+        driverId: driverProfile.id,
+        driverName: driverProfile.name,
+        driverAvatar: driverProfile.avatar,
+        driverVehicle: driverProfile.vehicle,
+        driverRating: driverProfile.rating,
+        driverPlateNumber: driverPlate,
+        acceptedAt: Date.now()
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error accepting scheduled ride in Firestore:", err);
+    }
+
+    // Send notification to rider's notifications collection
+    if (ride.passengerId) {
+      try {
+        const notifId = `notif-sch-${Date.now()}`;
+        await setDoc(doc(db, 'users', ride.passengerId, 'notifications', notifId), {
+          id: notifId,
+          title: 'Scheduled Ride Accepted!',
+          message: `Driver ${driverProfile.name} accepted your scheduled ride from ${getStopName(ride.pickup)} to ${getStopName(ride.dropoff)} for ${ride.date} at ${ride.time}.`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: 'Today',
+          isRead: false,
+          type: 'success'
+        });
+      } catch (e) {
+        console.warn("Error sending acceptance notification to rider:", e);
+      }
+    }
+
+    // Update global scheduled rides in localStorage
     const stored = localStorage.getItem('campusride_global_scheduled_rides');
     if (stored) {
       try {
         const allRides = JSON.parse(stored) as any[];
-        const updated = allRides.filter(r => r.id !== ride.id);
+        const updated = allRides.map((r: any) => r.id === ride.id ? { ...r, status: 'accepted', driverId: driverProfile.id, driverName: driverProfile.name } : r);
         localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updated));
-        setScheduledRides(updated);
       } catch (e) {}
     }
 
@@ -471,8 +551,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 
     onAddNotification({
       id: `driver-notif-${Date.now()}`,
-      title: 'Scheduled Ride Claimed',
-      message: `You claimed scheduled trip ${ride.id} from ${getStopName(ride.pickup)} to ${getStopName(ride.dropoff)}. Proceed to dashboard to execute.`,
+      title: 'Scheduled Ride Confirmed',
+      message: `You accepted scheduled trip ${ride.id} from ${getStopName(ride.pickup)} to ${getStopName(ride.dropoff)}. Ride is now active on your dashboard.`,
       date: 'Today',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
@@ -1129,14 +1209,14 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <div className="w-5 h-5 rounded-full bg-[#BE5912]/20 flex items-center justify-center text-[#BE5912] shrink-0 text-[10px] font-extrabold">A</div>
                       <div>
                         <span className="text-[9px] font-bold text-gray-400 uppercase font-mono block">Pickup Spot Location</span>
-                        <span className="text-xs font-bold text-[#BE5912]">{activeRide.pickup}</span>
+                        <span className="text-xs font-bold text-[#BE5912]">{getStopName(activeRide.pickup)}</span>
                       </div>
                     </div>
                     <div className="flex items-start space-x-3">
                       <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center text-red-700 shrink-0 text-[10px] font-extrabold font-mono">B</div>
                       <div>
                         <span className="text-[9px] font-bold text-gray-400 uppercase font-mono block font-mono">Destination Stop</span>
-                        <span className="text-xs font-bold text-[#BE5912]">{activeRide.dropoff}</span>
+                        <span className="text-xs font-bold text-[#BE5912]">{getStopName(activeRide.dropoff)}</span>
                       </div>
                     </div>
                   </div>
@@ -1217,11 +1297,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <div className="grid grid-cols-2 gap-4 text-xs">
                         <div className="space-y-1 bg-white p-2.5 rounded-xl border border-gray-100">
                           <span className="text-[9px] font-bold text-gray-400 font-mono block tracking-wider uppercase">Pickup Spot Campus</span>
-                          <span className="font-bold text-[#BE5912] truncate block">{incomingRequest.pickup}</span>
+                          <span className="font-bold text-[#BE5912] truncate block">{getStopName(incomingRequest.pickup)}</span>
                         </div>
                         <div className="space-y-1 bg-white p-2.5 rounded-xl border border-gray-100">
                           <span className="text-[9px] font-bold text-gray-400 font-mono block tracking-wider uppercase">Destination Stop</span>
-                          <span className="font-bold text-[#BE5912] truncate block">{incomingRequest.dropoff}</span>
+                          <span className="font-bold text-[#BE5912] truncate block">{getStopName(incomingRequest.dropoff)}</span>
                         </div>
                       </div>
 
@@ -1424,7 +1504,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                               <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-extrabold uppercase font-mono">Completed</span>
                             </div>
                             <span className="text-[10px] text-gray-500 truncate block">
-                              {ride.pickup} → {ride.dropoff}
+                              {getStopName(ride.pickup)} → {getStopName(ride.dropoff)}
                             </span>
                             <span className="text-[9px] text-gray-400 font-mono block">
                               {ride.date || 'Today'} • {ride.time}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, setDoc, doc, getDoc, updateDoc, addDoc, onSnapshot } from 'firebase/firestore';
+import { collection, setDoc, doc, getDoc, updateDoc, addDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { isSupabaseConfigured, uploadFile, uploadLogoFromUrl } from '../lib/supabase';
 import { 
   UserProfile, 
@@ -313,19 +313,36 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     }
   }, [selectedSchoolId, campusStops]);
 
-  // Load scheduled rides on mount
+  // Load & Sync scheduled rides on mount + Firestore real-time listener
   useEffect(() => {
-    const stored = localStorage.getItem('campusride_global_scheduled_rides');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as any[];
-        const myRides = parsed.filter(r => r.passengerId === userProfile.id);
-        setScheduledRides(myRides);
-      } catch (e) {
-        console.error("Error parsing stored scheduled rides", e);
+    if (!userProfile?.id) return;
+
+    // Real-time Firestore query for scheduled rides belonging to this passenger
+    const q = query(
+      collection(db, 'scheduledRideRequests'),
+      where('passengerId', '==', userProfile.id)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setScheduledRides(list);
+    }, (err) => {
+      console.warn("Firestore error syncing scheduled rides, falling back to local storage:", err);
+      const stored = localStorage.getItem('campusride_global_scheduled_rides');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as any[];
+          const myRides = parsed.filter(r => r.passengerId === userProfile.id);
+          setScheduledRides(myRides);
+        } catch (e) {}
       }
-    }
-  }, [userProfile.id]);
+    });
+
+    return () => unsub();
+  }, [userProfile?.id]);
 
   // Set default currency symbol
   const currencySymbol = "₦";
@@ -954,10 +971,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         return;
       }
       
+      const scheduleId = `SCH-${Math.floor(100000 + Math.random() * 900000)}`;
       const newSchedule = {
-        id: `SCH-${Math.floor(100000 + Math.random() * 900000)}`,
-        pickup,
-        dropoff,
+        id: scheduleId,
+        pickup: getStopName(pickup),
+        dropoff: getStopName(dropoff),
+        pickupId: pickup,
+        dropoffId: dropoff,
         mode: rideMode === 'solo' ? ('solo' as const) : ('create' as const),
         date: scheduledDate,
         time: scheduledTime,
@@ -966,27 +986,35 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         passengerId: userProfile.id,
         passengerName: userProfile.name,
         passengerAvatar: userProfile.avatar,
-        passengerRating: userProfile.rating || 4.8
+        passengerRating: userProfile.rating || 4.8,
+        status: 'pending_driver_acceptance',
+        driverId: null,
+        driverName: null,
+        createdAt: Date.now()
       };
 
-      // Get current global scheduled rides, append new one, and save
+      // Save to Firestore scheduledRideRequests collection
+      setDoc(doc(db, 'scheduledRideRequests', scheduleId), newSchedule).catch(err => {
+        console.error("Error saving scheduled ride request to Firestore:", err);
+      });
+
+      // Get current global scheduled rides, append new one, and save in localStorage as backup
       const stored = localStorage.getItem('campusride_global_scheduled_rides');
       const allRides = stored ? JSON.parse(stored) : [];
       const updatedRides = [newSchedule, ...allRides];
       localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updatedRides));
 
-      setScheduledRides(updatedRides.filter(r => r.passengerId === userProfile.id));
       onAddNotification({
         id: `notif-${Date.now()}`,
-        title: 'Ride Scheduled Successfully!',
-        message: `Your ${rideMode === 'solo' ? 'Solo' : 'Pool'} ride from ${getStopName(pickup)} to ${getStopName(dropoff)} has been scheduled for ${scheduledDate} at ${scheduledTime}.`,
+        title: 'Ride Request Scheduled (Pending Driver)',
+        message: `Your ${rideMode === 'solo' ? 'Solo' : 'Pool'} ride from ${getStopName(pickup)} to ${getStopName(dropoff)} has been submitted for ${scheduledDate} at ${scheduledTime}. A driver must accept to confirm.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         date: 'Today',
         isRead: false,
         type: 'success'
       });
       
-      alert(`Success! Your ride has been scheduled for ${scheduledDate} at ${scheduledTime}.`);
+      alert(`Ride Request Submitted! Your ride for ${scheduledDate} at ${scheduledTime} is pending driver acceptance.`);
       setScheduledDate('');
       setScheduledTime('');
       return;
@@ -1567,70 +1595,87 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   // Complete Rating
   const handleRateSubmit = async () => {
-    // Average the rating and update driverProfile directly in Firestore
+    // Average the rating and update driverProfile in Firestore
     if (activeRide) {
-      if (activeRide.driverId && ratingScore > 0) {
-        const driverId = activeRide.driverId;
+      const driverId = activeRide.driverId || 'drv-001';
+      if (driverId && ratingScore > 0) {
         try {
           const driverDocRef = doc(db, 'users', driverId);
-          const driverDocSnap = await getDoc(driverDocRef);
-          
           let currentRating = 5.0;
           let currentCount = 0;
           
-          if (driverDocSnap.exists()) {
-            const driverData = driverDocSnap.data();
-            currentRating = driverData.rating ?? 5.0;
-            currentCount = driverData.ratingsCount ?? 0;
+          try {
+            const driverDocSnap = await getDoc(driverDocRef);
+            if (driverDocSnap.exists()) {
+              const driverData = driverDocSnap.data();
+              currentRating = driverData.rating ?? 5.0;
+              currentCount = driverData.ratingsCount ?? 0;
+            }
+          } catch (e) {
+            console.warn("Could not fetch driver profile for rating calculation:", e);
           }
           
           const newCount = currentCount + 1;
           const newRating = Number(((currentRating * currentCount + ratingScore) / newCount).toFixed(2));
           
-          // Update the driver's profile in Firestore directly!
-          await updateDoc(driverDocRef, {
+          // Use setDoc with merge to safely update rating and ratingsCount on driver doc
+          await setDoc(driverDocRef, {
             rating: newRating,
             ratingsCount: newCount
-          });
+          }, { merge: true });
 
-          // Add a review doc to the driver's reviews subcollection
+          // Add a review doc to the driver's reviews subcollection in Firestore
           const reviewId = `rev-${Date.now()}`;
-          await setDoc(doc(db, 'users', driverId, 'reviews', reviewId), {
+          const reviewObj = {
             id: reviewId,
-            passengerName: activeRide.passengerName || 'Anonymous Rider',
-            passengerAvatar: activeRide.passengerAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+            passengerName: activeRide.passengerName || userProfile.name || 'Anonymous Rider',
+            passengerAvatar: activeRide.passengerAvatar || userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
             rating: ratingScore,
             comment: reviewText.trim() || 'Rider rated the travel experience.',
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             date: 'Today',
             createdAt: Date.now()
-          });
+          };
 
-          // Clear review feedback state
-          setReviewText('');
+          await setDoc(doc(db, 'users', driverId, 'reviews', reviewId), reviewObj);
 
-          // Add a notification to the driver
+          // Add a notification to the driver in Firestore
           const notifId = `notif-${Date.now()}`;
-          await setDoc(doc(db, 'users', driverId, 'notifications', notifId), {
+          const driverNotif = {
             id: notifId,
             title: 'New Trip Rating Received',
-            message: `A passenger rated your recent ride ${ratingScore} Stars. Your average rating is now ★ ${newRating}.`,
+            message: `A passenger rated your recent ride ${ratingScore} Stars (${reviewObj.comment}). Rating updated to ★ ${newRating}.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             date: 'Today',
             isRead: false,
             type: 'success'
-          });
+          };
+          await setDoc(doc(db, 'users', driverId, 'notifications', notifId), driverNotif);
+
+          // Save to local storage as fallback for instant sync
+          const storedReviewsKey = `campusride_reviews_${driverId}`;
+          const existingReviews = localStorage.getItem(storedReviewsKey);
+          const parsedReviews = existingReviews ? JSON.parse(existingReviews) : [];
+          localStorage.setItem(storedReviewsKey, JSON.stringify([reviewObj, ...parsedReviews]));
+
+          // Notify any local driver session directly
+          window.dispatchEvent(new CustomEvent('campusride_new_driver_review', { 
+            detail: { driverId, review: reviewObj, notif: driverNotif, newRating, newCount } 
+          }));
+
+          // Clear review feedback state
+          setReviewText('');
 
         } catch (err) {
-          console.error("Error updating driver rating:", err);
+          console.error("Error updating driver rating/review:", err);
         }
       }
 
       // Mark the ride as passenger rated in Firestore so onSnapshot ignores it
       try {
-        await updateDoc(doc(db, 'rideRequests', activeRide.id), {
+        await setDoc(doc(db, 'rideRequests', activeRide.id), {
           passengerRated: true
-        });
+        }, { merge: true });
       } catch (e) {
         console.error("Error marking passengerRated in Firestore:", e);
       }
@@ -2138,46 +2183,81 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     </h3>
 
                     <div className="space-y-2.5">
-                      {scheduledRides.map((ride) => (
-                        <div key={ride.id} className="bg-slate-50 border border-slate-150 p-4 rounded-2xl flex items-center justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black text-slate-800 font-mono tracking-tight">{ride.id}</span>
-                              <span className="text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
-                                {ride.mode === 'solo' ? 'Solo' : 'Pool'}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-700 font-medium">{getStopName(ride.pickup)} ➔ {getStopName(ride.dropoff)}</p>
-                            <p className="text-[10px] text-slate-500 font-semibold font-mono flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-[#00875A]" /> {ride.date} • <Clock className="w-3 h-3 text-[#00875A]" /> {ride.time}
-                            </p>
-                          </div>
+                      {scheduledRides.map((ride) => {
+                        const isAccepted = ride.status === 'accepted' || !!ride.driverId;
 
-                          <div className="text-right flex flex-col items-end gap-2">
-                            <span className="text-xs font-mono font-black text-[#00875A]">{currencySymbol}{ride.fare}</span>
-                             <button
-                              type="button"
-                              onClick={() => {
-                                if (confirm('Are you sure you want to cancel this scheduled ride?')) {
-                                  const stored = localStorage.getItem('campusride_global_scheduled_rides');
-                                  if (stored) {
-                                    try {
-                                      const allRides = JSON.parse(stored) as any[];
-                                      const updated = allRides.filter(r => r.id !== ride.id);
-                                      localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updated));
-                                    } catch (e) {}
-                                  }
-                                  setScheduledRides(prev => prev.filter(r => r.id !== ride.id));
-                                  alert('Scheduled ride cancelled.');
-                                }
-                              }}
-                              className="text-[10px] text-rose-600 hover:text-rose-700 font-bold uppercase tracking-wider cursor-pointer hover:underline"
-                            >
-                              Cancel
-                            </button>
+                        return (
+                          <div key={ride.id} className="bg-slate-50 border border-slate-150 p-4 rounded-2xl space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-black text-slate-800 font-mono tracking-tight">{ride.id}</span>
+                                  <span className="text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                                    {ride.mode === 'solo' ? 'Solo' : 'Pool'}
+                                  </span>
+                                  {isAccepted ? (
+                                    <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                      <CheckCircle className="w-3 h-3 text-emerald-600" /> Driver Accepted
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-amber-600 animate-pulse" /> Pending Driver Acceptance
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-700 font-medium">{getStopName(ride.pickup)} ➔ {getStopName(ride.dropoff)}</p>
+                                <p className="text-[10px] text-slate-500 font-semibold font-mono flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 text-[#00875A]" /> {ride.date} • <Clock className="w-3 h-3 text-[#00875A]" /> {ride.time}
+                                </p>
+                              </div>
+
+                              <div className="text-right flex flex-col items-end gap-2">
+                                <span className="text-xs font-mono font-black text-[#00875A]">{currencySymbol}{ride.fare}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to cancel this scheduled ride?')) {
+                                      // Delete from Firestore
+                                      doc(db, 'scheduledRideRequests', ride.id);
+                                      setDoc(doc(db, 'scheduledRideRequests', ride.id), { status: 'cancelled' }, { merge: true }).catch(() => {});
+                                      
+                                      const stored = localStorage.getItem('campusride_global_scheduled_rides');
+                                      if (stored) {
+                                        try {
+                                          const allRides = JSON.parse(stored) as any[];
+                                          const updated = allRides.filter(r => r.id !== ride.id);
+                                          localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updated));
+                                        } catch (e) {}
+                                      }
+                                      setScheduledRides(prev => prev.filter(r => r.id !== ride.id));
+                                      alert('Scheduled ride request cancelled.');
+                                    }
+                                  }}
+                                  className="text-[10px] text-rose-600 hover:text-rose-700 font-bold uppercase tracking-wider cursor-pointer hover:underline"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Driver Acceptance info panel */}
+                            {isAccepted ? (
+                              <div className="bg-emerald-50/80 border border-emerald-200/80 p-2.5 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                                <div>
+                                  <span className="font-extrabold">Assigned Driver:</span> {ride.driverName || 'Campus Driver'} {ride.driverVehicle ? `(${ride.driverVehicle})` : ''}
+                                  {ride.driverPlateNumber ? ` • ${ride.driverPlateNumber}` : ''}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-[11px] text-amber-900 flex items-center gap-2">
+                                <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span>Ride request is listed for online campus drivers. It will be fully scheduled once a driver accepts.</span>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

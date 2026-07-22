@@ -176,7 +176,7 @@ service cloud.firestore {
 
     // Match blocks
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isSignedIn();
       allow create: if (isOwner(userId) || isAdmin()) && isValidUserProfile(incoming());
       allow update: if (
         (isOwner(userId) && isValidUserProfile(incoming()) && (
@@ -188,7 +188,9 @@ service cloud.firestore {
             'todayEarnings', 'completedTripsCount', 'hoursOnline', 'status',
             'bankName', 'bankAccountNumber', 'bankAccountName'
           ])
-        )) || isAdmin()
+        )) ||
+        (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'ratingsCount'])) ||
+        isAdmin()
       );
       allow delete: if isAdmin();
 
@@ -269,6 +271,10 @@ service cloud.firestore {
       allow get: if isValidId(lookupId);
       allow create: if true; // Create lookup during sign-up
       allow update, delete: if isAdmin() || (isSignedIn() && incoming().email == existing().email);
+    }
+
+    match /scheduledRideRequests/{scheduleId} {
+      allow read, create, update, delete: if isSignedIn();
     }
   }
 }
