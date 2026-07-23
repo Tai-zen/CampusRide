@@ -113,6 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'admin_analytics', label: 'Performance Hub', icon: LineChart, badge: null },
         { id: 'admin_reviews', label: 'Reviews', icon: Grid, badge: pendingReviewsCount > 0 ? `${pendingReviewsCount} New` : null },
         { id: 'admin_complaints', label: 'Rider Complaints', icon: AlertTriangle, badge: null },
+        { id: 'admin_settings', label: 'Admin Settings', icon: Settings, badge: null },
       ];
     }
   };
@@ -136,6 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'admin_analytics': return 'Analytics';
       case 'admin_reviews': return 'Reviews';
       case 'admin_complaints': return 'Complaints';
+      case 'admin_settings': return 'Settings';
       default: return label.split(' ')[0];
     }
   };

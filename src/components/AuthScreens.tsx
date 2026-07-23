@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserRole } from '../types';
-import { KeyRound, Mail, UserPlus, LogIn, Car, ClipboardCheck, Clock, Check, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { KeyRound, Mail, UserPlus, LogIn, Car, ClipboardCheck, Clock, Check, ArrowLeft, CheckCircle2, AlertCircle, Upload, FileText, X } from 'lucide-react';
 import { LOGIN_BG_IMAGE } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -8,9 +8,47 @@ import { auth } from '../lib/firebase';
 
 interface AuthScreensProps {
   onLogin: (role: UserRole, email: string, password?: string) => Promise<void> | void;
-  onSignUp: (role: UserRole, name: string, email: string, password?: string, driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string }, idNumber?: string, gender?: string) => Promise<void> | void;
+  onSignUp: (
+    role: UserRole, 
+    name: string, 
+    email: string, 
+    password?: string, 
+    driverInfo?: { 
+      carBrand: string; 
+      plateNumber: string; 
+      carType: string; 
+      vehicleId?: string; 
+      licenseDocName?: string;
+      carModel?: string;
+      maxCapacity?: number;
+    }, 
+    idNumber?: string
+  ) => Promise<void> | void;
   onGoogleSignIn?: () => Promise<void> | void;
 }
+
+export const formatAppropriateCase = (str: string): string => {
+  return str
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+export const validateName = (inputName: string): { isValid: boolean; reason?: string } => {
+  const trimmed = inputName.trim();
+  if (!trimmed) {
+    return { isValid: false, reason: 'Full name is required.' };
+  }
+  if (!/^[a-zA-Z\s]+$/.test(trimmed)) {
+    return { isValid: false, reason: 'Full name must contain only alphabetic characters and spaces (no numbers or symbols).' };
+  }
+  if (trimmed.replace(/\s/g, '').length < 2) {
+    return { isValid: false, reason: 'Full name must be at least 2 alphabetic characters long.' };
+  }
+  return { isValid: true };
+};
 
 export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onGoogleSignIn }) => {
   const [isLogin, setIsLogin] = useState<boolean>(true);
@@ -21,13 +59,21 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [idNumber, setIdNumber] = useState<string>('');
   const [carBrand, setCarBrand] = useState<string>('');
+  const [carModelOption, setCarModelOption] = useState<'Sienna' | 'Corolla' | 'Other'>('Sienna');
+  const [customCarModel, setCustomCarModel] = useState<string>('');
+  const [maxCapacity, setMaxCapacity] = useState<number>(7);
   const [plateNumber, setPlateNumber] = useState<string>('');
   const [vehicleId, setVehicleId] = useState<string>('');
   const [carType, setCarType] = useState<'car' | 'keke' | 'shuttle'>('car');
-  const [gender, setGender] = useState<string>('Male');
+  
+  // Driver License File State
+  const [licenseFile, setLicenseFile] = useState<File | null>(null);
+  const [licenseFileName, setLicenseFileName] = useState<string>('');
+  const [licenseDocUrl, setLicenseDocUrl] = useState<string>('');
+
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [driverSuccessDetails, setDriverSuccessDetails] = useState<{ name: string; email: string; vehicleId: string } | null>(null);
+  const [driverSuccessDetails, setDriverSuccessDetails] = useState<{ name: string; email: string; vehicleId: string; licenseDocName?: string } | null>(null);
 
   // Forgot Password Screen State
   const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
@@ -47,6 +93,9 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   };
 
   const validatePasswordFormat = (pwd: string): { isValid: boolean; reason?: string } => {
+    if (pwd.length < 6) {
+      return { isValid: false, reason: 'Password must be at least 6 characters long.' };
+    }
     if (pwd.includes(' ')) {
       return { isValid: false, reason: 'Password must not contain spaces.' };
     }
@@ -62,46 +111,87 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
     return { isValid: true };
   };
 
+  const handleLicenseFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        setError("Driver's license document must be under 10MB.");
+        return;
+      }
+      setLicenseFile(file);
+      setLicenseFileName(file.name);
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (evt.target?.result) {
+          setLicenseDocUrl(evt.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+
+      if (error && error.toLowerCase().includes('license')) {
+        setError('');
+      }
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (!email || !password) {
-      setError('Please fill in all standard credentials.');
+      setError('Please fill in all required credentials.');
       return;
-    }
-
-    if (!validateEmail(email)) {
-      setError('Please use a valid email address.');
-      return;
-    }
-
-    if (!isLogin && !name) {
-      setError('Please enter your full name.');
-      return;
-    }
-
-    if (!isLogin && selectedRole === 'student' && !idNumber) {
-      setError('A Student ID number is required (e.g. RUN/XXX/XX/XXXXX).');
-      return;
-    }
-
-    if (!isLogin && selectedRole === 'driver') {
-      if (!carBrand) {
-        setError('Please enter your vehicle brand and color.');
-        return;
-      }
-      if (!plateNumber) {
-        setError('Please enter your vehicle plate number.');
-        return;
-      }
-      if (!vehicleId) {
-        setError('Please enter your vehicle ID.');
-        return;
-      }
     }
 
     if (!isLogin) {
+      // 1. Validate Name with strictly alphabetic rule
+      const nameCheck = validateName(name);
+      if (!nameCheck.isValid) {
+        setError(nameCheck.reason || 'Invalid full name.');
+        return;
+      }
+      // Format appropriate casing (e.g. John Doe)
+      const formattedName = formatAppropriateCase(name);
+      setName(formattedName);
+
+      if (!validateEmail(email)) {
+        setError('Please enter a valid email address.');
+        return;
+      }
+
+      if (selectedRole === 'student' && !idNumber) {
+        setError('A Student ID number is required (e.g. RUN/XXX/XX/XXXXX).');
+        return;
+      }
+
+      if (selectedRole === 'driver') {
+        if (carType === 'car' && carModelOption === 'Other' && !customCarModel.trim()) {
+          setError('Please specify your custom car model name.');
+          return;
+        }
+        if (!maxCapacity || maxCapacity < 1) {
+          setError('Please enter a valid max passenger capacity (at least 1).');
+          return;
+        }
+        if (!carBrand) {
+          setError('Please enter your vehicle color.');
+          return;
+        }
+        if (!plateNumber) {
+          setError('Please enter your vehicle plate number.');
+          return;
+        }
+        if (!vehicleId) {
+          setError('Please enter your vehicle ID.');
+          return;
+        }
+        if (!licenseFileName) {
+          setError("Please upload a clear copy of your driver's license document.");
+          return;
+        }
+      }
+
       if (!confirmPassword) {
         setError('Please confirm your password.');
         return;
@@ -113,6 +203,12 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
       const pwdVal = validatePasswordFormat(password);
       if (!pwdVal.isValid) {
         setError(pwdVal.reason || '');
+        return;
+      }
+    } else {
+      // Login validation
+      if (email.includes('@') && !validateEmail(email)) {
+        setError('Please enter a valid email address.');
         return;
       }
     }
@@ -131,13 +227,36 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         })
         .finally(() => setLoading(false));
     } else {
-      Promise.resolve(onSignUp(finalRole, name, email, password, { carBrand, plateNumber, carType, vehicleId }, idNumber, gender))
+      const finalName = formatAppropriateCase(name);
+      const selectedModelName = carType === 'car'
+        ? (carModelOption === 'Other' ? (formatAppropriateCase(customCarModel) || 'Custom Model') : carModelOption)
+        : (carType === 'keke' ? 'Keke Marwa' : 'Shuttle Bus');
+      const fullCarBrand = carBrand ? `${carBrand} ${selectedModelName}` : selectedModelName;
+
+      Promise.resolve(onSignUp(
+        finalRole, 
+        finalName, 
+        email, 
+        password, 
+        { 
+          carBrand: fullCarBrand, 
+          plateNumber, 
+          carType, 
+          vehicleId, 
+          licenseDocName: licenseFileName,
+          licenseDocUrl: licenseDocUrl,
+          carModel: selectedModelName,
+          maxCapacity: Number(maxCapacity) || 4
+        }, 
+        idNumber
+      ))
         .then(() => {
           if (finalRole === 'driver') {
             setDriverSuccessDetails({
-              name,
+              name: finalName,
               email: email.toLowerCase().trim(),
-              vehicleId: vehicleId || 'DRV-2024-8839'
+              vehicleId: vehicleId || 'DRV-2024-8839',
+              licenseDocName: licenseFileName || 'Driver_License_Submitted.pdf'
             });
           }
         })
@@ -149,7 +268,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   };
 
   return (
-    <div id="auth-screen-container" className={`min-h-screen flex flex-col md:flex-row bg-[#F9FAFB] ${selectedRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'} font-sans antialiased overflow-hidden`}>
+    <div id="auth-screen-container" className="min-h-screen flex flex-col md:flex-row bg-[#F9FAFB] text-slate-900 font-sans antialiased overflow-hidden">
       
       {/* Visual Side Banner (Super clean, spacious and empty at the bottom as requested) */}
       <div 
@@ -166,7 +285,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
           transition={{ duration: 0.6 }}
           className="relative z-10 flex items-center space-x-3"
         >
-          <div className={`w-10 h-10 rounded-xl transition-colors duration-500 ${selectedRole === 'driver' ? 'bg-orange-500' : 'bg-[#00875A]'} flex items-center justify-center shadow-lg text-white`}>
+          <div className="w-10 h-10 rounded-xl bg-[#00875A] flex items-center justify-center shadow-lg text-white">
             <Car className="w-6 h-6 stroke-[2]" />
           </div>
           <div>
@@ -175,25 +294,20 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
           </div>
         </motion.div>
 
-        {/* Dynamic & Empty Middle/Bottom Section */}
+        {/* Dynamic Centered Vertically / Left-Aligned Text Section */}
         <motion.div 
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.1 }}
-          className="relative z-10 max-w-lg mb-20"
+          className="relative z-10 max-w-lg my-auto text-left flex flex-col items-start justify-center"
         >
-          <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.15] text-white">
+          <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.15] text-white text-left">
             Intelligent Transit for Campus Commuters
           </h1>
-          <p className="mt-4 text-emerald-100 text-base leading-relaxed font-light">
-            Real-time peer-to-peer verification, instant micro-deposits, and active dispatcher operations.
+          <p className="mt-4 text-emerald-100 text-base leading-relaxed font-light text-left max-w-md">
+            Real-time campus ride-hailing, student carpooling, driver dispatching, and automated trip matching.
           </p>
         </motion.div>
-
-        {/* Empty lower layout for minimalist discipline */}
-        <div className="relative z-10 text-[11px] text-emerald-300/60 font-mono tracking-wider">
-          PARKING & TRANSIT INFRASTUCTURE • 2026
-        </div>
       </div>
 
       {/* Action / Input Side */}
@@ -392,7 +506,19 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   </div>
                   <div>
                     <div className="text-slate-400 font-medium">Access Status</div>
-                    <div className="text-amber-600 font-bold mt-0.5">Awaiting Activation</div>
+                    <div className="text-amber-606 font-bold mt-0.5">Awaiting Activation</div>
+                  </div>
+                  <div className="col-span-2 pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
+                    <div>
+                      <div className="text-slate-400 font-medium text-[11px]">Driver's License Document</div>
+                      <div className="text-slate-800 font-bold font-mono text-xs mt-0.5 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-orange-600 shrink-0" />
+                        <span className="truncate max-w-[200px] inline-block">{driverSuccessDetails.licenseDocName || 'Driver_License_Submitted.pdf'}</span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase tracking-wider font-mono shrink-0">
+                      Uploaded
+                    </span>
                   </div>
                 </div>
               </div>
@@ -552,36 +678,32 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Full Name</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
                         <UserPlus className="w-4 h-4" />
                       </div>
                       <input
                         type="text"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Alex Mercer"
-                        className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                        onChange={(e) => {
+                          // Filter out numbers and any non-alphabetic characters (except spaces)
+                          const sanitized = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                          setName(sanitized);
+                          if (error && error.toLowerCase().includes('name')) {
+                            setError('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (name.trim()) {
+                            setName(formatAppropriateCase(name));
+                          }
+                        }}
+                        placeholder="e.g. John Doe"
+                        className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
+                          selectedRole === 'driver' 
+                            ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                            : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
+                        }`}
                       />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Gender</label>
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl">
-                      {(['Male', 'Female', 'Other'] as const).map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setGender(g)}
-                          className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                            gender === g 
-                              ? (selectedRole === 'driver' ? 'bg-orange-600 text-white shadow-sm' : 'bg-[#00875A] text-white shadow-sm') 
-                              : 'text-gray-500 hover:text-gray-900 bg-transparent'
-                          }`}
-                        >
-                          {g}
-                        </button>
-                      ))}
                     </div>
                   </div>
                 </motion.div>
@@ -593,7 +715,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 {isLogin ? 'ID Number (Registered ID / Email)' : 'Email Address'}
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
                   <Mail className="w-4 h-4" />
                 </div>
                 <input
@@ -601,7 +723,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={isLogin ? "e.g. RUN/2022/10432 or email" : "name@domain.com"}
-                  className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                  className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
+                    selectedRole === 'driver' 
+                      ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                      : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
+                  }`}
                 />
               </div>
             </div>
@@ -643,8 +769,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                         <button
                           key={type}
                           type="button"
-                          onClick={() => setCarType(type)}
-                          className={`py-2 text-[10px] font-bold rounded-lg capitalize transition-colors ${carType === type ? 'bg-orange-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 bg-transparent'}`}
+                          onClick={() => {
+                            setCarType(type);
+                            if (type === 'keke') setMaxCapacity(3);
+                            else if (type === 'shuttle') setMaxCapacity(10);
+                            else setMaxCapacity(carModelOption === 'Sienna' ? 7 : 4);
+                          }}
+                          className={`py-2 text-[10px] font-bold rounded-lg capitalize transition-colors cursor-pointer ${carType === type ? 'bg-orange-600 text-white shadow-xs' : 'text-gray-500 hover:text-gray-900 bg-transparent'}`}
                         >
                           {type}
                         </button>
@@ -652,14 +783,91 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     </div>
                   </div>
 
+                  {carType === 'car' && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Car Model</label>
+                      <div className="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl">
+                        {(['Sienna', 'Corolla', 'Other'] as const).map((model) => (
+                          <button
+                            key={model}
+                            type="button"
+                            onClick={() => {
+                              setCarModelOption(model);
+                              if (model === 'Sienna') setMaxCapacity(7);
+                              else if (model === 'Corolla') setMaxCapacity(4);
+                              if (error && error.toLowerCase().includes('model')) setError('');
+                            }}
+                            className={`py-2 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
+                              carModelOption === model ? 'bg-orange-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                            }`}
+                          >
+                            {model}
+                          </button>
+                        ))}
+                      </div>
+                      {carModelOption === 'Other' && (
+                        <input
+                          type="text"
+                          value={customCarModel}
+                          onChange={(e) => {
+                            setCustomCarModel(e.target.value);
+                            if (error && error.toLowerCase().includes('model')) {
+                              setError('');
+                            }
+                          }}
+                          onBlur={() => {
+                            if (customCarModel.trim()) {
+                              setCustomCarModel(formatAppropriateCase(customCarModel));
+                            }
+                          }}
+                          placeholder="e.g. Honda Accord, Camry, Lexus"
+                          className="w-full px-4 py-2.5 mt-1.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition text-gray-900 placeholder:text-gray-400"
+                        />
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Vehicle Color & Model</label>
+                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Max Passenger Capacity</label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={maxCapacity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setMaxCapacity(isNaN(val) ? 1 : Math.max(1, Math.min(30, val)));
+                          if (error && error.toLowerCase().includes('capacity')) {
+                            setError('');
+                          }
+                        }}
+                        placeholder="e.g. 4 or 7"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition text-gray-900 font-mono font-medium"
+                      />
+                      <span className="absolute right-3 text-xs text-gray-400 pointer-events-none font-medium">seats</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Vehicle Color</label>
                     <input
                       type="text"
                       value={carBrand}
-                      onChange={(e) => setCarBrand(e.target.value)}
-                      placeholder="e.g. Silver Toyota Camry"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:bg-white transition"
+                      onChange={(e) => {
+                        const sanitized = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                        setCarBrand(sanitized);
+                        if (error && (error.toLowerCase().includes('vehicle') || error.toLowerCase().includes('color'))) {
+                          setError('');
+                        }
+                      }}
+                      onBlur={() => {
+                        if (carBrand.trim()) {
+                          setCarBrand(formatAppropriateCase(carBrand));
+                        }
+                      }}
+                      placeholder="e.g. Silver, Black, Navy Blue"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:bg-white transition text-gray-900 placeholder:text-gray-400"
                     />
                   </div>
 
@@ -679,10 +887,71 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     <input
                       type="text"
                       value={vehicleId}
-                      onChange={(e) => setVehicleId(e.target.value)}
-                      placeholder="e.g. VID-2026-KLM"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:bg-white transition uppercase font-mono"
+                      onChange={(e) => {
+                        const sanitized = e.target.value.replace(/[^0-9]/g, '');
+                        setVehicleId(sanitized);
+                        if (error && error.toLowerCase().includes('vehicle')) {
+                          setError('');
+                        }
+                      }}
+                      placeholder="001"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition font-mono text-gray-900 placeholder:text-gray-400"
                     />
+                  </div>
+
+                  {/* New Section: Driver's License Document Upload */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider flex items-center justify-between">
+                      <span>Driver's License Document</span>
+                      <span className="text-[10px] text-orange-600 font-bold">*Required</span>
+                    </label>
+
+                    <div className="bg-orange-50/50 border-2 border-dashed border-orange-200 hover:border-orange-400 rounded-2xl p-3 transition text-center relative">
+                      {licenseFileName ? (
+                        <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-orange-200 shadow-xs">
+                          <div className="flex items-center space-x-2.5 overflow-hidden text-left">
+                            <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-gray-800 truncate">{licenseFileName}</p>
+                              <p className="text-[10px] text-emerald-600 font-bold flex items-center space-x-1 mt-0.5">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Driver's License Document Uploaded</span>
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLicenseFile(null);
+                              setLicenseFileName('');
+                            }}
+                            className="text-xs text-rose-600 font-bold hover:underline p-1 cursor-pointer ml-2 shrink-0"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer block py-2.5">
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            onChange={handleLicenseFileUpload}
+                            className="hidden"
+                          />
+                          <div className="flex flex-col items-center space-y-1.5">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs">
+                              <Upload className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-800">Upload Clear Copy of Driver's License</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">JPEG, PNG or PDF (Max 10MB)</p>
+                            </div>
+                          </div>
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -707,7 +976,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 )}
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
                   <KeyRound className="w-4 h-4" />
                 </div>
                 <input
@@ -715,7 +984,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                  className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
+                    selectedRole === 'driver' 
+                      ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                      : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
+                  }`}
                 />
               </div>
               {!isLogin && (
@@ -736,7 +1009,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 >
                   <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Confirm Password</label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                    <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
                       <KeyRound className="w-4 h-4" />
                     </div>
                     <input
@@ -744,7 +1017,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                      className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
+                        selectedRole === 'driver' 
+                          ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                          : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
+                      }`}
                     />
                   </div>
                 </motion.div>
@@ -784,10 +1061,12 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 setPassword('');
                 setConfirmPassword('');
               }}
-              className="text-xs text-gray-600 font-medium hover:underline inline-flex items-center space-x-1"
+              className="text-xs text-gray-600 font-medium hover:underline inline-flex items-center space-x-1 cursor-pointer"
             >
               <span>{isLogin ? "Don't have a commuter profile?" : 'Already registered?'}</span>
-              <span className="text-primary font-bold">{isLogin ? 'Sign up here' : 'Log in here'}</span>
+              <span className={`font-bold transition-colors ${selectedRole === 'driver' ? 'text-orange-600 hover:text-orange-700' : 'text-primary hover:text-[#00875A]'}`}>
+                {isLogin ? 'Sign up here' : 'Log in here'}
+              </span>
             </button>
           </div>
             </>

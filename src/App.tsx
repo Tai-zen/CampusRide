@@ -573,7 +573,7 @@ export default function App() {
     name: string, 
     email: string, 
     password?: string, 
-    driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string }, 
+    driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string; licenseDocName?: string; carModel?: string; maxCapacity?: number }, 
     idNumber?: string,
     gender?: string
   ) => {
@@ -653,12 +653,17 @@ export default function App() {
       } else if (role === 'driver') {
         const finalPlateNumber = existingDriverData?.plateNumber || driverInfo?.plateNumber || '4P-928X';
         const finalVehicleId = existingDriverData?.vehicleId || driverInfo?.vehicleId || 'DRV-2024-8839';
-        const finalCarBrand = existingDriverData?.carBrand || driverInfo?.carBrand || 'Toyota Camry';
+        const finalCarBrand = existingDriverData?.carBrand || driverInfo?.carBrand || 'Toyota Sienna';
         const finalCarType = existingDriverData?.carType || driverInfo?.carType || 'car';
+        const finalCarModel = driverInfo?.carModel || existingDriverData?.carModel || 'Sienna';
+        const finalMaxCapacity = driverInfo?.maxCapacity || existingDriverData?.maxCapacity || (finalCarModel === 'Sienna' ? 7 : 4);
         
         const vehicleDetails = driverInfo 
-          ? `${driverInfo.carBrand} (${driverInfo.carType.toUpperCase()}) • ${driverInfo.plateNumber}${driverInfo.vehicleId ? ` [ID: ${driverInfo.vehicleId}]` : ''}` 
-          : (existingDriverData?.vehicle || 'Toyota Camry (Silver) • 4P-928X');
+          ? `${driverInfo.carBrand} (${driverInfo.carType.toUpperCase()}) • Max ${finalMaxCapacity} Seats • ${driverInfo.plateNumber}${driverInfo.vehicleId ? ` [ID: ${driverInfo.vehicleId}]` : ''}` 
+          : (existingDriverData?.vehicle || 'Toyota Sienna (Silver) • Max 7 Seats • 4P-928X');
+
+        const licenseDocName = driverInfo?.licenseDocName || existingDriverData?.licenseDocName || 'Driver_License_Submitted.pdf';
+        const licenseDocUrl = driverInfo?.licenseDocUrl || existingDriverData?.licenseDocUrl || '';
 
         const dProfile = {
           ...INITIAL_DRIVER_PROFILE,
@@ -670,9 +675,13 @@ export default function App() {
           status: 'Offline',
           isApproved: existingDriverDocId ? true : false,
           carBrand: finalCarBrand,
+          carModel: finalCarModel,
+          maxCapacity: finalMaxCapacity,
           plateNumber: finalPlateNumber,
           carType: finalCarType,
           vehicleId: finalVehicleId,
+          licenseDocName,
+          licenseDocUrl,
         };
         try {
           await setDoc(doc(db, 'users', uid), dProfile);
@@ -707,6 +716,8 @@ export default function App() {
               carType: finalCarType,
               plateNumber: finalPlateNumber,
               vehicleId: finalVehicleId,
+              licenseDocName,
+              licenseDocUrl,
               createdAt: new Date().toISOString()
             });
           } catch (dbErr) {
@@ -1014,16 +1025,9 @@ export default function App() {
     }
   };
 
-  // 1. If checking cached auth, show loader
+  // 1. If checking cached auth, render null (bypassing initial syncing splash UI)
   if (loadingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-[#BE5912] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm font-semibold text-gray-500 animate-pulse">Syncing CampusRide with Firestore...</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   // Unauthenticated: Show Login/SignUp screen (Backdrop, logo, quick actions)
@@ -1064,6 +1068,11 @@ export default function App() {
       switch (activeView) {
         case 'admin_dashboard': return 'Admin Central';
         case 'admin_operations': return 'Admin Operations';
+        case 'admin_users': return 'User Directory';
+        case 'admin_analytics': return 'Performance Hub';
+        case 'admin_reviews': return 'Driver Reviews';
+        case 'admin_complaints': return 'Rider Complaints';
+        case 'admin_settings': return 'Admin Settings';
         default: return 'Administrator';
       }
     }

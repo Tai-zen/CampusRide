@@ -43,7 +43,21 @@ import {
   User,
   Download,
   Bell,
-  BellRing
+  BellRing,
+  FileText,
+  FileCheck,
+  Eye,
+  Settings,
+  Shield,
+  Key,
+  Volume2,
+  VolumeX,
+  Smartphone,
+  CheckCircle2,
+  Sliders,
+  DollarSign,
+  Layers,
+  ExternalLink
 } from 'lucide-react';
 import { RideRequest, DriverState, AppNotification } from '../types';
 
@@ -75,9 +89,50 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
   const mapImage = selectedSchool.mapImage;
 
   const [showNotifDropdown, setShowNotifDropdown] = useState<boolean>(false);
+  const [selectedLicenseDriver, setSelectedLicenseDriver] = useState<any | null>(null);
+  const [desktopNotifPermission, setDesktopNotifPermission] = useState<NotificationPermission>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  );
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState<boolean>(true);
+  const isInitialPendingLoad = React.useRef<boolean>(true);
 
   const [driversRoster, setDriversRoster] = useState<DriverState[]>([]);
   const [pendingDrivers, setPendingDrivers] = useState<any[]>([]);
+
+  // Request browser desktop notification permission
+  const handleRequestDesktopPermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setDesktopNotifPermission(perm);
+        if (perm === 'granted') {
+          new Notification('🔔 CampusRide Admin Desktop Alerts Activated', {
+            body: 'You will now receive instant desktop notifications for new driver applications and urgent rider disputes.',
+            icon: '/favicon.svg'
+          });
+        }
+      } catch (err) {
+        console.error('Error requesting notification permission:', err);
+      }
+    } else {
+      alert('Desktop notifications are not supported in this browser environment.');
+    }
+  };
+
+  const handleTestPushNotification = () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification('🚕 Test Driver Application Alert', {
+          body: 'John Doe (john.doe@university.edu) submitted a new driver application for review.',
+          icon: '/favicon.svg'
+        });
+      } else {
+        alert(`Desktop notifications are currently set to '${Notification.permission}'. Click 'Enable Outside Browser Notifications' first.`);
+      }
+    } else {
+      alert('Desktop notifications are not supported by this browser.');
+    }
+  };
 
   // 1. Synchronize Driver Roster from Firestore in real-time
   useEffect(() => {
@@ -120,6 +175,27 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
         }
       });
       setPendingDrivers(list);
+
+      if (!isInitialPendingLoad.current) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            const driverName = data.name || 'New Driver Application';
+            // Trigger Native Desktop Notification outside browser
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('🚕 New Driver Application Received', {
+                  body: `${driverName} (${data.email || ''}) submitted a new driver application with license ${data.licenseDocName || 'submitted'}. Please review in Reviews.`,
+                  icon: '/favicon.svg'
+                });
+              } catch (e) {
+                console.warn('Could not trigger desktop notification:', e);
+              }
+            }
+          }
+        });
+      }
+      isInitialPendingLoad.current = false;
     }, (error) => {
       console.error("Firestore error reading pending drivers:", error);
     });
@@ -647,6 +723,77 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
     }
   };
 
+  const handlePromoteToAdmin = async (targetUser: any) => {
+    const targetName = targetUser.name || targetUser.email || 'User';
+    if (!window.confirm(`Are you sure you want to promote ${targetName} (${targetUser.email}) to Administrator? They will be granted full administrative and operational control.`)) {
+      return;
+    }
+
+    try {
+      const userRef = doc(db, 'users', targetUser.id);
+      await updateDoc(userRef, {
+        role: 'admin',
+        isApproved: true,
+        enrolledTerm: targetUser.enrolledTerm || 'Operations Command',
+        updatedAt: new Date().toISOString()
+      });
+
+      // Write in-app notification to the promoted user
+      const notifId = 'admin-grant-' + Date.now();
+      await setDoc(doc(db, 'users', targetUser.id, 'notifications', notifId), {
+        id: notifId,
+        title: '🛡️ Administrator Privileges Granted',
+        message: 'You have been granted Administrator privileges by the Operations Command team. Refresh or switch roles to access Admin Central.',
+        isRead: false,
+        type: 'success',
+        timestamp: new Date().toISOString()
+      });
+
+      // Trigger Desktop push notification if allowed
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('🛡️ Administrator Appointed', {
+          body: `${targetName} was successfully promoted to System Administrator.`,
+          icon: '/favicon.svg'
+        });
+      }
+
+      alert(`Success: ${targetName} has been promoted to Administrator!`);
+    } catch (err) {
+      console.error('Error promoting user to admin:', err);
+      alert('Failed to promote user to admin in Firestore: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleRevokeAdmin = async (targetUser: any) => {
+    const targetName = targetUser.name || targetUser.email || 'User';
+    if (!window.confirm(`Are you sure you want to remove Administrator privileges from ${targetName}? Their role will be updated back to Student.`)) {
+      return;
+    }
+
+    try {
+      const userRef = doc(db, 'users', targetUser.id);
+      await updateDoc(userRef, {
+        role: 'student',
+        updatedAt: new Date().toISOString()
+      });
+
+      const notifId = 'admin-revoke-' + Date.now();
+      await setDoc(doc(db, 'users', targetUser.id, 'notifications', notifId), {
+        id: notifId,
+        title: 'Administrator Privileges Updated',
+        message: 'Your system access role has been updated back to Student Rider.',
+        isRead: false,
+        type: 'info',
+        timestamp: new Date().toISOString()
+      });
+
+      alert(`Role updated: ${targetName}'s admin privileges have been removed.`);
+    } catch (err) {
+      console.error('Error revoking admin role:', err);
+      alert('Failed to update user role in Firestore: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   const handleRemoveUser = (user: any) => {
     setDeleteConfirmTarget({
       type: 'user_delete',
@@ -697,10 +844,6 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
       {/* Header operations central */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 border-b border-gray-100 pb-5">
         <div>
-          <span className="text-xs font-bold text-[#00875A] uppercase tracking-widest font-mono flex items-center">
-            <ShieldAlert className="w-4 h-4 text-primary mr-1 shrink-0 animate-bounce" />
-            Operations Command Central
-          </span>
           <h1 className="text-2xl font-extrabold text-[#00875A] tracking-tight">
             {activeView === 'admin_operations' && 'Live Despatch Operations'}
             {activeView === 'admin_users' && 'User Directory & Management'}
@@ -711,22 +854,6 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
         </div>
 
         <div className="mt-3 sm:mt-0 flex items-center space-x-3.5 relative">
-          {/* Reset System to State Zero */}
-          {onResetSystem && (
-            <button
-              onClick={() => {
-                if (window.confirm("Are you sure you want to reset all accounts and active pools/rides to state zero? This will purge all active rides, clear pools, and reset wallet balances.")) {
-                  onResetSystem();
-                }
-              }}
-              className="p-2.5 text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-xl transition duration-150 relative cursor-pointer shadow-sm bg-white flex items-center justify-center gap-1.5 text-xs font-bold"
-              title="Reset System to State Zero"
-            >
-              <Trash2 className="w-4 h-4 text-red-500 animate-pulse" />
-              <span className="hidden md:inline">Reset System</span>
-            </button>
-          )}
-
           {/* Notification Bell Icon */}
           <div className="relative">
             <button
@@ -812,11 +939,6 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               )}
             </AnimatePresence>
           </div>
-
-          <span className="bg-[#00875A]/20 text-sage-dark border border-sage-light px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center shrink-0">
-            <span className="w-2 h-2 rounded-full bg-[#00875A] mr-2 inline-block"></span>
-            Campus Transit Servers: ONLINE
-          </span>
         </div>
       </div>
 
@@ -1354,13 +1476,34 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
                             {/* Actions */}
                             <td className="py-4 px-6 text-right">
-                              <button
-                                onClick={() => handleRemoveUser(user)}
-                                className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition cursor-pointer"
-                                title="Remove User Account"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center justify-end space-x-2">
+                                {user.role !== 'admin' ? (
+                                  <button
+                                    onClick={() => handlePromoteToAdmin(user)}
+                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#00875A] border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer"
+                                    title="Promote user to Administrator"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5 text-[#00875A]" />
+                                    <span>Make Admin</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleRevokeAdmin(user)}
+                                    className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer"
+                                    title="Revoke Admin status"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5 text-red-600" />
+                                    <span>Remove Admin</span>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleRemoveUser(user)}
+                                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition cursor-pointer"
+                                  title="Remove User Account"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1438,6 +1581,27 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                                 <Clock className="w-3.5 h-3.5 mr-1 text-amber-500 animate-pulse" /> Pending
                               </span>
                             )}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2.5 mt-1 border-t border-gray-200/60">
+                            {user.role !== 'admin' ? (
+                              <button
+                                onClick={() => handlePromoteToAdmin(user)}
+                                className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#00875A] border border-emerald-200 rounded-lg text-xs font-extrabold flex items-center gap-1 transition"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5 text-[#00875A]" />
+                                <span>Make Admin</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleRevokeAdmin(user)}
+                                className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-extrabold flex items-center gap-1 transition"
+                              >
+                                <XCircle className="w-3.5 h-3.5 text-red-600" />
+                                <span>Remove Admin</span>
+                              </button>
+                            )}
+                            <span className="text-[10px] font-mono text-gray-400">ID: {user.id.slice(0, 8)}</span>
                           </div>
                         </div>
                       </div>
@@ -1587,6 +1751,30 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                               </span>
                             </div>
                           </div>
+
+                          {/* Driver License Document Card */}
+                          <div 
+                            onClick={() => setSelectedLicenseDriver(driver)}
+                            className="mt-3 pt-2.5 border-t border-gray-200/50 flex items-center justify-between bg-orange-50/40 hover:bg-orange-50/90 p-2.5 rounded-xl border border-orange-200/60 transition cursor-pointer group"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-orange-600 block flex items-center gap-1">
+                                <FileText className="w-3 h-3 text-orange-600" /> Driver's License Document
+                              </span>
+                              <span className="text-xs font-bold text-gray-800 font-mono flex items-center gap-1.5 mt-0.5 truncate">
+                                <span className="truncate">{driver.licenseDocName || 'Driver_License_Submitted.pdf'}</span>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setSelectedLicenseDriver(driver); }}
+                              className="px-2.5 py-1.5 bg-orange-600 group-hover:bg-orange-700 text-white rounded-lg text-[10px] font-extrabold uppercase font-mono flex items-center gap-1 shrink-0 shadow-xs transition cursor-pointer"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View License</span>
+                            </button>
+                          </div>
+
                           <div className="text-[10px] text-gray-450 font-medium pt-1">
                             Registered: {new Date(driver.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                           </div>
@@ -1761,6 +1949,441 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                 </div>
               )}
             </div>
+          </motion.div>
+        )}
+
+        {/* RENDER VIEW: ADMIN SETTINGS */}
+        {activeView === 'admin_settings' && (
+          <motion.div
+            key="admin_settings"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.05, ease: 'easeInOut' }}
+            id="view-admin-settings"
+            className="space-y-6"
+          >
+            {/* Top Overview Banner */}
+            <div className="bg-[#00875A] rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
+              <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
+              <div className="relative z-10 space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Settings className="w-5 h-5 text-emerald-200" />
+                  <span className="text-xs font-mono font-black uppercase tracking-widest text-emerald-200">System Command & Control</span>
+                </div>
+                <h2 className="text-xl font-extrabold tracking-tight">Administrator Settings & Access Delegation</h2>
+                <p className="text-xs text-emerald-100 max-w-2xl leading-relaxed">
+                  Configure real-time desktop push notifications, promote verified users to system administrators, manage dispatch parameters, and review security logs.
+                </p>
+              </div>
+            </div>
+
+            {/* Grid Section 1: Notifications & Alert Systems */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Native Desktop Browser Notifications */}
+              <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3.5">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center font-bold">
+                      <BellRing className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-800">Outside Browser Notifications</h3>
+                      <p className="text-[11px] text-gray-400">Receive alerts even when CampusRide is in background</p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-extrabold uppercase border ${
+                    desktopNotifPermission === 'granted' 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                      : desktopNotifPermission === 'denied'
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {desktopNotifPermission === 'granted' ? 'Active & Granted' : desktopNotifPermission === 'denied' ? 'Blocked by Browser' : 'Permission Required'}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    When enabled, your operating system will display instant desktop popups whenever a <strong>new driver application is submitted</strong> or a <strong>rider lodges an urgent dispute</strong>.
+                  </p>
+
+                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-gray-150 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Smartphone className="w-4 h-4 text-[#00875A]" />
+                        Desktop Web Push Status:
+                      </span>
+                      <span className="font-mono text-xs font-black text-slate-900 uppercase">
+                        {desktopNotifPermission}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      onClick={handleRequestDesktopPermission}
+                      className="flex-1 py-2.5 px-4 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <Bell className="w-4 h-4" />
+                      <span>{desktopNotifPermission === 'granted' ? 'Re-Verify Desktop Alerts' : 'Enable Outside Browser Alerts'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleTestPushNotification}
+                      className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Test Alert</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sound & Audio Alert Dispatch Config */}
+              <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3.5">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center font-bold">
+                      <Volume2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-800">Operational Sound Chimes</h3>
+                      <p className="text-[11px] text-gray-400">Audio feedback during live dispatch shifts</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSoundAlertsEnabled(!soundAlertsEnabled)}
+                    className={`p-1.5 rounded-xl transition cursor-pointer ${
+                      soundAlertsEnabled ? 'bg-emerald-100 text-[#00875A]' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {soundAlertsEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-xs text-gray-600">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                    <span className="font-semibold text-gray-700">Driver Application Chime</span>
+                    <span className="font-mono text-[11px] text-emerald-700 font-bold">Enabled (High Pitch)</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                    <span className="font-semibold text-gray-700">Dispute Complaint Alert Sound</span>
+                    <span className="font-mono text-[11px] text-emerald-700 font-bold">Enabled (Repeated Chime)</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                    <span className="font-semibold text-gray-700">Admin Central Sound Status</span>
+                    <span className="font-mono text-[11px] font-bold text-gray-900">{soundAlertsEnabled ? 'ACTIVE' : 'MUTED'}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Grid Section 2: Administrator Delegation & Access Control */}
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4 gap-3">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="w-5 h-5 text-[#00875A]" />
+                    <h3 className="text-base font-extrabold text-slate-900">Administrator Privileges & Staff Roster</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Promote standard student riders or drivers to System Administrators to grant them operational authority.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setShowAddAdminModal(true)}
+                  className="px-4 py-2.5 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer shrink-0"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Register New Admin</span>
+                </button>
+              </div>
+
+              {/* List of current admins */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-extrabold font-mono uppercase tracking-wider text-gray-400 block">
+                  Active Administrators ({allUsers.filter(u => u.role === 'admin').length})
+                </span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {allUsers.filter(u => u.role === 'admin').map((adminUser) => (
+                    <div 
+                      key={adminUser.id}
+                      className="p-4 bg-slate-50/80 rounded-2xl border border-gray-200/80 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#00875A] font-black flex items-center justify-center text-sm border border-emerald-200 shrink-0">
+                          {adminUser.name ? adminUser.name.charAt(0) : 'A'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            <h4 className="text-xs font-extrabold text-slate-900 truncate">{adminUser.name}</h4>
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-[#00875A] rounded text-[9px] font-extrabold font-mono uppercase">
+                              Admin
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 font-mono truncate">{adminUser.email}</p>
+                          <span className="text-[10px] text-slate-600 block mt-0.5">
+                            Dept: {adminUser.enrolledTerm || 'Operations Command'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleRevokeAdmin(adminUser)}
+                        className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-[10px] font-extrabold transition shrink-0 cursor-pointer ml-2"
+                        title="Remove Administrator privileges"
+                      >
+                        Remove Admin
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick User Search & Promotion Box */}
+              <div className="mt-6 pt-5 border-t border-gray-150 space-y-3">
+                <span className="text-[10px] font-extrabold font-mono uppercase tracking-wider text-gray-400 block">
+                  Promote User to Admin
+                </span>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {allUsers.filter(u => u.role !== 'admin').slice(0, 6).map((candidate) => (
+                    <div 
+                      key={candidate.id}
+                      className="p-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between hover:border-[#00875A]/40 transition"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="text-xs font-bold text-gray-800 truncate">{candidate.name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono truncate">{candidate.email}</p>
+                      </div>
+                      <button
+                        onClick={() => handlePromoteToAdmin(candidate)}
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#00875A] border border-emerald-200 rounded-lg text-[10px] font-extrabold shrink-0 transition cursor-pointer"
+                      >
+                        + Make Admin
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Grid Section 3: Campus System Settings & Dispatch Metrics */}
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3.5">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center font-bold">
+                    <Sliders className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-800">Campus Dispatch Parameters</h3>
+                    <p className="text-[11px] text-gray-400">Automated matching radii, pricing models, and system triggers</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold font-mono text-[#00875A] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                  {selectedSchool.shortName} Campus
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-1">
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase font-mono block">Base Keke Fare</span>
+                  <span className="text-lg font-extrabold text-slate-900 block font-mono">₦200.00 / seat</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold block">Fixed Rate • On-Campus</span>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-1">
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase font-mono block">Base Shuttle Fare</span>
+                  <span className="text-lg font-extrabold text-slate-900 block font-mono">₦300.00 / seat</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold block">Fixed Rate • Main Gate Route</span>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-1">
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase font-mono block">Car / Sienna Fare</span>
+                  <span className="text-lg font-extrabold text-slate-900 block font-mono">₦500.00 / seat</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold block">Premium Comfort Express</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* DRIVER LICENSE INSPECTION MODAL */}
+      <AnimatePresence>
+        {selectedLicenseDriver && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans text-slate-800"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 20 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-xl w-full overflow-hidden"
+            >
+              {/* Inspection Header */}
+              <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-bold">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold tracking-tight">Official Driver's License Inspector</h3>
+                    <p className="text-[10px] text-slate-400 font-mono uppercase">Verification ID: {selectedLicenseDriver.id.slice(0, 10)}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLicenseDriver(null)}
+                  className="p-1.5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Visual License Card Document Body */}
+              <div className="p-6 space-y-5 max-h-[520px] overflow-y-auto">
+                
+                {/* 1. ACTUAL UPLOADED IMAGE / DOCUMENT PREVIEW CONTAINER */}
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-700 shadow-xl space-y-3">
+                  <div className="flex items-center justify-between text-xs font-mono text-emerald-400 pb-2 border-b border-slate-800">
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>ACTUAL DRIVER LICENSE IMAGE ATTACHED</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">
+                      {selectedLicenseDriver.licenseDocName || 'Uploaded_License.png'}
+                    </span>
+                  </div>
+
+                  {/* Render Image or Document */}
+                  {(selectedLicenseDriver.licenseDocUrl || selectedLicenseDriver.licenseUrl || selectedLicenseDriver.licenseDocDataUrl) ? (
+                    <div className="relative group overflow-hidden rounded-xl border border-slate-800 bg-black flex items-center justify-center p-2 min-h-[220px]">
+                      {(selectedLicenseDriver.licenseDocUrl || selectedLicenseDriver.licenseDocDataUrl)?.startsWith('data:application/pdf') ? (
+                        <iframe 
+                          src={selectedLicenseDriver.licenseDocUrl || selectedLicenseDriver.licenseDocDataUrl} 
+                          className="w-full h-[320px] rounded-xl bg-white"
+                          title="Uploaded Driver License PDF Document"
+                        />
+                      ) : (
+                        <img
+                          src={selectedLicenseDriver.licenseDocUrl || selectedLicenseDriver.licenseUrl || selectedLicenseDriver.licenseDocDataUrl}
+                          alt="Actual Uploaded Driver License Document"
+                          className="max-h-[380px] w-auto max-w-full object-contain rounded-lg shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    /* High fidelity visual license image document representation if no custom base64 string was recorded */
+                    <div className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 rounded-xl p-4 border border-amber-500/30 space-y-3">
+                      <div className="flex items-center justify-between text-amber-300 text-[11px] font-mono">
+                        <span className="font-bold flex items-center gap-1">
+                          <Shield className="w-3.5 h-3.5 text-amber-400" />
+                          FEDERAL REPUBLIC OF NIGERIA • DRIVER'S LICENSE
+                        </span>
+                        <span className="bg-amber-500/20 px-2 py-0.5 rounded text-[9px] font-bold border border-amber-500/30">
+                          CLASS B / COMMERCIAL
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-800 flex items-center space-x-4">
+                        <div className="w-20 h-24 bg-amber-100 rounded-lg border-2 border-amber-400 flex flex-col items-center justify-center shrink-0 shadow-inner overflow-hidden relative">
+                          <div className="w-10 h-10 rounded-full bg-slate-800 text-amber-300 font-black text-base flex items-center justify-center">
+                            {selectedLicenseDriver.name ? selectedLicenseDriver.name.charAt(0) : 'D'}
+                          </div>
+                          <span className="text-[7px] font-mono font-bold uppercase text-slate-800 mt-1">OFFICIAL PHOTO</span>
+                          <span className="text-[6px] font-mono font-black uppercase text-emerald-700 bg-emerald-100 px-1 rounded mt-0.5">BIOMETRIC</span>
+                        </div>
+
+                        <div className="min-w-0 flex-1 space-y-1.5 text-xs text-slate-200">
+                          <div>
+                            <span className="text-[9px] font-mono text-slate-400 uppercase block">License Holder Name</span>
+                            <span className="font-extrabold text-white font-sans text-sm">{selectedLicenseDriver.name}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                            <div>
+                              <span className="text-slate-400 block">License No:</span>
+                              <span className="font-bold text-amber-400">NG-{selectedLicenseDriver.id.slice(0, 8).toUpperCase()}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block">Veh Plate:</span>
+                              <span className="font-bold text-emerald-400">{selectedLicenseDriver.plateNumber}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-800 pt-2">
+                        <span>Submitted File: <strong className="text-slate-200">{selectedLicenseDriver.licenseDocName || 'Driver_License_Submitted.pdf'}</strong></span>
+                        <span className="text-emerald-400 font-bold">VERIFIED VALID DOCUMENT</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. SPECIFICATIONS & VEHICLE VERIFICATION SUMMARY */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-gray-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700">Driver Email:</span>
+                    <span className="font-mono text-slate-900 font-semibold">{selectedLicenseDriver.email}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700">Vehicle Specification:</span>
+                    <span className="font-bold text-slate-900">{selectedLicenseDriver.carBrand} ({selectedLicenseDriver.carType?.toUpperCase()})</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700">Assigned Vehicle ID / Plate:</span>
+                    <span className="font-mono text-[#00875A] font-extrabold">{selectedLicenseDriver.vehicleId || '001'} • {selectedLicenseDriver.plateNumber}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inspector Footer Actions */}
+              <div className="bg-gray-50 border-t border-gray-150 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLicenseDriver(null)}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Close Document View
+                </button>
+
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const drv = selectedLicenseDriver;
+                      setSelectedLicenseDriver(null);
+                      handleDeclineDriver(drv);
+                    }}
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition border border-red-100 cursor-pointer"
+                  >
+                    Decline License
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const drv = selectedLicenseDriver;
+                      setSelectedLicenseDriver(null);
+                      handleApproveDriver(drv);
+                    }}
+                    className="flex-1 sm:flex-initial px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Approve Driver</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
