@@ -213,15 +213,9 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
       }
     }
 
-    // Auto-detect and permit back-end admin logins if they use an admin-associated email address
-    let finalRole = selectedRole;
-    if (isLogin && (email.toLowerCase().includes('admin') || email.toLowerCase().trim() === 'wywsk64571@minitts.net')) {
-      finalRole = 'admin';
-    }
-
     setLoading(true);
     if (isLogin) {
-      Promise.resolve(onLogin(finalRole, email, password))
+      Promise.resolve(onLogin(selectedRole, email, password))
         .catch((err: any) => {
           setError(err.message || 'An error occurred during sign in.');
         })
@@ -234,7 +228,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
       const fullCarBrand = carBrand ? `${carBrand} ${selectedModelName}` : selectedModelName;
 
       Promise.resolve(onSignUp(
-        finalRole, 
+        selectedRole, 
         finalName, 
         email, 
         password, 
@@ -251,7 +245,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         idNumber
       ))
         .then(() => {
-          if (finalRole === 'driver') {
+          if (selectedRole === 'driver') {
             setDriverSuccessDetails({
               name: finalName,
               email: email.toLowerCase().trim(),

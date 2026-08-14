@@ -495,9 +495,6 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
         password: 'Driver123!', // default testing password
         dateSent: new Date().toLocaleString(),
       });
-
-      // Dispatch storage event to update sidebar badges
-      window.dispatchEvent(new Event('storage'));
     } catch (error) {
       console.error("Error approving driver in Firestore:", error);
     }
@@ -568,7 +565,6 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
         });
 
         alert(`Registration for ${item.name} has been declined. Reapplication instruction email has been sent to ${item.email}.`);
-        window.dispatchEvent(new Event('storage'));
       } catch (error) {
         console.error("Error declining driver in Firestore:", error);
       }
@@ -2186,7 +2182,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   </div>
                 </div>
                 <span className="text-xs font-bold font-mono text-[#00875A] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                  {selectedSchool.shortName} Campus
+                  {selectedSchool.name} Campus
                 </span>
               </div>
 

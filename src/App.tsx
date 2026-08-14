@@ -148,6 +148,7 @@ export default function App() {
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
   const [driverPastRides, setDriverPastRides] = useState<RideRequest[]>([]);
   const [studentPastRides, setStudentPastRides] = useState<RideRequest[]>([]);
+  const [pendingDriversCount, setPendingDriversCount] = useState<number>(0);
 
   // Helper to get active user ID
   const getActiveUid = () => {
@@ -429,6 +430,20 @@ export default function App() {
     };
   }, [currentUser?.uid, currentRole]);
 
+  // Synchronize pending drivers count for admin badge in sidebar
+  useEffect(() => {
+    if (currentRole !== 'admin') {
+      setPendingDriversCount(0);
+      return;
+    }
+    const unsub = onSnapshot(collection(db, 'pendingDrivers'), (snapshot) => {
+      setPendingDriversCount(snapshot.size);
+    }, (error) => {
+      console.error("Firestore error reading pending drivers count:", error);
+    });
+    return () => unsub();
+  }, [currentRole]);
+
   // Authentication Callbacks
   const handleLogin = async (role: UserRole, loginId: string, password?: string) => {
     if (!password) {
@@ -573,7 +588,7 @@ export default function App() {
     name: string, 
     email: string, 
     password?: string, 
-    driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string; licenseDocName?: string; carModel?: string; maxCapacity?: number }, 
+    driverInfo?: { carBrand: string; plateNumber: string; carType: string; vehicleId?: string; licenseDocName?: string; licenseDocUrl?: string; carModel?: string; maxCapacity?: number }, 
     idNumber?: string,
     gender?: string
   ) => {
@@ -745,6 +760,25 @@ export default function App() {
       }
 
       if (role === 'driver') {
+        // Dispatch in-app notification to all admin users
+        try {
+          const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
+          const adminNotif: AppNotification = {
+            id: `admin-driver-notif-${Date.now()}`,
+            title: 'New Driver Application Received',
+            message: `${name} has submitted a new driver application (${driverInfo?.licenseDocName || 'Driver License attached'}). Ready for review in Reviews queue.`,
+            date: 'Today',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isRead: false,
+            type: 'alert',
+          };
+          adminSnap.forEach(async (adminDoc) => {
+            await setDoc(doc(db, 'users', adminDoc.id, 'notifications', adminNotif.id), adminNotif).catch(console.error);
+          });
+        } catch (adminErr) {
+          console.warn("Could not dispatch admin registration alerts:", adminErr);
+        }
+
         await auth.signOut();
         isSigningUpRef.current = false;
         return;
@@ -1092,6 +1126,7 @@ export default function App() {
         userProfile={activeSidebarProfile}
         selectedSchoolId={selectedSchoolId || undefined}
         onResetSystem={handleResetSystemToStateZero}
+        pendingDriversCount={pendingDriversCount}
       />
 
       {/* Main Viewport Content block */}

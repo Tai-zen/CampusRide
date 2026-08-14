@@ -41,6 +41,7 @@ interface SidebarProps {
   };
   selectedSchoolId?: string;
   onResetSystem?: () => void;
+  pendingDriversCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -52,23 +53,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onChangeRole,
   userProfile,
   selectedSchoolId,
-  onResetSystem
+  onResetSystem,
+  pendingDriversCount = 0
 }) => {
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  const getPendingReviewCount = () => {
-    try {
-      const stored = localStorage.getItem('campusride_pending_drivers');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed.length : 0;
-      }
-    } catch (e) {}
-    return 0;
-  };
-  const pendingReviewsCount = getPendingReviewCount();
+  const pendingReviewsCount = pendingDriversCount;
 
   const navigateTo = (view: string) => {
     onNavigate(view);

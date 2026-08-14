@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, setDoc, doc, getDoc, updateDoc, addDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, setDoc, doc, getDoc, updateDoc, addDoc, onSnapshot, query, where, runTransaction, deleteDoc } from 'firebase/firestore';
 import { isSupabaseConfigured, uploadFile, uploadLogoFromUrl } from '../lib/supabase';
 import { 
   UserProfile, 
@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { UNIVERSITIES } from './SchoolSelection';
 import { CampusMap } from './CampusMap';
+import { ComplaintForm } from './ComplaintForm';
 import { 
   Car, 
   MapPin, 
@@ -419,50 +420,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [chatInput, setChatInput] = useState<string>('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // Complaint state variables
-  const [isComplaintFormOpen, setIsComplaintFormOpen] = useState<boolean>(false);
-  const [complaintCategory, setComplaintCategory] = useState<string>('Driver Behavior');
-  const [complaintDetails, setComplaintDetails] = useState<string>('');
-  const [isSubmittingComplaint, setIsSubmittingComplaint] = useState<boolean>(false);
-  const [complaintSuccessMsg, setComplaintSuccessMsg] = useState<string>('');
-
-  const handleSendComplaint = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!complaintDetails.trim()) return;
-
-    setIsSubmittingComplaint(true);
-    setComplaintSuccessMsg('');
-    try {
-      const complaintId = `COMP-${Date.now()}`;
-      const newComplaint = {
-        id: complaintId,
-        rideId: activeRide?.id || joinedPoolId || 'N/A',
-        passengerId: userProfile.id,
-        passengerName: userProfile.name,
-        passengerAvatar: userProfile.avatar,
-        driverId: activeRide?.driverId || 'N/A',
-        driverName: activeRide?.driverName || 'David Alao',
-        category: complaintCategory,
-        details: complaintDetails,
-        status: 'pending',
-        createdAt: Date.now(),
-      };
-
-      await setDoc(doc(db, 'complaints', complaintId), newComplaint);
-      setComplaintSuccessMsg('Your complaint has been logged and sent to the admin team for immediate review.');
-      setComplaintDetails('');
-      setTimeout(() => {
-        setIsComplaintFormOpen(false);
-        setComplaintSuccessMsg('');
-      }, 4000);
-    } catch (err) {
-      console.error('Error submitting complaint:', err);
-      alert('Failed to submit complaint. Please check your network connection and try again.');
-    } finally {
-      setIsSubmittingComplaint(false);
-    }
-  };
-
   // Live simulation states
   const [simStep, setSimStep] = useState<number>(0);
   const [liveDistance, setLiveDistance] = useState<number>(0); // 0 to 100% of route
@@ -725,52 +682,52 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     }
   }, [chatMessages, poolingState]);
 
-  // Synchronize active pools & lobby members & active driver states across tabs/sessions
+  // Synchronize active pools & lobby members & active driver states across Firestore & tabs/sessions
   useEffect(() => {
-    const syncPools = () => {
+    const unsub = onSnapshot(collection(db, 'activePools'), (snapshot) => {
+      const poolsList: ActivePool[] = [];
+      snapshot.forEach(docSnap => {
+        poolsList.push({ id: docSnap.id, ...docSnap.data() } as ActivePool);
+      });
+      poolsList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setActivePools(poolsList);
+
+      if (joinedPoolId) {
+        const myPool = poolsList.find(p => p.id === joinedPoolId);
+        if (myPool) {
+          setLobbyMembers(myPool.currentRiders.map(r => ({
+            name: r.name,
+            avatar: r.avatar,
+            major: r.major,
+            gender: r.gender,
+            rating: r.rating,
+            confirmedStart: r.confirmedStart
+          })));
+
+          // If pool has been accepted by a driver, transition matching states
+          if (myPool.driverAccepted && myPool.status === 'closed' && poolingState === 'forming') {
+            setPoolingState('matched');
+            setIsMatchingDriver(false);
+          }
+        } else {
+          // Pool cancel or deleted
+          setJoinedPoolId(null);
+          setPoolingState('idle');
+          setIsMatchingDriver(false);
+        }
+      }
+    }, (err) => {
+      console.warn("Firestore error reading activePools, using local fallback:", err);
       const stored = localStorage.getItem('campusride_active_pools');
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as ActivePool[];
           setActivePools(parsed);
-          
-          if (joinedPoolId) {
-            const myPool = parsed.find(p => p.id === joinedPoolId);
-            if (myPool) {
-              setLobbyMembers(myPool.currentRiders.map(r => ({
-                name: r.name,
-                avatar: r.avatar,
-                major: r.major,
-                gender: r.gender,
-                rating: r.rating,
-                confirmedStart: r.confirmedStart
-              })));
-
-              // If pool has been accepted by a driver, transition matching states
-              if (myPool.driverAccepted && myPool.status === 'closed' && poolingState === 'forming') {
-                setPoolingState('matched');
-                setIsMatchingDriver(false);
-              }
-            } else {
-              // Pool cancel or deleted
-              setJoinedPoolId(null);
-              setPoolingState('idle');
-              setIsMatchingDriver(false);
-            }
-          }
-        } catch (e) {
-          console.error("Error parsing stored active pools", e);
-        }
+        } catch (e) {}
       }
-    };
+    });
 
-    syncPools();
-    window.addEventListener('storage', syncPools);
-    const interval = setInterval(syncPools, 1500);
-    return () => {
-      window.removeEventListener('storage', syncPools);
-      clearInterval(interval);
-    };
+    return () => unsub();
   }, [joinedPoolId, poolingState]);
 
   // Periodically clean up timed-out pools from local storage
@@ -1111,6 +1068,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         createdAt: Date.now()
       };
 
+      setDoc(doc(db, 'activePools', newPoolId), newPool).catch(err => {
+        console.error("Error writing active pool to Firestore:", err);
+      });
+
       const updatedPools = [newPool, ...activePools];
       setActivePools(updatedPools);
       localStorage.setItem('campusride_active_pools', JSON.stringify(updatedPools));
@@ -1269,7 +1230,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   // Delete a pool created by the user
-  const handleDeletePool = (poolId: string) => {
+  const handleDeletePool = async (poolId: string) => {
+    try {
+      await deleteDoc(doc(db, 'activePools', poolId));
+    } catch (e) {
+      console.warn("Error deleting pool in Firestore:", e);
+    }
+
     const updated = activePools.filter(p => p.id !== poolId);
     setActivePools(updated);
     localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
@@ -1295,7 +1262,28 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   // Leave a pool joined by the user
-  const handleLeavePool = (poolId: string) => {
+  const handleLeavePool = async (poolId: string) => {
+    const poolRef = doc(db, 'activePools', poolId);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (poolDoc.exists()) {
+          const poolData = poolDoc.data() as ActivePool;
+          const filteredRiders = (poolData.currentRiders || []).filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
+          if (filteredRiders.length === 0) {
+            transaction.delete(poolRef);
+          } else {
+            transaction.update(poolRef, {
+              currentRiders: filteredRiders,
+              status: filteredRiders.length >= (poolData.maxRiders || 4) ? 'closed' : 'active'
+            });
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("Error leaving pool via Firestore transaction:", e);
+    }
+
     const updated = activePools.map(pool => {
       if (pool.id === poolId) {
         const filteredRiders = pool.currentRiders.filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
@@ -1332,8 +1320,29 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   // Cancel an active ride (solo or pool)
-  const handleCancelRide = () => {
+  const handleCancelRide = async () => {
     if (joinedPoolId) {
+      const poolRef = doc(db, 'activePools', joinedPoolId);
+      try {
+        await runTransaction(db, async (transaction) => {
+          const poolDoc = await transaction.get(poolRef);
+          if (poolDoc.exists()) {
+            const poolData = poolDoc.data() as ActivePool;
+            const filteredRiders = (poolData.currentRiders || []).filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
+            if (filteredRiders.length === 0) {
+              transaction.delete(poolRef);
+            } else {
+              transaction.update(poolRef, {
+                currentRiders: filteredRiders,
+                status: filteredRiders.length >= (poolData.maxRiders || 4) ? 'closed' : 'active'
+              });
+            }
+          }
+        });
+      } catch (e) {
+        console.warn("Error cancelling ride pool in Firestore:", e);
+      }
+
       const updated = activePools.map(pool => {
         if (pool.id === joinedPoolId) {
           const filteredRiders = pool.currentRiders.filter(r => r.name !== (userProfile.name || 'Temi Adeyemi'));
@@ -1368,33 +1377,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     });
   };
 
-  // Join existing pool handler
-  const handleJoinPool = (pool: ActivePool) => {
+  // Join existing pool handler with Firestore runTransaction for concurrency safety
+  const handleJoinPool = async (pool: ActivePool) => {
     if (poolingState !== 'idle') {
       alert("You are already in an active ride or pool lobby! Please complete or cancel your current trip before joining another pool.");
       return;
     }
 
-    if (pool.status === 'closed' || pool.currentRiders.length >= pool.maxRiders) {
-      alert("This pool is full and has been closed.");
-      return;
-    }
-
-    // Calculate split price for new rider count
-    const newRiderCount = pool.currentRiders.length + 1;
-    const poolVehicleType = pool.vehicleType;
-    let baseF = 350;
-    if (poolVehicleType === 'Car') baseF = 350;
-    else if (poolVehicleType === 'Keke') baseF = 200;
-    else baseF = 100;
-
-    let tierPriceMultiplier = 1;
-    if (newRiderCount === 2) tierPriceMultiplier = 0.5;
-    else if (newRiderCount === 3) tierPriceMultiplier = 0.33;
-    else if (newRiderCount === 4) tierPriceMultiplier = 0.25;
-
-    const finalJoinFare = Math.round(baseF * tierPriceMultiplier);
-
+    const poolRef = doc(db, 'activePools', pool.id);
     const newUserRider = {
       name: userProfile.name || 'Temi Adeyemi',
       avatar: userProfile.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
@@ -1404,7 +1394,55 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       confirmedStart: false
     };
 
-    const updatedRiders = [...pool.currentRiders, newUserRider];
+    let updatedRiders = [...pool.currentRiders, newUserRider];
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists()) {
+          throw new Error("This pool is no longer available.");
+        }
+
+        const poolData = poolDoc.data() as ActivePool;
+        const currentRiders = poolData.currentRiders || [];
+        const maxRiders = poolData.maxRiders || 4;
+
+        if (poolData.status === 'closed' || currentRiders.length >= maxRiders) {
+          throw new Error("This pool is full and has been closed.");
+        }
+
+        const alreadyJoined = currentRiders.some(r => r.name === (userProfile.name || 'Temi Adeyemi'));
+        if (!alreadyJoined) {
+          updatedRiders = [...currentRiders, newUserRider];
+          const isClosedNow = updatedRiders.length >= maxRiders;
+          transaction.update(poolRef, {
+            currentRiders: updatedRiders,
+            status: isClosedNow ? 'closed' : (poolData.status || 'active')
+          });
+        }
+      });
+    } catch (err: any) {
+      console.warn("Firestore transaction join pool info:", err);
+      if (err.message && (err.message.includes("full") || err.message.includes("no longer available"))) {
+        alert(err.message);
+        return;
+      }
+    }
+
+    // Calculate split price for new rider count
+    const newRiderCount = updatedRiders.length;
+    const poolVehicleType = pool.vehicleType;
+    let baseF = 350;
+    if (poolVehicleType === 'Car') baseF = 350;
+    else if (poolVehicleType === 'Keke') baseF = 200;
+    else baseF = 100;
+
+    let tierPriceMultiplier = 1;
+    if (newRiderCount === 2) tierPriceMultiplier = 0.5;
+    else if (newRiderCount === 3) tierPriceMultiplier = 0.33;
+    else if (newRiderCount >= 4) tierPriceMultiplier = 0.25;
+
+    const finalJoinFare = Math.round(baseF * tierPriceMultiplier);
     const isClosedNow = updatedRiders.length >= pool.maxRiders;
 
     const updatedPools = activePools.map(p => {
@@ -2820,79 +2858,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 </div>
 
                 {/* COMPLAINT SUBMISSION MODULE */}
-                <div className="mt-4 border-t border-slate-150 pt-4 text-left">
-                  {!isComplaintFormOpen ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsComplaintFormOpen(true)}
-                      className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-250 py-3 px-4 rounded-2xl transition-all text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
-                      File An On-Trip Complaint
-                    </button>
-                  ) : (
-                    <div className="bg-rose-50/50 border border-rose-200/60 rounded-2xl p-4 text-left space-y-3.5">
-                      <div className="flex items-center justify-between border-b border-rose-100 pb-2">
-                        <span className="text-xs font-black text-rose-800 uppercase tracking-wide flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-rose-600" />
-                          Lodge Active Trip Dispute
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setIsComplaintFormOpen(false)}
-                          className="text-xs font-extrabold text-slate-400 hover:text-slate-600 cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-
-                      {complaintSuccessMsg ? (
-                        <div className="p-3 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-200 animate-pulse">
-                          {complaintSuccessMsg}
-                        </div>
-                      ) : (
-                        <div className="space-y-3.5">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Dispute Category</label>
-                            <select
-                              value={complaintCategory}
-                              onChange={(e) => setComplaintCategory(e.target.value)}
-                              className="w-full bg-white border border-rose-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-700"
-                            >
-                              <option value="Driver Behavior">Unprofessional Driver Behavior</option>
-                              <option value="Dangerous Driving">Dangerous Driving or Speeding</option>
-                              <option value="Route Deviation">Incorrect or Unauthorized Route Deviation</option>
-                              <option value="Vehicle Condition">Unsanitary or Damaged Vehicle Condition</option>
-                              <option value="Overcharging Dispute">Fare Dispute / Overcharging</option>
-                              <option value="Other">Other Operational Safety Concerns</option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Incident Details</label>
-                            <textarea
-                              value={complaintDetails}
-                              onChange={(e) => setComplaintDetails(e.target.value)}
-                              placeholder="Provide specific details about what is happening on this ride. This is sent directly to administrators in real time."
-                              rows={3}
-                              className="w-full bg-white border border-rose-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-rose-500 outline-none text-slate-700 placeholder-slate-400 leading-relaxed font-semibold"
-                              required
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(e) => handleSendComplaint(e as any)}
-                            disabled={isSubmittingComplaint || !complaintDetails.trim()}
-                            className="w-full bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl shadow-md shadow-rose-900/10 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer font-mono"
-                          >
-                            {isSubmittingComplaint ? 'Submitting Dispute...' : 'Transmit Dispute to Admin'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ComplaintForm
+                  rideId={activeRide?.id || joinedPoolId || 'N/A'}
+                  passengerId={userProfile.id}
+                  passengerName={userProfile.name}
+                  passengerAvatar={userProfile.avatar}
+                  driverId={activeRide?.driverId || 'N/A'}
+                  driverName={activeRide?.driverName || 'David Alao'}
+                />
               </div>
             )}
 
@@ -2948,79 +2921,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 </div>
 
                 {/* COMPLAINT SUBMISSION MODULE */}
-                <div className="mt-4 border-t border-slate-150 pt-4 text-left">
-                  {!isComplaintFormOpen ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsComplaintFormOpen(true)}
-                      className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-250 py-3 px-4 rounded-2xl transition-all text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
-                      File An On-Trip Complaint
-                    </button>
-                  ) : (
-                    <div className="bg-rose-50/50 border border-rose-200/60 rounded-2xl p-4 text-left space-y-3.5">
-                      <div className="flex items-center justify-between border-b border-rose-100 pb-2">
-                        <span className="text-xs font-black text-rose-800 uppercase tracking-wide flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-rose-600" />
-                          Lodge Active Trip Dispute
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setIsComplaintFormOpen(false)}
-                          className="text-xs font-extrabold text-slate-400 hover:text-slate-600 cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-
-                      {complaintSuccessMsg ? (
-                        <div className="p-3 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-200 animate-pulse">
-                          {complaintSuccessMsg}
-                        </div>
-                      ) : (
-                        <div className="space-y-3.5">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Dispute Category</label>
-                            <select
-                              value={complaintCategory}
-                              onChange={(e) => setComplaintCategory(e.target.value)}
-                              className="w-full bg-white border border-rose-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-700"
-                            >
-                              <option value="Driver Behavior">Unprofessional Driver Behavior</option>
-                              <option value="Dangerous Driving">Dangerous Driving or Speeding</option>
-                              <option value="Route Deviation">Incorrect or Unauthorized Route Deviation</option>
-                              <option value="Vehicle Condition">Unsanitary or Damaged Vehicle Condition</option>
-                              <option value="Overcharging Dispute">Fare Dispute / Overcharging</option>
-                              <option value="Other">Other Operational Safety Concerns</option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-rose-850 uppercase tracking-wider font-mono">Incident Details</label>
-                            <textarea
-                              value={complaintDetails}
-                              onChange={(e) => setComplaintDetails(e.target.value)}
-                              placeholder="Provide specific details about what is happening on this ride. This is sent directly to administrators in real time."
-                              rows={3}
-                              className="w-full bg-white border border-rose-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-rose-500 outline-none text-slate-700 placeholder-slate-400 leading-relaxed font-semibold"
-                              required
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(e) => handleSendComplaint(e as any)}
-                            disabled={isSubmittingComplaint || !complaintDetails.trim()}
-                            className="w-full bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl shadow-md shadow-rose-900/10 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer font-mono"
-                          >
-                            {isSubmittingComplaint ? 'Submitting Dispute...' : 'Transmit Dispute to Admin'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ComplaintForm
+                  rideId={activeRide?.id || joinedPoolId || 'N/A'}
+                  passengerId={userProfile.id}
+                  passengerName={userProfile.name}
+                  passengerAvatar={userProfile.avatar}
+                  driverId={activeRide?.driverId || 'N/A'}
+                  driverName={activeRide?.driverName || 'David Alao'}
+                />
               </div>
             )}
 

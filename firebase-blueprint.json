@@ -225,6 +225,18 @@
     "/sent_emails/{emailId}": {
       "schema": "SentEmail",
       "description": "Administrative email action dispatch history logs."
+    },
+    "/complaints/{complaintId}": {
+      "schema": "object",
+      "description": "Student complaint records for administrative review."
+    },
+    "/scheduledRideRequests/{scheduleId}": {
+      "schema": "RideRequest",
+      "description": "Scheduled ride reservations."
+    },
+    "/activePools/{poolId}": {
+      "schema": "object",
+      "description": "Live carpooling lobbies and real-time active shared rides."
     }
   }
 }
