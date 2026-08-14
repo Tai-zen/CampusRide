@@ -255,14 +255,22 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [rideMode, setRideMode] = useState<'create' | 'find' | 'solo'>('create');
   const [scheduledRides, setScheduledRides] = useState<{
     id: string;
+    passengerId?: string;
     pickup: string;
     dropoff: string;
-    mode: 'create' | 'solo';
+    mode: 'create' | 'solo' | string;
     date: string;
     time: string;
-    vehicleType: string;
+    vehicleType?: string;
     fare: number;
+    cost?: number;
+    status?: string;
+    driverId?: string;
+    driverName?: string;
+    driverVehicle?: string;
+    driverPlateNumber?: string;
   }[]>([]);
+  const [cancellingScheduledId, setCancellingScheduledId] = useState<string | null>(null);
 
   const [activePools, setActivePools] = useState<ActivePool[]>([]);
   const [joinedPoolId, setJoinedPoolId] = useState<string | null>(() => {
@@ -326,7 +334,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     const unsub = onSnapshot(q, (snapshot) => {
       const list: any[] = [];
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (data.status !== 'canceled' && data.status !== 'cancelled' && data.status !== 'deleted') {
+          list.push({ id: docSnap.id, ...data });
+        }
       });
       list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setScheduledRides(list);
@@ -336,7 +347,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as any[];
-          const myRides = parsed.filter(r => r.passengerId === userProfile.id);
+          const myRides = parsed.filter(r => r.passengerId === userProfile.id && r.status !== 'canceled' && r.status !== 'cancelled' && r.status !== 'deleted');
           setScheduledRides(myRides);
         } catch (e) {}
       }
@@ -1359,6 +1370,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
     }
 
+    // Backend audit logging for live pool/ride cancellation
+    try {
+      addDoc(collection(db, 'activity_logs'), {
+        action: 'CANCEL_ACTIVE_RIDE',
+        category: 'RIDE_MANAGEMENT',
+        userId: userProfile?.id || 'anonymous_student',
+        userName: userProfile?.name || 'Student',
+        userRole: userProfile?.role || 'student',
+        rideId: activeRide?.id || joinedPoolId || 'live_ride',
+        pickup: getStopName(pickup),
+        dropoff: getStopName(dropoff),
+        timestamp: Date.now(),
+        createdAt: new Date().toISOString(),
+        status: 'success'
+      }).catch(() => {});
+    } catch (e) {}
+
     setJoinedPoolId(null);
     setPoolingState('idle');
     setLobbyMembers([]);
@@ -1779,6 +1807,125 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       setCustomFundAmount('');
       alert(`Success! Refilled wallet with ${currencySymbol}${finalAmount}.`);
     }, 2000);
+  };
+
+  // Robust cancellation and deletion handler for scheduled rides with Firestore backend audit logging
+  const handleCancelScheduledRide = async (ride: {
+    id: string;
+    pickup: string;
+    dropoff: string;
+    mode?: string;
+    date: string;
+    time: string;
+    vehicleType?: string;
+    fare: number;
+    cost?: number;
+    status?: string;
+    driverId?: string;
+    driverName?: string;
+    driverVehicle?: string;
+    driverPlateNumber?: string;
+  }) => {
+    const pickupName = getStopName(ride.pickup);
+    const dropoffName = getStopName(ride.dropoff);
+
+    setCancellingScheduledId(ride.id);
+    const timestamp = Date.now();
+    const isoDate = new Date().toISOString();
+
+    // 1. Immediately remove from local state for instant feedback
+    setScheduledRides((prev) => prev.filter((r) => r.id !== ride.id));
+
+    // 2. Immediately remove from local storage cache
+    const stored = localStorage.getItem('campusride_global_scheduled_rides');
+    if (stored) {
+      try {
+        const allRides = JSON.parse(stored) as any[];
+        const updated = allRides.filter((r: any) => r.id !== ride.id);
+        localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Local storage update error:', e);
+      }
+    }
+
+    try {
+      // 3. Permanently delete from Firestore scheduledRideRequests collection
+      try {
+        await deleteDoc(doc(db, 'scheduledRideRequests', ride.id));
+      } catch (firestoreErr) {
+        console.warn('Firestore deleteDoc fallback, updating status to canceled:', firestoreErr);
+        await setDoc(
+          doc(db, 'scheduledRideRequests', ride.id),
+          {
+            status: 'canceled',
+            canceledAt: timestamp,
+            canceledBy: userProfile?.id || userProfile?.email || 'student',
+            cancellationReason: 'Passenger deleted scheduled ride',
+            updatedAt: timestamp
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+
+      // 4. Write structured audit log to backend activity_logs collection
+      try {
+        await addDoc(collection(db, 'activity_logs'), {
+          action: 'CANCEL_SCHEDULED_RIDE',
+          category: 'RIDE_MANAGEMENT',
+          userId: userProfile?.id || 'anonymous_student',
+          userName: userProfile?.name || 'Student',
+          userEmail: userProfile?.email || '',
+          userRole: userProfile?.role || 'student',
+          rideId: ride.id,
+          pickup: pickupName,
+          dropoff: dropoffName,
+          scheduledDate: ride.date || '',
+          scheduledTime: ride.time || '',
+          fare: ride.fare || ride.cost || 0,
+          driverId: ride.driverId || null,
+          driverName: ride.driverName || null,
+          timestamp,
+          createdAt: isoDate,
+          status: 'success',
+          details: `Scheduled ride ${ride.id} (${pickupName} -> ${dropoffName}) deleted by passenger.`
+        });
+      } catch (logErr) {
+        console.warn('Activity log write error:', logErr);
+      }
+
+      // 5. If a driver was already assigned, send real-time notification to driver
+      if (ride.driverId) {
+        try {
+          await addDoc(collection(db, 'users', ride.driverId, 'notifications'), {
+            id: `notif-${timestamp}`,
+            title: 'Scheduled Ride Cancelled',
+            message: `${userProfile?.name || 'Passenger'} cancelled the scheduled ride from ${pickupName} to ${dropoffName} (${ride.date} at ${ride.time}).`,
+            type: 'alert',
+            date: 'Today',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: isoDate,
+            isRead: false
+          });
+        } catch (driverNotifErr) {
+          console.warn('Driver cancellation notification failed:', driverNotifErr);
+        }
+      }
+
+      // 6. Push confirmation notification to student user
+      onAddNotification({
+        id: `notif-cancel-${timestamp}`,
+        title: 'Scheduled Ride Cancelled & Removed',
+        message: `Your scheduled ride to ${dropoffName} on ${ride.date} at ${ride.time} has been deleted.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: 'Today',
+        isRead: false,
+        type: 'info'
+      });
+    } catch (err) {
+      console.error('Error cancelling scheduled ride:', err);
+    } finally {
+      setCancellingScheduledId(null);
+    }
   };
 
   const activeReq = activeRide || (joinedPoolId ? activePools.find(p => p.id === joinedPoolId) : null);
@@ -2253,27 +2400,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                 <span className="text-xs font-mono font-black text-[#00875A]">{currencySymbol}{ride.fare}</span>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (confirm('Are you sure you want to cancel this scheduled ride?')) {
-                                      // Delete from Firestore
-                                      doc(db, 'scheduledRideRequests', ride.id);
-                                      setDoc(doc(db, 'scheduledRideRequests', ride.id), { status: 'cancelled' }, { merge: true }).catch(() => {});
-                                      
-                                      const stored = localStorage.getItem('campusride_global_scheduled_rides');
-                                      if (stored) {
-                                        try {
-                                          const allRides = JSON.parse(stored) as any[];
-                                          const updated = allRides.filter(r => r.id !== ride.id);
-                                          localStorage.setItem('campusride_global_scheduled_rides', JSON.stringify(updated));
-                                        } catch (e) {}
-                                      }
-                                      setScheduledRides(prev => prev.filter(r => r.id !== ride.id));
-                                      alert('Scheduled ride request cancelled.');
-                                    }
-                                  }}
-                                  className="text-[10px] text-rose-600 hover:text-rose-700 font-bold uppercase tracking-wider cursor-pointer hover:underline"
+                                  id={`cancel-scheduled-ride-${ride.id}`}
+                                  disabled={cancellingScheduledId === ride.id}
+                                  onClick={() => handleCancelScheduledRide(ride)}
+                                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold tracking-wide uppercase bg-rose-50 hover:bg-rose-100/90 active:bg-rose-200 text-rose-600 hover:text-rose-700 border border-rose-200/80 shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95"
+                                  title="Cancel this scheduled ride"
                                 >
-                                  Cancel
+                                  {cancellingScheduledId === ride.id ? (
+                                    <>
+                                      <RefreshCw className="w-3 h-3 animate-spin text-rose-600" />
+                                      <span>Cancelling...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-3.5 h-3.5 stroke-[2.2] text-rose-600" />
+                                      <span>Cancel</span>
+                                    </>
+                                  )}
                                 </button>
                               </div>
                             </div>
