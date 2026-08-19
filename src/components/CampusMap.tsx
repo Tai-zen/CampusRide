@@ -324,8 +324,8 @@ export const CampusMap: React.FC<CampusMapProps> = ({
                   >
                     {isPickup ? (
                       <div className="relative flex items-center justify-center">
-                        <span className="absolute w-8 h-8 rounded-full bg-[#BE5912]/30 animate-ping"></span>
-                        <div className="w-7 h-7 bg-[#BE5912] text-white rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+                        <span className="absolute w-8 h-8 rounded-full bg-[#001058]/30 animate-ping"></span>
+                        <div className="w-7 h-7 bg-[#001058] text-white rounded-full border-2 border-white shadow-lg flex items-center justify-center">
                           <MapPin className="w-3.5 h-3.5" />
                         </div>
                       </div>
@@ -353,8 +353,8 @@ export const CampusMap: React.FC<CampusMapProps> = ({
                     <div 
                       className={`p-2 rounded-xl flex items-center justify-center shadow-md border-2 transition-transform duration-300 ${
                         isMatchedDriver 
-                          ? 'bg-[#BE5912] border-white scale-110 text-white z-20' 
-                          : 'bg-white border-[#BE5912] text-[#BE5912] scale-95 z-10'
+                          ? 'bg-[#001058] border-white scale-110 text-white z-20' 
+                          : 'bg-white border-[#001058] text-[#001058] scale-95 z-10'
                       }`}
                       style={{ transform: `rotate(${drv.angle}deg)` }}
                     >
@@ -370,7 +370,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
         ) : (
           /* GOOGLE MAPS API KEY REQUIRED SPLASH SCREEN */
           <div className="relative w-full h-full bg-slate-900 text-white p-6 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-12 h-12 bg-[#BE5912]/20 border border-[#BE5912]/40 rounded-2xl flex items-center justify-center text-[#BE5912]">
+            <div className="w-12 h-12 bg-[#001058]/20 border border-[#001058]/40 rounded-2xl flex items-center justify-center text-[#001058]">
               <Compass className="w-6 h-6 animate-spin" />
             </div>
             <div className="max-w-md space-y-2">
@@ -402,7 +402,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
 
         <div className="flex gap-4">
           <div className="flex items-center space-x-1.5">
-            <div className="w-3 h-3 rounded-full bg-[#BE5912]"></div>
+            <div className="w-3 h-3 rounded-full bg-[#001058]"></div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Pickup</span>
           </div>
           <div className="flex items-center space-x-1.5">

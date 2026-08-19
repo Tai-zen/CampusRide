@@ -1113,7 +1113,7 @@ export default function App() {
   };
 
   return (
-    <div id="application-layout-context" className={`flex flex-col md:flex-row min-h-screen bg-[#F9FAFB] ${currentRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'} font-sans antialiased`}>
+    <div id="application-layout-context" className={`flex flex-col md:flex-row min-h-screen bg-[#F9FAFB] ${currentRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'} font-sans antialiased`}>
       
       {/* Sidebar Navigation */}
       <Sidebar 
@@ -1134,7 +1134,7 @@ export default function App() {
         
         {/* Native Web Push Notifications Consent Banner */}
         {notificationPermission === 'default' && !dismissedNotificationBanner && (
-          <div className="bg-gradient-to-r from-[#BE5912] to-orange-500 text-white p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 animate-fade-in relative z-20">
+          <div className="bg-gradient-to-r from-[#001058] to-[#0A2472] text-white p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 animate-fade-in relative z-20">
             <div className="flex items-start md:items-center space-x-3 text-left">
               <div className="bg-white/15 p-2 rounded-xl text-white mt-0.5 md:mt-0 flex-shrink-0 animate-pulse">
                 <Bell className="w-5 h-5 stroke-[2.5]" />
@@ -1144,7 +1144,7 @@ export default function App() {
                   Enable System Notifications
                   <span className="bg-white/20 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-widest font-mono">Outside Browser</span>
                 </h4>
-                <p className="text-[11px] sm:text-xs text-orange-50 max-w-2xl leading-relaxed">
+                <p className="text-[11px] sm:text-xs text-[#EFF4FF] max-w-2xl leading-relaxed">
                   Stay updated instantly! Receive real-time alerts for driver arrivals, newly formed ride pools, and group chats—even when you close this tab or put it in the background.
                 </p>
               </div>
@@ -1160,7 +1160,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleRequestNotificationPermission}
-                className="bg-white text-[#BE5912] hover:bg-orange-50 font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                className="bg-white text-[#001058] hover:bg-[#EFF4FF] font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle className="w-3.5 h-3.5 stroke-[3]" />
                 Enable Alerts

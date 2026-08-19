@@ -309,10 +309,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         
         {/* Small screen top header */}
         <div className="md:hidden flex items-center justify-center space-x-2 mb-8 border-b border-gray-100 pb-4">
-          <div className={`w-8 h-8 rounded-lg transition-colors duration-500 ${selectedRole === 'driver' ? 'bg-orange-500' : 'bg-[#00875A]'} flex items-center justify-center shadow-md`}>
+          <div className={`w-8 h-8 rounded-lg transition-colors duration-500 ${selectedRole === 'driver' ? 'bg-[#001058]' : 'bg-[#00875A]'} flex items-center justify-center shadow-md`}>
             <Car className="w-5 h-5 text-white" />
           </div>
-          <span className={`font-bold tracking-tight text-xl transition-colors duration-500 ${selectedRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>Campus<span className={`${selectedRole === 'driver' ? 'text-orange-500' : 'text-primary'} font-extrabold`}>Ride</span></span>
+          <span className={`font-bold tracking-tight text-xl transition-colors duration-500 ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'}`}>Campus<span className={`${selectedRole === 'driver' ? 'text-[#001058]' : 'text-primary'} font-extrabold`}>Ride</span></span>
         </div>
 
         <div className="max-w-md w-full mx-auto space-y-8">
@@ -342,7 +342,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 </div>
 
                 <div>
-                  <h2 className={`text-2xl font-extrabold tracking-tight ${selectedRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>
+                  <h2 className={`text-2xl font-extrabold tracking-tight ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'}`}>
                     Reset Your Password
                   </h2>
                   <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
@@ -431,7 +431,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
                         placeholder="name@domain.com"
-                        className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                        className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition ${selectedRole === 'driver' ? 'focus:border-[#001058]' : 'focus:border-primary'}`}
                       />
                     </div>
                   </div>
@@ -442,7 +442,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     whileTap={{ scale: 0.98 }}
                     className={`w-full py-3 rounded-xl text-white font-bold tracking-wide text-xs uppercase flex items-center justify-center space-x-2 shadow-lg transition-colors cursor-pointer ${
                       resetLoading ? 'opacity-70 cursor-not-allowed bg-gray-500' :
-                      selectedRole === 'student' ? 'bg-primary hover:bg-[#00875A]' : 'bg-orange-600 hover:bg-orange-700'
+                      selectedRole === 'student' ? 'bg-primary hover:bg-[#00875A]' : 'bg-[#001058] hover:bg-[#000B3E]'
                     }`}
                   >
                     {resetLoading ? (
@@ -506,7 +506,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     <div>
                       <div className="text-slate-400 font-medium text-[11px]">Driver's License Document</div>
                       <div className="text-slate-800 font-bold font-mono text-xs mt-0.5 flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-orange-600 shrink-0" />
+                        <FileText className="w-4 h-4 text-[#001058] shrink-0" />
                         <span className="truncate max-w-[200px] inline-block">{driverSuccessDetails.licenseDocName || 'Driver_License_Submitted.pdf'}</span>
                       </div>
                     </div>
@@ -535,7 +535,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
 
                   {/* Step 2 */}
                   <div className="flex items-start space-x-3 text-xs">
-                    <div className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold flex-shrink-0">
+                    <div className="w-5 h-5 rounded-full bg-[#EFF4FF] text-[#001058] flex items-center justify-center font-bold flex-shrink-0">
                       2
                     </div>
                     <div>
@@ -571,7 +571,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     setPassword('');
                     setConfirmPassword('');
                   }}
-                  className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold tracking-wide text-xs uppercase rounded-xl flex items-center justify-center space-x-2 shadow-lg shadow-orange-600/10 cursor-pointer"
+                  className="w-full py-3 bg-[#001058] hover:bg-[#000B3E] text-white font-bold tracking-wide text-xs uppercase rounded-xl flex items-center justify-center space-x-2 shadow-lg shadow-[#001058]/10 cursor-pointer"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Return to Sign In</span>
@@ -587,7 +587,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <h2 className={`text-3xl font-extrabold tracking-tight transition-colors duration-500 ${selectedRole === 'driver' ? 'text-orange-600' : 'text-[#00875A]'}`}>
+            <h2 className={`text-3xl font-extrabold tracking-tight transition-colors duration-500 ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'}`}>
               {isLogin ? 'Welcome Back!' : 'Create Account'}
             </h2>
             <p className="mt-2 text-sm text-[#737686]">
@@ -632,7 +632,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 {selectedRole === 'driver' && (
                   <motion.div 
                     layoutId="activeRoleBg"
-                    className="absolute inset-0 bg-orange-600 rounded-lg shadow-sm -z-10"
+                    className="absolute inset-0 bg-[#001058] rounded-lg shadow-sm -z-10"
                     transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                   />
                 )}
@@ -672,7 +672,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Full Name</label>
                     <div className="relative">
-                      <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
+                      <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-gray-400'}`}>
                         <UserPlus className="w-4 h-4" />
                       </div>
                       <input
@@ -694,7 +694,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                         placeholder="e.g. John Doe"
                         className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
                           selectedRole === 'driver' 
-                            ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                            ? 'focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 font-medium' 
                             : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
                         }`}
                       />
@@ -709,7 +709,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 {isLogin ? 'ID Number (Registered ID / Email)' : 'Email Address'}
               </label>
               <div className="relative">
-                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
+                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-gray-400'}`}>
                   <Mail className="w-4 h-4" />
                 </div>
                 <input
@@ -719,7 +719,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   placeholder={isLogin ? "e.g. RUN/2022/10432 or email" : "name@domain.com"}
                   className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
                     selectedRole === 'driver' 
-                      ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                      ? 'focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 font-medium' 
                       : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
                   }`}
                 />
@@ -741,7 +741,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     value={idNumber}
                     onChange={(e) => setIdNumber(e.target.value)}
                     placeholder="RUN/XXX/XX/XXXXX"
-                    className={`w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition uppercase font-mono ${selectedRole === 'driver' ? 'focus:border-orange-500' : 'focus:border-primary'}`}
+                    className={`w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition uppercase font-mono ${selectedRole === 'driver' ? 'focus:border-[#001058]' : 'focus:border-primary'}`}
                   />
                 </motion.div>
               )}
@@ -754,7 +754,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="space-y-4 overflow-hidden border-l-2 border-orange-500 pl-3 py-1"
+                  className="space-y-4 overflow-hidden border-l-2 border-[#001058] pl-3 py-1"
                 >
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Vehicle Type</label>
@@ -769,7 +769,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                             else if (type === 'shuttle') setMaxCapacity(10);
                             else setMaxCapacity(carModelOption === 'Sienna' ? 7 : 4);
                           }}
-                          className={`py-2 text-[10px] font-bold rounded-lg capitalize transition-colors cursor-pointer ${carType === type ? 'bg-orange-600 text-white shadow-xs' : 'text-gray-500 hover:text-gray-900 bg-transparent'}`}
+                          className={`py-2 text-[10px] font-bold rounded-lg capitalize transition-colors cursor-pointer ${carType === type ? 'bg-[#001058] text-white shadow-xs' : 'text-gray-500 hover:text-gray-900 bg-transparent'}`}
                         >
                           {type}
                         </button>
@@ -792,7 +792,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                               if (error && error.toLowerCase().includes('model')) setError('');
                             }}
                             className={`py-2 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
-                              carModelOption === model ? 'bg-orange-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                              carModelOption === model ? 'bg-[#001058] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900 bg-transparent'
                             }`}
                           >
                             {model}
@@ -815,7 +815,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                             }
                           }}
                           placeholder="e.g. Honda Accord, Camry, Lexus"
-                          className="w-full px-4 py-2.5 mt-1.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition text-gray-900 placeholder:text-gray-400"
+                          className="w-full px-4 py-2.5 mt-1.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 focus:bg-white transition text-gray-900 placeholder:text-gray-400"
                         />
                       )}
                     </div>
@@ -837,7 +837,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                           }
                         }}
                         placeholder="e.g. 4 or 7"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition text-gray-900 font-mono font-medium"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 focus:bg-white transition text-gray-900 font-mono font-medium"
                       />
                       <span className="absolute right-3 text-xs text-gray-400 pointer-events-none font-medium">seats</span>
                     </div>
@@ -861,7 +861,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                         }
                       }}
                       placeholder="e.g. Silver, Black, Navy Blue"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:bg-white transition text-gray-900 placeholder:text-gray-400"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#001058] focus:bg-white transition text-gray-900 placeholder:text-gray-400"
                     />
                   </div>
 
@@ -872,7 +872,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                       value={plateNumber}
                       onChange={(e) => setPlateNumber(e.target.value)}
                       placeholder="e.g. 4P-928X"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:bg-white transition uppercase font-mono"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#001058] focus:bg-white transition uppercase font-mono"
                     />
                   </div>
 
@@ -889,7 +889,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                         }
                       }}
                       placeholder="001"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition font-mono text-gray-900 placeholder:text-gray-400"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 focus:bg-white transition font-mono text-gray-900 placeholder:text-gray-400"
                     />
                   </div>
 
@@ -897,14 +897,14 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   <div className="space-y-1.5 pt-1">
                     <label className="text-xs font-bold text-gray-600 uppercase tracking-wider flex items-center justify-between">
                       <span>Driver's License Document</span>
-                      <span className="text-[10px] text-orange-600 font-bold">*Required</span>
+                      <span className="text-[10px] text-[#001058] font-bold">*Required</span>
                     </label>
 
-                    <div className="bg-orange-50/50 border-2 border-dashed border-orange-200 hover:border-orange-400 rounded-2xl p-3 transition text-center relative">
+                    <div className="bg-[#EFF4FF]/50 border-2 border-dashed border-[#C7D7FE] hover:border-[#001058] rounded-2xl p-3 transition text-center relative">
                       {licenseFileName ? (
-                        <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-orange-200 shadow-xs">
+                        <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-[#C7D7FE] shadow-xs">
                           <div className="flex items-center space-x-2.5 overflow-hidden text-left">
-                            <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                            <div className="w-9 h-9 rounded-lg bg-[#EFF4FF] flex items-center justify-center text-[#001058] shrink-0">
                               <FileText className="w-5 h-5" />
                             </div>
                             <div className="truncate">
@@ -935,7 +935,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                             className="hidden"
                           />
                           <div className="flex flex-col items-center space-y-1.5">
-                            <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs">
+                            <div className="w-10 h-10 rounded-full bg-[#EFF4FF] text-[#001058] flex items-center justify-center shadow-xs">
                               <Upload className="w-5 h-5" />
                             </div>
                             <div>
@@ -963,14 +963,14 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                       setResetSuccess(null);
                       setResetError(null);
                     }}
-                    className={`text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer ${selectedRole === 'driver' ? 'text-orange-600' : 'text-primary'}`}
+                    className={`text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-primary'}`}
                   >
                     Forgot password?
                   </button>
                 )}
               </div>
               <div className="relative">
-                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
+                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-gray-400'}`}>
                   <KeyRound className="w-4 h-4" />
                 </div>
                 <input
@@ -980,7 +980,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                   placeholder="••••••••"
                   className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
                     selectedRole === 'driver' 
-                      ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                      ? 'focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 font-medium' 
                       : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
                   }`}
                 />
@@ -1003,7 +1003,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 >
                   <label className="text-xs font-bold text-gray-600 uppercase tracking-wider block">Confirm Password</label>
                   <div className="relative">
-                    <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none ${selectedRole === 'driver' ? 'text-orange-600' : 'text-gray-400'}`}>
+                    <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-gray-400'}`}>
                       <KeyRound className="w-4 h-4" />
                     </div>
                     <input
@@ -1013,7 +1013,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                       placeholder="••••••••"
                       className={`w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:bg-white transition text-gray-900 placeholder:text-gray-400 ${
                         selectedRole === 'driver' 
-                          ? 'focus:border-orange-600 focus:ring-2 focus:ring-orange-500/20 font-medium' 
+                          ? 'focus:border-[#001058] focus:ring-2 focus:ring-[#001058]/20 font-medium' 
                           : 'focus:border-primary focus:ring-2 focus:ring-primary/20'
                       }`}
                     />
@@ -1031,7 +1031,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 loading ? 'opacity-70 cursor-not-allowed bg-gray-500' :
                 selectedRole === 'student' 
                   ? 'bg-primary hover:bg-[#00875A]' 
-                  : 'bg-orange-600 hover:bg-orange-700 shadow-orange-500/10'
+                  : 'bg-[#001058] hover:bg-[#000B3E] shadow-[#001058]/10'
               }`}
             >
               {loading ? (
@@ -1058,7 +1058,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
               className="text-xs text-gray-600 font-medium hover:underline inline-flex items-center space-x-1 cursor-pointer"
             >
               <span>{isLogin ? "Don't have a commuter profile?" : 'Already registered?'}</span>
-              <span className={`font-bold transition-colors ${selectedRole === 'driver' ? 'text-orange-600 hover:text-orange-700' : 'text-primary hover:text-[#00875A]'}`}>
+              <span className={`font-bold transition-colors ${selectedRole === 'driver' ? 'text-[#001058] hover:text-[#000B3E]' : 'text-primary hover:text-[#00875A]'}`}>
                 {isLogin ? 'Sign up here' : 'Log in here'}
               </span>
             </button>

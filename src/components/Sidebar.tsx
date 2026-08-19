@@ -69,14 +69,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isDriver = currentRole === 'driver';
   
   // Dynamic color classes based on role
-  const brandTextColor = isDriver ? 'text-[#BE5912]' : 'text-[#00875A]';
-  const brandBgLight = isDriver ? 'bg-orange-50' : 'bg-emerald-50';
-  const brandBorderLight = isDriver ? 'border-orange-100' : 'border-emerald-100';
-  const brandTextActive = isDriver ? 'text-orange-600' : 'text-[#00875A]';
-  const brandBgActive = isDriver ? (isDriver ? 'bg-orange-600 shadow-orange-500/20' : 'bg-[#00875A] shadow-[#00875A]/20') : 'bg-[#00875A] shadow-[#00875A]/20';
-  const brandHoverBorder = isDriver ? 'hover:border-orange-500/20 hover:bg-orange-50' : 'hover:border-[#00875A]/20 hover:bg-emerald-50';
-  const brandButtonBorder = isDriver ? 'text-orange-600' : 'text-[#00875A]';
-  const brandBadgeBg = isDriver ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-[#00875A]';
+  const brandTextColor = isDriver ? 'text-[#001058]' : 'text-[#00875A]';
+  const brandBgLight = isDriver ? 'bg-[#EFF4FF]' : 'bg-emerald-50';
+  const brandBorderLight = isDriver ? 'border-[#E0E7FF]' : 'border-emerald-100';
+  const brandTextActive = isDriver ? 'text-[#001058]' : 'text-[#00875A]';
+  const brandBgActive = isDriver ? 'bg-[#001058] shadow-[#001058]/20' : 'bg-[#00875A] shadow-[#00875A]/20';
+  const brandHoverBorder = isDriver ? 'hover:border-[#001058]/20 hover:bg-[#EFF4FF]' : 'hover:border-[#00875A]/20 hover:bg-emerald-50';
+  const brandButtonBorder = isDriver ? 'text-[#001058]' : 'text-[#00875A]';
+  const brandBadgeBg = isDriver ? 'bg-[#EFF4FF] text-[#001058]' : 'bg-emerald-50 text-[#00875A]';
 
   // Define Navigation Items based on active role
   const getNavItems = () => {

@@ -2377,7 +2377,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs font-black text-slate-800 font-mono tracking-tight">{ride.id}</span>
-                                  <span className="text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                                  <span className="text-[9px] bg-[#EFF4FF] text-[#001058] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
                                     {ride.mode === 'solo' ? 'Solo' : 'Pool'}
                                   </span>
                                   {isAccepted ? (
@@ -2727,7 +2727,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                 {/* Implications & Safety Alerts Box */}
                 <div className="bg-amber-500/5 border border-amber-500/25 p-4 rounded-2xl space-y-2 text-left">
-                  <span className="text-xs font-extrabold text-[#BE5912] uppercase block tracking-wider">Ride Guidelines & Cancellation Policy</span>
+                  <span className="text-xs font-extrabold text-[#001058] uppercase block tracking-wider">Ride Guidelines & Cancellation Policy</span>
                   <ul className="text-[11px] text-slate-600 list-disc pl-4 space-y-1 leading-relaxed">
                     <li><strong>Match Vehicle Plate:</strong> Verify vehicle corresponds to <span className="font-mono bg-slate-100 px-1 py-0.5 rounded font-black text-slate-800">{activeRide?.driverPlateNumber || 'RUN-918-LA'}</span> before boarding.</li>
                     <li><strong>Logistics Liability:</strong> Cancellations after driver accepts cause gridlocks. Avoid repetitive cancellations to maintain a high rating.</li>
@@ -3028,7 +3028,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Active Trip Info details */}
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600">
+                    <div className="w-10 h-10 rounded-xl bg-[#EFF4FF] border border-[#E0E7FF] flex items-center justify-center text-[#001058]">
                       <Shield className="w-5 h-5" />
                     </div>
                     <div>
@@ -3468,7 +3468,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           ? 'bg-sage-bg/30 border border-sage-light text-[#00875A]'
                           : pool.vehicleType === 'Keke'
                             ? 'bg-amber-50 border border-amber-200 text-amber-600'
-                            : 'bg-orange-50 border border-orange-200 text-orange-600'
+                            : 'bg-[#EFF4FF] border border-[#C7D7FE] text-[#001058]'
                       }`}>
                         {pool.vehicleType.toUpperCase()}
                       </span>
@@ -3875,7 +3875,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   className={`p-5 rounded-2xl border transition-all ${
                     notif.isRead 
                       ? 'bg-white border-slate-200 opacity-70' 
-                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-orange-500/10'
+                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-[#001058]/10'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">

@@ -1261,12 +1261,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-gray-150/80 shadow-sm flex items-center space-x-3.5">
-                <div className="p-2 rounded-xl bg-orange-50 text-orange-600 shrink-0">
+                <div className="p-2 rounded-xl bg-[#EFF4FF] text-[#001058] shrink-0">
                   <Activity className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Verified Drivers</p>
-                  <p className="text-lg font-extrabold text-orange-600 leading-none mt-1">{driverCount}</p>
+                  <p className="text-lg font-extrabold text-[#001058] leading-none mt-1">{driverCount}</p>
                 </div>
               </div>
 
@@ -1409,8 +1409,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                                 </span>
                               )}
                               {user.role === 'driver' && (
-                                <span className="bg-orange-50 text-orange-700 border border-orange-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
-                                  <Activity className="w-3.5 h-3.5 text-orange-500" />
+                                <span className="bg-[#EFF4FF] text-[#001058] border border-[#E0E7FF] px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
+                                  <Activity className="w-3.5 h-3.5 text-[#001058]" />
                                   <span>Verified Driver</span>
                                 </span>
                               )}
@@ -1540,7 +1540,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                               <span className="text-[#00875A] font-bold text-[10px]">Administrator</span>
                             )}
                             {user.role === 'driver' && (
-                              <span className="text-orange-700 font-bold text-[10px]">Verified Driver</span>
+                              <span className="text-[#001058] font-bold text-[10px]">Verified Driver</span>
                             )}
                             {(user.role === 'student' || user.role === 'rider') && (
                               <span className="text-[#00875A] font-bold text-[10px]">Student Rider</span>
@@ -1679,8 +1679,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     Review and approve submitted credentials for new peer drivers to activate their transit authorization.
                   </p>
                 </div>
-                <div className="bg-orange-50 text-orange-700 border border-orange-100 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center shrink-0">
-                  <Clock className="w-4 h-4 mr-1.5 text-orange-600 animate-spin" style={{ animationDuration: '3s' }} />
+                <div className="bg-[#EFF4FF] text-[#001058] border border-[#E0E7FF] px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center shrink-0">
+                  <Clock className="w-4 h-4 mr-1.5 text-[#001058] animate-spin" style={{ animationDuration: '3s' }} />
                   {pendingDrivers.length} Pending Application{pendingDrivers.length !== 1 ? 's' : ''}
                 </div>
               </div>
@@ -1708,7 +1708,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                         {/* Upper Details */}
                         <div className="flex items-start justify-between">
                           <div className="flex items-center space-x-3">
-                            <div className="w-11 h-11 rounded-full bg-orange-100 text-orange-700 font-extrabold flex items-center justify-center text-sm border border-orange-200 uppercase shrink-0">
+                            <div className="w-11 h-11 rounded-full bg-[#EFF4FF] text-[#001058] font-extrabold flex items-center justify-center text-sm border border-[#C7D7FE] uppercase shrink-0">
                               {driver.name.charAt(0)}
                             </div>
                             <div className="min-w-0">
@@ -1741,7 +1741,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                               <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono border ${
                                 driver.carType === 'keke' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
                                 driver.carType === 'shuttle' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                'bg-orange-50 text-orange-700 border-orange-200'
+                                'bg-[#EFF4FF] text-[#001058] border-[#C7D7FE]'
                               }`}>
                                 {driver.carType}
                               </span>
@@ -1751,11 +1751,11 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           {/* Driver License Document Card */}
                           <div 
                             onClick={() => setSelectedLicenseDriver(driver)}
-                            className="mt-3 pt-2.5 border-t border-gray-200/50 flex items-center justify-between bg-orange-50/40 hover:bg-orange-50/90 p-2.5 rounded-xl border border-orange-200/60 transition cursor-pointer group"
+                            className="mt-3 pt-2.5 border-t border-gray-200/50 flex items-center justify-between bg-[#EFF4FF]/40 hover:bg-[#EFF4FF]/90 p-2.5 rounded-xl border border-[#C7D7FE]/60 transition cursor-pointer group"
                           >
                             <div className="min-w-0 pr-2">
-                              <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-orange-600 block flex items-center gap-1">
-                                <FileText className="w-3 h-3 text-orange-600" /> Driver's License Document
+                              <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-[#001058] block flex items-center gap-1">
+                                <FileText className="w-3 h-3 text-[#001058]" /> Driver's License Document
                               </span>
                               <span className="text-xs font-bold text-gray-800 font-mono flex items-center gap-1.5 mt-0.5 truncate">
                                 <span className="truncate">{driver.licenseDocName || 'Driver_License_Submitted.pdf'}</span>
@@ -1764,7 +1764,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setSelectedLicenseDriver(driver); }}
-                              className="px-2.5 py-1.5 bg-orange-600 group-hover:bg-orange-700 text-white rounded-lg text-[10px] font-extrabold uppercase font-mono flex items-center gap-1 shrink-0 shadow-xs transition cursor-pointer"
+                              className="px-2.5 py-1.5 bg-[#001058] group-hover:bg-[#000B3E] text-white rounded-lg text-[10px] font-extrabold uppercase font-mono flex items-center gap-1 shrink-0 shadow-xs transition cursor-pointer"
                             >
                               <Eye className="w-3 h-3" />
                               <span>View License</span>
@@ -2229,7 +2229,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               {/* Inspection Header */}
               <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-bold">
+                  <div className="w-8 h-8 rounded-xl bg-[#001058] text-white flex items-center justify-center font-bold">
                     <FileText className="w-4 h-4" />
                   </div>
                   <div>

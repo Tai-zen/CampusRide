@@ -1094,8 +1094,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       {/* Upper Shift Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 border-b border-gray-100 pb-5">
         <div>
-          <span className="text-xs font-bold text-[#BE5912] uppercase tracking-widest font-mono">Driver Shift Center</span>
-          <h1 className="text-2xl font-extrabold text-[#BE5912] tracking-tight">
+          <span className="text-xs font-bold text-[#001058] uppercase tracking-widest font-mono">Driver Shift Center</span>
+          <h1 className="text-2xl font-extrabold text-[#001058] tracking-tight">
             {activeView === 'driver_dashboard' && 'Core Shift Dashboard'}
             {activeView === 'driver_earnings' && 'Shift Earnings Ledger'}
             {activeView === 'driver_scheduled' && 'Scheduled Rides'}
@@ -1110,7 +1110,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             onClick={handleToggleShift}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold tracking-wide transition flex items-center space-x-2 shadow-sm ${
               shiftOnline 
-                ? 'bg-[#BE5912] text-white hover:bg-[#BE5912]' 
+                ? 'bg-[#001058] text-white hover:bg-[#001058]' 
                 : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
             }`}
           >
@@ -1137,40 +1137,40 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             
             {/* KPI Trips */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/20 transition-all duration-300 cursor-pointer">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#001058]/20 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Completed Travels</span>
-                <span className="text-2xl font-extrabold text-[#BE5912] block">{driverProfile.completedTripsCount}</span>
+                <span className="text-2xl font-extrabold text-[#001058] block">{driverProfile.completedTripsCount}</span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#001058]/10 text-[#001058] flex items-center justify-center">
                 <Car className="w-5 h-5" />
               </div>
             </div>
 
             {/* KPI Average Rating */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/25 transition-all duration-300 cursor-pointer">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#001058]/25 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider block font-mono">Average Rating</span>
-                <span className="text-2xl font-extrabold text-[#BE5912] block">★ {driverProfile.ratingsCount > 0 ? (driverProfile.rating || 5.0).toFixed(1) : '0.0'}</span>
-                <span className="text-[9px] text-[#BE5912] font-bold bg-[#BE5912]/10 px-2 rounded-full inline-block">
+                <span className="text-2xl font-extrabold text-[#001058] block">★ {driverProfile.ratingsCount > 0 ? (driverProfile.rating || 5.0).toFixed(1) : '0.0'}</span>
+                <span className="text-[9px] text-[#001058] font-bold bg-[#001058]/10 px-2 rounded-full inline-block">
                   {driverProfile.ratingsCount} reviews
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#001058]/10 text-[#001058] flex items-center justify-center">
                 <Star className="w-5 h-5" />
               </div>
             </div>
 
             {/* KPI Hours Online */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#BE5912]/20 transition-all duration-300 cursor-pointer">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between hover:scale-[1.02] hover:shadow-md hover:border-[#001058]/20 transition-all duration-300 cursor-pointer">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono">Hours Clocked</span>
-                <span className="text-2xl font-extrabold text-[#BE5912] block">{(secondsClockedToday / 3600).toFixed(1)} hrs</span>
+                <span className="text-2xl font-extrabold text-[#001058] block">{(secondsClockedToday / 3600).toFixed(1)} hrs</span>
                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${shiftOnline ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'}`}>
                   {shiftOnline ? 'Active duty state' : 'Shift paused (Offline)'}
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#001058]/10 text-[#001058] flex items-center justify-center">
                 <Clock className="w-5 h-5" />
               </div>
             </div>
@@ -1205,18 +1205,18 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               
               {/* STATUS CARD: ON TRIP (SIMULATION MODE CONTROLS) */}
               {activeRide ? (
-                <div className="bg-white rounded-3xl border-2 border-[#BE5912] p-6 shadow-md shadow-orange-50 space-y-6">
+                <div className="bg-white rounded-3xl border-2 border-[#001058] p-6 shadow-md shadow-[#EFF4FF] space-y-6">
                   
                   {/* Trip details header */}
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="bg-[#BE5912] text-white text-[9px] font-bold uppercase px-2.5 py-0.5 rounded font-mono">
+                      <span className="bg-[#001058] text-white text-[9px] font-bold uppercase px-2.5 py-0.5 rounded font-mono">
                         Active Destination: {activeRide.dropoff}
                       </span>
-                      <h2 className="text-lg font-extrabold text-[#BE5912] mt-2">Active Campus Commuter State</h2>
+                      <h2 className="text-lg font-extrabold text-[#001058] mt-2">Active Campus Commuter State</h2>
                       <p className="text-xs text-slate-500">Currently executing verified registrar peer travel itinerary.</p>
                     </div>
-                    <span className="bg-[#BE5912]/10 text-[#BE5912] font-mono font-bold text-[10px] px-2.5 py-1 rounded-lg border border-orange-250 animate-pulse">
+                    <span className="bg-[#001058]/10 text-[#001058] font-mono font-bold text-[10px] px-2.5 py-1 rounded-lg border border-[#C7D7FE] animate-pulse">
                       Status: {activeRide.status.toUpperCase().replace('_', ' ')}
                     </span>
                   </div>
@@ -1231,9 +1231,9 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                         className="w-12 h-12 rounded-xl object-cover shrink-0 border border-gray-205"
                       />
                       <div>
-                        <h4 className="text-sm font-bold text-[#BE5912]">{activeRide.passengerName}</h4>
+                        <h4 className="text-sm font-bold text-[#001058]">{activeRide.passengerName}</h4>
                         <div className="flex items-center space-x-1.5 text-[10px] text-gray-500 font-semibold">
-                          <span className="bg-[#BE5912]/10 text-[#BE5912] px-1.5 py-0.5 rounded font-bold font-mono">STUDENT</span>
+                          <span className="bg-[#001058]/10 text-[#001058] px-1.5 py-0.5 rounded font-bold font-mono">STUDENT</span>
                           <span>★ {activeRide.passengerRating} Rating</span>
                         </div>
                       </div>
@@ -1245,11 +1245,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block font-mono">Fare Method:</span>
-                        <span className="text-xs font-black text-[#BE5912] bg-[#BE5912]/10 border border-orange-200 px-2 py-0.5 rounded-lg">
+                        <span className="text-xs font-black text-[#001058] bg-[#001058]/10 border border-[#C7D7FE] px-2 py-0.5 rounded-lg">
                           {activeRide.paymentMethod === 'transfer' ? 'Bank Transfer' : activeRide.paymentMethod === 'cash' ? 'Cash Payment' : 'Rider choosing...'}
                         </span>
                       </div>
-                      <span className="text-xs font-mono font-black text-[#BE5912]">₦{activeRide.cost}</span>
+                      <span className="text-xs font-mono font-black text-[#001058]">₦{activeRide.cost}</span>
                     </div>
 
                     {activeRide.paymentMethod === 'transfer' && (
@@ -1344,7 +1344,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                           </span>
                         ) : isConfirmingCash ? (
                           <div className="flex items-center space-x-1">
-                            <span className="text-[10px] text-[#BE5912] font-bold mr-1">Received cash of ₦{activeRide.cost}?</span>
+                            <span className="text-[10px] text-[#001058] font-bold mr-1">Received cash of ₦{activeRide.cost}?</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -1378,7 +1378,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                                   type: 'success'
                                 });
                               }}
-                              className="bg-[#BE5912] hover:bg-[#BE5912]/90 text-white text-[10px] font-black px-2.5 py-1 rounded-lg cursor-pointer"
+                              className="bg-[#001058] hover:bg-[#001058]/90 text-white text-[10px] font-black px-2.5 py-1 rounded-lg cursor-pointer"
                             >
                               Yes
                             </button>
@@ -1396,7 +1396,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                             onClick={() => {
                               setIsConfirmingCash(true);
                             }}
-                            className="bg-[#BE5912] hover:bg-[#BE5912]/90 text-white text-[10px] font-extrabold px-3 py-1 rounded-xl cursor-pointer animate-pulse"
+                            className="bg-[#001058] hover:bg-[#001058]/90 text-white text-[10px] font-extrabold px-3 py-1 rounded-xl cursor-pointer animate-pulse"
                           >
                             Mark Cash Received
                           </button>
@@ -1408,24 +1408,24 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   {/* Pickup -> Destination Details route list */}
                   <div className="space-y-4">
                     <div className="flex items-start space-x-3">
-                      <div className="w-5 h-5 rounded-full bg-[#BE5912]/20 flex items-center justify-center text-[#BE5912] shrink-0 text-[10px] font-extrabold">A</div>
+                      <div className="w-5 h-5 rounded-full bg-[#001058]/20 flex items-center justify-center text-[#001058] shrink-0 text-[10px] font-extrabold">A</div>
                       <div>
                         <span className="text-[9px] font-bold text-gray-400 uppercase font-mono block">Pickup Spot Location</span>
-                        <span className="text-xs font-bold text-[#BE5912]">{getStopName(activeRide.pickup)}</span>
+                        <span className="text-xs font-bold text-[#001058]">{getStopName(activeRide.pickup)}</span>
                       </div>
                     </div>
                     <div className="flex items-start space-x-3">
                       <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center text-red-700 shrink-0 text-[10px] font-extrabold font-mono">B</div>
                       <div>
                         <span className="text-[9px] font-bold text-gray-400 uppercase font-mono block font-mono">Destination Stop</span>
-                        <span className="text-xs font-bold text-[#BE5912]">{getStopName(activeRide.dropoff)}</span>
+                        <span className="text-xs font-bold text-[#001058]">{getStopName(activeRide.dropoff)}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Live Trip Status Controls */}
                   <div className="bg-slate-50 p-4 rounded-2xl border border-gray-100 text-xs text-slate-700">
-                    <h4 className="font-extrabold text-[#BE5912] mb-2 flex items-center">
+                    <h4 className="font-extrabold text-[#001058] mb-2 flex items-center">
                       <Car className="w-4 h-4 mr-1.5" />
                       Live Transit Operations
                     </h4>
@@ -1438,7 +1438,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       className={`w-full py-2.5 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1 shadow-sm ${
                         activeRide.status === 'arriving' && !activeRide.riderPaid
                           ? 'bg-amber-500 hover:bg-amber-600 cursor-pointer'
-                          : 'bg-[#BE5912] hover:bg-[#BE5912]/90 cursor-pointer'
+                          : 'bg-[#001058] hover:bg-[#001058]/90 cursor-pointer'
                       }`}
                     >
                       <Play className="w-4 h-4 fill-white shrink-0" />
@@ -1456,13 +1456,13 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-extrabold text-[#BE5912]">Incoming Transit Invitations</h3>
+                      <h3 className="text-base font-extrabold text-[#001058]">Incoming Transit Invitations</h3>
                       <p className="text-xs text-gray-400">Student requests matched dynamically to your silver Toyota sedan.</p>
                     </div>
                     {!incomingRequest && (
                       <button 
                         onClick={refreshPassengerMatches}
-                        className="text-xs text-[#BE5912] font-bold hover:underline flex items-center space-x-1"
+                        className="text-xs text-[#001058] font-bold hover:underline flex items-center space-x-1"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Refresh Requests</span>
@@ -1473,7 +1473,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   {!shiftOnline ? (
                     <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
                       <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
-                      <h4 className="font-bold text-xs text-[#BE5912]">Offline Shift Mode Active</h4>
+                      <h4 className="font-bold text-xs text-[#001058]">Offline Shift Mode Active</h4>
                       <p className="text-[11px] text-gray-500">Go Online in the top right to start receiving peer requests.</p>
                     </div>
                   ) : incomingRequest ? (
@@ -1482,8 +1482,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       
                       {/* Scheduled Ride badge if applicable */}
                       {(incomingRequest.isScheduled || incomingRequest.date) && (
-                        <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 flex items-center gap-2 text-[#BE5912]">
-                          <Calendar className="w-4 h-4 shrink-0 text-[#BE5912]" />
+                        <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 flex items-center gap-2 text-[#001058]">
+                          <Calendar className="w-4 h-4 shrink-0 text-[#001058]" />
                           <div className="text-xs font-bold">
                             <span className="uppercase tracking-wider text-[10px] block text-amber-700 font-mono">Scheduled Invitation</span>
                             <span className="text-slate-800">{incomingRequest.date || 'Upcoming Date'} • {incomingRequest.time || 'Scheduled Time'}</span>
@@ -1500,8 +1500,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                             className="w-10 h-10 rounded-full object-cover border border-[#c3c6d7]"
                           />
                           <div>
-                            <h4 className="text-xs font-bold text-[#BE5912]">{incomingRequest.passengerName}</h4>
-                            <span className="text-[9px] bg-[#F9FAFB] text-[#BE5912] px-1.5 py-0.5 rounded font-bold font-mono">★ {incomingRequest.passengerRating} Star Rider</span>
+                            <h4 className="text-xs font-bold text-[#001058]">{incomingRequest.passengerName}</h4>
+                            <span className="text-[9px] bg-[#F9FAFB] text-[#001058] px-1.5 py-0.5 rounded font-bold font-mono">★ {incomingRequest.passengerRating} Star Rider</span>
                           </div>
                         </div>
                       </div>
@@ -1510,11 +1510,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <div className="grid grid-cols-2 gap-4 text-xs">
                         <div className="space-y-1 bg-white p-2.5 rounded-xl border border-gray-100">
                           <span className="text-[9px] font-bold text-gray-400 font-mono block tracking-wider uppercase">Pickup Spot Campus</span>
-                          <span className="font-bold text-[#BE5912] truncate block">{getStopName(incomingRequest.pickup)}</span>
+                          <span className="font-bold text-[#001058] truncate block">{getStopName(incomingRequest.pickup)}</span>
                         </div>
                         <div className="space-y-1 bg-white p-2.5 rounded-xl border border-gray-100">
                           <span className="text-[9px] font-bold text-gray-400 font-mono block tracking-wider uppercase">Destination Stop</span>
-                          <span className="font-bold text-[#BE5912] truncate block">{getStopName(incomingRequest.dropoff)}</span>
+                          <span className="font-bold text-[#001058] truncate block">{getStopName(incomingRequest.dropoff)}</span>
                         </div>
                       </div>
 
@@ -1522,7 +1522,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <div className="flex space-x-2 pt-2 border-t border-gray-100">
                         <button
                           onClick={handleAcceptRide}
-                          className="flex-1 py-2.5 bg-[#BE5912] hover:bg-[#BE5912]/90 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1 shadow-md shadow-orange-500/10"
+                          className="flex-1 py-2.5 bg-[#001058] hover:bg-[#001058]/90 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1 shadow-md shadow-[#001058]/10"
                         >
                           <CheckCircle className="w-4 h-4" />
                           <span>{incomingRequest.isScheduled || incomingRequest.date ? 'Accept Scheduled Ride' : 'Accept Request'}</span>
@@ -1549,10 +1549,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                   <div>
-                    <h3 className="text-sm font-extrabold text-[#BE5912]">Rider Feedback</h3>
+                    <h3 className="text-sm font-extrabold text-[#001058]">Rider Feedback</h3>
                     <p className="text-[10px] text-gray-400">Verbatim comments from Redeemer's campus commuters.</p>
                   </div>
-                  <span className="text-[10px] bg-[#BE5912]/10 text-[#BE5912] font-bold px-2.5 py-1 rounded-lg font-mono">
+                  <span className="text-[10px] bg-[#001058]/10 text-[#001058] font-bold px-2.5 py-1 rounded-lg font-mono">
                     ★ {driverProfile.ratingsCount > 0 ? (driverProfile.rating || 5.0).toFixed(1) : '0.0'} Avg
                   </span>
                 </div>
@@ -1612,8 +1612,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
                 <div>
-                  <h3 className="text-base font-extrabold text-[#BE5912] flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-orange-600" />
+                  <h3 className="text-base font-extrabold text-[#001058] flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-[#001058]" />
                     Earnings Ledger & Past Travels
                   </h3>
                   <p className="text-xs text-gray-400">Review your past successfully completed rides and total shift earnings.</p>
@@ -1633,7 +1633,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <span className="text-[10px] text-slate-500 dark:text-gray-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
                       <span className="text-lg font-extrabold text-slate-800 dark:text-white">Weekly Shift Revenue Graph</span>
                     </div>
-                    <span className="text-xs bg-[#BE5912] text-white font-bold px-3 py-1 rounded-full">+12.5% vs Last Week</span>
+                    <span className="text-xs bg-[#001058] text-white font-bold px-3 py-1 rounded-full">+12.5% vs Last Week</span>
                   </div>
                   
                   {/* Simulated visual bar charts */}
@@ -1648,9 +1648,9 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       { day: 'Sun', amt: 0 }
                     ].map((item, id) => (
                       <div key={id} className="flex-1 flex flex-col items-center group cursor-pointer">
-                        <span className="text-[9px] font-mono text-[#BE5912] dark:text-orange-400 invisible group-hover:visible mb-1">₦{item.amt}</span>
+                        <span className="text-[9px] font-mono text-[#001058] dark:text-blue-400 invisible group-hover:visible mb-1">₦{item.amt}</span>
                         <div 
-                          className="w-full bg-[#BE5912] rounded-t-md transition-all group-hover:bg-[#BE5912]/80 dark:group-hover:bg-amber-400 shadow-xs dark:shadow-sm dark:shadow-amber-900/10" 
+                          className="w-full bg-[#001058] rounded-t-md transition-all group-hover:bg-[#001058]/80 dark:group-hover:bg-amber-400 shadow-xs dark:shadow-sm dark:shadow-amber-900/10" 
                           style={{ height: `${Math.max(item.amt / 224 * 100, 5)}%` }}
                         ></div>
                         <span className="text-[10px] text-slate-500 dark:text-gray-400 mt-2 font-mono">{item.day}</span>
@@ -1669,7 +1669,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   <div className="my-4 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 dark:text-gray-400">Completed Shifts:</span>
-                      <span className="font-extrabold text-orange-600 dark:text-orange-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
+                      <span className="font-extrabold text-[#001058] dark:text-blue-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 dark:text-gray-400">Average Fare per Ride:</span>
@@ -1708,7 +1708,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     driverPastRides.filter(r => r.status === 'completed').map((ride, idx) => (
                       <div key={ride.id || idx} className="flex items-center justify-between p-3.5 bg-gray-50 hover:bg-gray-100/70 border border-gray-150 rounded-2xl transition-colors">
                         <div className="flex items-start gap-3 text-left">
-                          <div className="w-8 h-8 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center font-bold text-xs shrink-0">
+                          <div className="w-8 h-8 rounded-xl bg-[#001058]/10 text-[#001058] flex items-center justify-center font-bold text-xs shrink-0">
                             <Car className="w-4 h-4" />
                           </div>
                           <div className="space-y-0.5 min-w-0">
@@ -1725,7 +1725,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className="text-xs font-black text-[#BE5912] block font-mono">+₦{ride.cost}</span>
+                          <span className="text-xs font-black text-[#001058] block font-mono">+₦{ride.cost}</span>
                           <span className="text-[8px] text-gray-400 font-bold uppercase font-mono">{ride.paymentMethod || 'Wallet'}</span>
                         </div>
                       </div>
@@ -1751,8 +1751,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           >
             <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
               <div className="mb-6">
-                <h2 className="text-lg font-extrabold text-[#BE5912] flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-[#BE5912]" /> Your Accepted Scheduled Rides
+                <h2 className="text-lg font-extrabold text-[#001058] flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-[#001058]" /> Your Accepted Scheduled Rides
                 </h2>
                 <p className="text-xs text-gray-500">View your accepted student scheduled rides. Click "Start Ride Now" when you are ready to begin the trip.</p>
               </div>
@@ -1775,7 +1775,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                               Accepted & Confirmed
                             </span>
                           </div>
-                          <span className="text-xs font-black text-[#BE5912] font-mono">₦{ride.fare || ride.cost}</span>
+                          <span className="text-xs font-black text-[#001058] font-mono">₦{ride.fare || ride.cost}</span>
                         </div>
 
                         {/* Passenger Details */}
@@ -1813,10 +1813,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                         {/* Date Time info */}
                         <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[10px] text-slate-500 font-bold font-mono">
                           <span className="flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-[#BE5912]" /> {ride.date}
+                            <Calendar className="w-3.5 h-3.5 text-[#001058]" /> {ride.date}
                           </span>
                           <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-[#BE5912]" /> {ride.time}
+                            <Clock className="w-3.5 h-3.5 text-[#001058]" /> {ride.time}
                           </span>
                         </div>
                       </div>
@@ -1825,7 +1825,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleStartScheduledRide(ride)}
-                          className="w-full h-11 bg-[#BE5912] text-white hover:bg-[#BE5912]/90 rounded-xl text-xs font-bold tracking-wide transition shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="w-full h-11 bg-[#001058] text-white hover:bg-[#001058]/90 rounded-xl text-xs font-bold tracking-wide transition shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <CheckCircle className="w-4 h-4" /> Start Ride Now
                         </button>
@@ -1850,7 +1850,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             className="max-w-xl mx-auto bg-white rounded-3xl p-6 border border-gray-150 shadow-sm space-y-6"
           >
           <div>
-            <h2 className="text-lg font-extrabold text-[#BE5912]">Vehicle profile registries</h2>
+            <h2 className="text-lg font-extrabold text-[#001058]">Vehicle profile registries</h2>
             <p className="text-xs text-gray-400">Current car description records certified to complete campus rides.</p>
           </div>
 
@@ -1864,7 +1864,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
             )}
 
             {supabaseSuccess && (
-              <div className="p-3 bg-orange-50 border border-orange-100 text-orange-800 rounded-xl text-xs flex items-start gap-2 text-left">
+              <div className="p-3 bg-[#EFF4FF] border border-[#E0E7FF] text-[#001058] rounded-xl text-xs flex items-start gap-2 text-left">
                 <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{supabaseSuccess}</span>
               </div>
@@ -1896,7 +1896,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     </div>
                   </div>
 
-                  <label className="w-full h-10 bg-white border border-gray-150 hover:border-[#BE5912] rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs">
+                  <label className="w-full h-10 bg-white border border-gray-150 hover:border-[#001058] rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs">
                     <UploadCloud className="w-4 h-4 text-gray-500" />
                     <span>{uploadingAvatar ? 'Uploading...' : 'Choose Picture'}</span>
                     <input 
@@ -1916,23 +1916,23 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           <div className="space-y-4">
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-[#BE5912] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-[#001058] flex items-center justify-center">
                   <Car className="w-6 h-6" />
                 </div>
                 <div>
                   <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider font-mono">PRIMARY VEHICLE FILE</span>
-                  <h4 className="text-sm font-bold text-[#BE5912]">Toyota Camry 2.5 Hybrid (Silver)</h4>
+                  <h4 className="text-sm font-bold text-[#001058]">Toyota Camry 2.5 Hybrid (Silver)</h4>
                   <p className="text-xs font-mono text-gray-500">License Plate Tag: 4P-928X • Decal VERIFIED</p>
                 </div>
               </div>
-              <span className="bg-[#BE5912]/10 text-[#BE5912] text-[10px] font-bold px-2.5 py-1 rounded border border-orange-200 font-mono">
+              <span className="bg-[#001058]/10 text-[#001058] text-[10px] font-bold px-2.5 py-1 rounded border border-[#C7D7FE] font-mono">
                 ACTIVE
               </span>
             </div>
 
             <div className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 flex items-center justify-between opacity-60">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-[#BE5912]/10 text-[#BE5912] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#001058]/10 text-[#001058] flex items-center justify-center">
                   <Car className="w-6 h-6" />
                 </div>
                 <div>
@@ -1945,7 +1945,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               </div>
               <button 
                 onClick={() => alert('Backup vehicle selection set successfully.')}
-                className="text-xs text-[#BE5912] font-bold hover:underline"
+                className="text-xs text-[#001058] font-bold hover:underline"
               >
                 Set Active
               </button>
@@ -1955,7 +1955,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           {/* Trust-Transfer Bank Details Form */}
           <div className="pt-6 border-t border-gray-150 space-y-4">
             <div>
-              <h3 className="text-base font-extrabold text-[#BE5912]">Trust-Transfer Payout Account</h3>
+              <h3 className="text-base font-extrabold text-[#001058]">Trust-Transfer Payout Account</h3>
               <p className="text-xs text-gray-400">Specify the bank details displayed to riders when they choose to pay via direct transfer.</p>
             </div>
 
@@ -1969,7 +1969,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
                     required
-                    className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-[#BE5912]"
+                    className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-[#001058]"
                   />
                 </div>
 
@@ -1982,7 +1982,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     onChange={(e) => setBankAccountNumber(e.target.value)}
                     required
                     maxLength={10}
-                    className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-[#BE5912]"
+                    className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-[#001058]"
                   />
                 </div>
               </div>
@@ -1995,7 +1995,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   value={bankAccountName}
                   onChange={(e) => setBankAccountName(e.target.value)}
                   required
-                  className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-[#BE5912]"
+                  className="w-full bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-[#001058]"
                 />
               </div>
 
@@ -2003,7 +2003,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                 <button
                   type="submit"
                   disabled={savingBank}
-                  className="bg-[#BE5912] hover:bg-[#BE5912]/90 text-white font-bold py-2.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 animate-none"
+                  className="bg-[#001058] hover:bg-[#001058]/90 text-white font-bold py-2.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 animate-none"
                 >
                   {savingBank ? (
                     <>
@@ -2021,7 +2021,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           {/* Driver Theme Settings Option */}
           <div className="pt-6 border-t border-gray-150 space-y-4">
             <div>
-              <h3 className="text-base font-extrabold text-[#BE5912]">App Styling Preferences</h3>
+              <h3 className="text-base font-extrabold text-[#001058]">App Styling Preferences</h3>
               <p className="text-xs text-gray-400">Configure layout features and application display options.</p>
             </div>
 
@@ -2037,7 +2037,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   onChange={onToggleDarkMode} 
                   className="sr-only peer" 
                 />
-                <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#BE5912]"></div>
+                <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#001058]"></div>
               </label>
             </div>
 
@@ -2057,14 +2057,14 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   }} 
                   className="sr-only peer" 
                 />
-                <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#BE5912]"></div>
+                <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#001058]"></div>
               </label>
             </div>
           </div>
 
           <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
-            <div className="text-[11px] text-[#BE5912] bg-[#F9FAFB]/35 border border-amber-300 p-3 rounded-xl flex items-start space-x-1.5 leading-relaxed">
-              <AlertTriangle className="w-4 h-4 text-[#BE5912] shrink-0 mt-0.5" />
+            <div className="text-[11px] text-[#001058] bg-[#F9FAFB]/35 border border-amber-300 p-3 rounded-xl flex items-start space-x-1.5 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 text-[#001058] shrink-0 mt-0.5" />
               <span>
                 Adding or modifying vehicle profiles is subject to a 24-hour verification window by Campus Transit administrators.
               </span>
@@ -2084,13 +2084,13 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-6 text-slate-800"
         >
           <div className="flex justify-between items-center">
-            <h1 className="text-xl font-black text-[#BE5912] tracking-tight uppercase">Driver Notification Inbox</h1>
+            <h1 className="text-xl font-black text-[#001058] tracking-tight uppercase">Driver Notification Inbox</h1>
             <div className="flex gap-4">
               <button
                 onClick={() => {
                   onMarkNotificationsRead?.();
                 }}
-                className="text-xs text-[#BE5912] hover:underline font-bold cursor-pointer"
+                className="text-xs text-[#001058] hover:underline font-bold cursor-pointer"
               >
                 Mark all as read
               </button>
@@ -2113,7 +2113,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   className={`p-5 rounded-2xl border transition-all text-left ${
                     notif.isRead 
                       ? 'bg-slate-50/50 border-slate-200 opacity-75' 
-                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-orange-500/10'
+                      : 'bg-white border-slate-150 shadow-xs shadow-md ring-1 ring-[#001058]/10'
                   }`}
                 >
                   <div className="flex justify-between items-start gap-4">
@@ -2123,7 +2123,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <span className="text-[10px] text-slate-400 font-mono block pt-1">{notif.time}</span>
                     </div>
                     {!notif.isRead && (
-                      <span className="bg-orange-100 text-orange-700 font-bold font-mono text-[9px] px-2 py-0.5 rounded-full uppercase shrink-0">New</span>
+                      <span className="bg-[#E0E7FF] text-[#001058] font-bold font-mono text-[9px] px-2 py-0.5 rounded-full uppercase shrink-0">New</span>
                     )}
                   </div>
                 </div>
@@ -2163,7 +2163,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               className={`relative w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl border cursor-grab active:cursor-grabbing transition-colors duration-200 shrink-0 ${
                 isChatOverlayOpen 
                   ? 'bg-rose-600 border-rose-500 hover:bg-rose-700' 
-                  : 'bg-[#BE5912] border-orange-500/20 hover:bg-[#BE5912]/95'
+                  : 'bg-[#001058] border-[#001058]/20 hover:bg-[#001058]/95'
               }`}
               style={{ boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)' }}
               id="driver-floating-messenger-bubble"
@@ -2206,7 +2206,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   id="driver-floating-messenger-panel"
                 >
                   {/* Header */}
-                  <div className="p-4 bg-[#BE5912] text-white flex items-center justify-between">
+                  <div className="p-4 bg-[#001058] text-white flex items-center justify-between">
                     <div className="flex items-center space-x-2.5">
                       <div className="relative">
                         <img 
@@ -2259,9 +2259,9 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                             </div>
                             <div className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed shadow-2xs ${
                               msg.sender === 'System' 
-                                ? 'bg-orange-50 text-slate-600 border border-orange-100 italic text-center w-full font-mono'
+                                ? 'bg-[#EFF4FF] text-slate-600 border border-[#E0E7FF] italic text-center w-full font-mono'
                                 : isMsgFromMe 
-                                  ? 'bg-[#BE5912] text-white rounded-tr-none' 
+                                  ? 'bg-[#001058] text-white rounded-tr-none' 
                                   : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
                             }`}>
                               {msg.text}
@@ -2285,7 +2285,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                             floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
                           }, 100);
                         }}
-                        className="px-2.5 py-1 bg-slate-50 hover:bg-[#BE5912] border border-slate-150 text-slate-500 hover:text-white rounded-lg text-[9px] font-bold transition-all shrink-0 cursor-pointer"
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-[#001058] border border-slate-150 text-slate-500 hover:text-white rounded-lg text-[9px] font-bold transition-all shrink-0 cursor-pointer"
                       >
                         {phrase}
                       </button>
@@ -2308,12 +2308,12 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       placeholder="Type a message..."
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#BE5912] focus:ring-1 focus:ring-[#BE5912]/20"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#001058] focus:ring-1 focus:ring-[#001058]/20"
                     />
                     <button
                       type="submit"
                       disabled={!chatInput.trim()}
-                      className="p-2 bg-[#BE5912] hover:bg-[#BE5912]/90 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-xl transition duration-150 cursor-pointer shrink-0"
+                      className="p-2 bg-[#001058] hover:bg-[#001058]/90 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-xl transition duration-150 cursor-pointer shrink-0"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
