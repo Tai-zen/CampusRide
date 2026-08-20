@@ -173,6 +173,53 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       }
     };
   }, [shiftOnline, driverProfile?.id]);
+
+  // ---------------------------------------------------------------------
+  // LIVE GPS LOCATION PUSH — feeds driverLocations/{driverId} in Firestore,
+  // which powers the OSM-based CampusMap and the nearest-driver dispatch
+  // matcher (src/lib/geo.ts). Runs continuously while the shift is online.
+  // ---------------------------------------------------------------------
+  const resolveVehicleType = (): 'Car' | 'Keke' | 'Shuttle' => {
+    const v = (driverProfile.vehicle || '').toLowerCase();
+    if (v.includes('keke')) return 'Keke';
+    if (v.includes('shuttle')) return 'Shuttle';
+    return 'Car';
+  };
+
+  useEffect(() => {
+    if (!shiftOnline || !driverProfile?.id) return;
+
+    if (!('geolocation' in navigator)) {
+      console.warn('Geolocation is not supported by this browser/device.');
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setDoc(
+          doc(db, 'driverLocations', driverProfile.id),
+          {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            heading: pos.coords.heading ?? null,
+            name: driverProfile.name,
+            vehicleType: resolveVehicleType(),
+            status: activeRide ? 'On Trip' : 'Idle',
+            rating: driverProfile.rating || 5.0,
+            updatedAt: Date.now(),
+          },
+          { merge: true }
+        ).catch((e) => console.warn('Error pushing driver location to Firestore:', e));
+      },
+      (err) => {
+        console.warn('Geolocation watch error (falling back to no live tracking):', err);
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [shiftOnline, driverProfile?.id, driverProfile?.vehicle, driverProfile?.name, driverProfile?.rating, activeRide?.id]);
+
   const [incomingRequest, setIncomingRequest] = useState<RideRequest | null>(null);
   const [declinedRideIds, setDeclinedRideIds] = useState<Set<string>>(() => new Set());
   const [simTransitLoading, setSimTransitLoading] = useState<boolean>(false);
@@ -785,6 +832,16 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
     const nextState = !shiftOnline;
     setShiftOnline(nextState);
     onUpdateDriverProfile({ status: nextState ? 'Idle' : 'Offline' });
+
+    // Immediately reflect the shift toggle in the live driverLocations feed
+    // so the dispatch matcher and map stop showing this driver as available.
+    if (driverProfile?.id) {
+      setDoc(
+        doc(db, 'driverLocations', driverProfile.id),
+        { status: nextState ? 'Idle' : 'Offline', updatedAt: Date.now() },
+        { merge: true }
+      ).catch((e) => console.warn('Error updating driverLocations status on shift toggle:', e));
+    }
     
     onAddNotification({
       id: `driver-notif-${Date.now()}`,
@@ -1089,7 +1146,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
   };
 
   return (
-    <div id="driver-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#F9FAFB]">
+    <div id="driver-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#F2F2F2]">
       
       {/* Upper Shift Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 border-b border-gray-100 pb-5">
@@ -1222,7 +1279,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                   </div>
 
                   {/* Passenger Card details */}
-                  <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
+                  <div className="bg-[#F2F2F2] p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
                     <div className="flex items-center space-x-3.5">
                       <img 
                         referrerPolicy="no-referrer"
@@ -1478,7 +1535,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     </div>
                   ) : incomingRequest ? (
                     /* High-Fidelity Incoming request block card */
-                    <div className="bg-[#F9FAFB] rounded-2xl p-5 border border-gray-100 shadow-xs space-y-4">
+                    <div className="bg-[#F2F2F2] rounded-2xl p-5 border border-gray-100 shadow-xs space-y-4">
                       
                       {/* Scheduled Ride badge if applicable */}
                       {(incomingRequest.isScheduled || incomingRequest.date) && (
@@ -1501,7 +1558,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                           />
                           <div>
                             <h4 className="text-xs font-bold text-[#001058]">{incomingRequest.passengerName}</h4>
-                            <span className="text-[9px] bg-[#F9FAFB] text-[#001058] px-1.5 py-0.5 rounded font-bold font-mono">★ {incomingRequest.passengerRating} Star Rider</span>
+                            <span className="text-[9px] bg-[#F2F2F2] text-[#001058] px-1.5 py-0.5 rounded font-bold font-mono">★ {incomingRequest.passengerRating} Star Rider</span>
                           </div>
                         </div>
                       </div>
@@ -1627,10 +1684,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 
                 {/* Column 1: Weekly Shift Revenue Graph */}
-                <div className="md:col-span-7 bg-white/55 dark:bg-slate-900 border border-slate-150 dark:border-transparent rounded-2xl overflow-hidden relative p-6 flex flex-col justify-between text-slate-800 dark:text-white h-72">
+                <div className="md:col-span-7 bg-white/55 dark:bg-[#0D0D0D] border border-slate-150 dark:border-neutral-800 rounded-2xl overflow-hidden relative p-6 flex flex-col justify-between text-slate-800 dark:text-white h-72">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] text-slate-500 dark:text-gray-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
+                      <span className="text-[10px] text-slate-500 dark:text-neutral-400 uppercase font-mono tracking-widest block">Operational Analytics</span>
                       <span className="text-lg font-extrabold text-slate-800 dark:text-white">Weekly Shift Revenue Graph</span>
                     </div>
                     <span className="text-xs bg-[#001058] text-white font-bold px-3 py-1 rounded-full">+12.5% vs Last Week</span>
@@ -1650,46 +1707,46 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                       <div key={id} className="flex-1 flex flex-col items-center group cursor-pointer">
                         <span className="text-[9px] font-mono text-[#001058] dark:text-blue-400 invisible group-hover:visible mb-1">₦{item.amt}</span>
                         <div 
-                          className="w-full bg-[#001058] rounded-t-md transition-all group-hover:bg-[#001058]/80 dark:group-hover:bg-amber-400 shadow-xs dark:shadow-sm dark:shadow-amber-900/10" 
+                          className="w-full bg-[#001058] rounded-t-md transition-all group-hover:bg-[#001058]/80 dark:group-hover:bg-amber-400 shadow-xs dark:shadow-sm dark:shadow-black/40" 
                           style={{ height: `${Math.max(item.amt / 224 * 100, 5)}%` }}
                         ></div>
-                        <span className="text-[10px] text-slate-500 dark:text-gray-400 mt-2 font-mono">{item.day}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-neutral-400 mt-2 font-mono">{item.day}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Column 2: Active Metrics & Today's Earnings */}
-                <div className="md:col-span-5 bg-white/55 dark:bg-gradient-to-br dark:from-slate-900 dark:to-slate-800 border border-slate-150 dark:border-transparent rounded-2xl p-5 text-slate-800 dark:text-white flex flex-col justify-between shadow-xs h-72">
+                <div className="md:col-span-5 bg-white/55 dark:bg-[#0D0D0D] border border-slate-150 dark:border-neutral-800 rounded-2xl p-5 text-slate-800 dark:text-white flex flex-col justify-between shadow-xs h-72">
                   <div>
-                    <span className="text-[10px] text-slate-500 dark:text-gray-400 uppercase font-mono tracking-widest block">Active Metrics</span>
+                    <span className="text-[10px] text-slate-500 dark:text-neutral-400 uppercase font-mono tracking-widest block">Active Metrics</span>
                     <h4 className="text-sm font-bold mt-1 text-slate-800 dark:text-white">Earning Insights</h4>
                   </div>
                   
                   <div className="my-4 space-y-3">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-500 dark:text-gray-400">Completed Shifts:</span>
+                      <span className="text-slate-500 dark:text-neutral-400">Completed Shifts:</span>
                       <span className="font-extrabold text-[#001058] dark:text-blue-400 font-mono">{driverPastRides.filter(r => r.status === 'completed').length} Rides</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-500 dark:text-gray-400">Average Fare per Ride:</span>
-                      <span className="font-extrabold text-[#00875A] dark:text-teal-400 font-mono">
+                      <span className="text-slate-500 dark:text-neutral-400">Average Fare per Ride:</span>
+                      <span className="font-extrabold text-[#46C96B] dark:text-teal-400 font-mono">
                         ₦{driverPastRides.filter(r => r.status === 'completed').length > 0 
                           ? Math.round(driverPastRides.filter(r => r.status === 'completed').reduce((acc, curr) => acc + (curr.cost || 0), 0) / driverPastRides.filter(r => r.status === 'completed').length) 
                           : 0}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-500 dark:text-gray-400">Shift Status:</span>
+                      <span className="text-slate-500 dark:text-neutral-400">Shift Status:</span>
                       <span className={`font-black uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-full ${shiftOnline ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-400'}`}>
                         {shiftOnline ? 'ONLINE' : 'OFFLINE'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-right border-t border-slate-150 dark:border-white/10 pt-3">
-                    <span className="text-[10px] text-slate-500 dark:text-gray-400 block font-mono">TODAY'S LEDGER</span>
-                    <span className="text-xl font-black text-[#00875A] dark:text-[#34D399] font-mono">₦{driverProfile.todayEarnings}</span>
+                  <div className="text-right border-t border-slate-150 dark:border-neutral-800 pt-3">
+                    <span className="text-[10px] text-slate-500 dark:text-neutral-400 block font-mono">TODAY'S LEDGER</span>
+                    <span className="text-xl font-black text-[#46C96B] dark:text-[#34D399] font-mono">₦{driverProfile.todayEarnings}</span>
                   </div>
                 </div>
 
@@ -1916,7 +1973,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           <div className="space-y-4">
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-[#001058] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#F2F2F2] text-[#001058] flex items-center justify-center">
                   <Car className="w-6 h-6" />
                 </div>
                 <div>
@@ -2063,7 +2120,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
           </div>
 
           <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
-            <div className="text-[11px] text-[#001058] bg-[#F9FAFB]/35 border border-amber-300 p-3 rounded-xl flex items-start space-x-1.5 leading-relaxed">
+            <div className="text-[11px] text-[#001058] bg-[#F2F2F2]/35 border border-amber-300 p-3 rounded-xl flex items-start space-x-1.5 leading-relaxed">
               <AlertTriangle className="w-4 h-4 text-[#001058] shrink-0 mt-0.5" />
               <span>
                 Adding or modifying vehicle profiles is subject to a 24-hour verification window by Campus Transit administrators.

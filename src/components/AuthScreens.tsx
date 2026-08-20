@@ -262,7 +262,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
   };
 
   return (
-    <div id="auth-screen-container" className="min-h-screen flex flex-col md:flex-row bg-[#F9FAFB] text-slate-900 font-sans antialiased overflow-hidden">
+    <div id="auth-screen-container" className="min-h-screen flex flex-col md:flex-row bg-[#F2F2F2] text-slate-900 font-sans antialiased overflow-hidden">
       
       {/* Visual Side Banner (Super clean, spacious and empty at the bottom as requested) */}
       <div 
@@ -270,7 +270,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         className="hidden md:flex md:w-1/2 bg-cover bg-center relative flex-col justify-between p-12 text-white overflow-hidden"
         style={{ backgroundImage: `url(${LOGIN_BG_IMAGE})` }}
       >
-        <div className="absolute inset-0 bg-gradient-to-t from-[#00875A]/95 via-[#00875A]/70 to-[#00875A]/40"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#46C96B]/95 via-[#46C96B]/70 to-[#46C96B]/40"></div>
         
         {/* Top Branding Section */}
         <motion.div 
@@ -279,7 +279,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
           transition={{ duration: 0.6 }}
           className="relative z-10 flex items-center space-x-3"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#00875A] flex items-center justify-center shadow-lg text-white">
+          <div className="w-10 h-10 rounded-xl bg-[#46C96B] flex items-center justify-center shadow-lg text-white">
             <Car className="w-6 h-6 stroke-[2]" />
           </div>
           <div>
@@ -309,10 +309,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
         
         {/* Small screen top header */}
         <div className="md:hidden flex items-center justify-center space-x-2 mb-8 border-b border-gray-100 pb-4">
-          <div className={`w-8 h-8 rounded-lg transition-colors duration-500 ${selectedRole === 'driver' ? 'bg-[#001058]' : 'bg-[#00875A]'} flex items-center justify-center shadow-md`}>
+          <div className={`w-8 h-8 rounded-lg transition-colors duration-500 ${selectedRole === 'driver' ? 'bg-[#001058]' : 'bg-[#46C96B]'} flex items-center justify-center shadow-md`}>
             <Car className="w-5 h-5 text-white" />
           </div>
-          <span className={`font-bold tracking-tight text-xl transition-colors duration-500 ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'}`}>Campus<span className={`${selectedRole === 'driver' ? 'text-[#001058]' : 'text-primary'} font-extrabold`}>Ride</span></span>
+          <span className={`font-bold tracking-tight text-xl transition-colors duration-500 ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#46C96B]'}`}>Campus<span className={`${selectedRole === 'driver' ? 'text-[#001058]' : 'text-primary'} font-extrabold`}>Ride</span></span>
         </div>
 
         <div className="max-w-md w-full mx-auto space-y-8">
@@ -342,7 +342,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                 </div>
 
                 <div>
-                  <h2 className={`text-2xl font-extrabold tracking-tight ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'}`}>
+                  <h2 className={`text-2xl font-extrabold tracking-tight ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#46C96B]'}`}>
                     Reset Your Password
                   </h2>
                   <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
@@ -374,7 +374,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                       setIsLogin(true);
                       setEmail(resetEmail);
                     }}
-                    className="w-full py-2.5 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer transition"
+                    className="w-full py-2.5 bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer transition"
                   >
                     Return to Sign In
                   </button>
@@ -442,7 +442,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
                     whileTap={{ scale: 0.98 }}
                     className={`w-full py-3 rounded-xl text-white font-bold tracking-wide text-xs uppercase flex items-center justify-center space-x-2 shadow-lg transition-colors cursor-pointer ${
                       resetLoading ? 'opacity-70 cursor-not-allowed bg-gray-500' :
-                      selectedRole === 'student' ? 'bg-primary hover:bg-[#00875A]' : 'bg-[#001058] hover:bg-[#000B3E]'
+                      selectedRole === 'student' ? 'bg-primary hover:bg-[#46C96B]' : 'bg-[#001058] hover:bg-[#000B3E]'
                     }`}
                   >
                     {resetLoading ? (
@@ -587,7 +587,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <h2 className={`text-3xl font-extrabold tracking-tight transition-colors duration-500 ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'}`}>
+            <h2 className={`text-3xl font-extrabold tracking-tight transition-colors duration-500 ${selectedRole === 'driver' ? 'text-[#001058]' : 'text-[#46C96B]'}`}>
               {isLogin ? 'Welcome Back!' : 'Create Account'}
             </h2>
             <p className="mt-2 text-sm text-[#737686]">
@@ -1030,7 +1030,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
               className={`w-full py-3 mt-4 rounded-xl text-white font-bold tracking-wide text-sm flex items-center justify-center space-x-2 shadow-lg transition-colors cursor-pointer ${
                 loading ? 'opacity-70 cursor-not-allowed bg-gray-500' :
                 selectedRole === 'student' 
-                  ? 'bg-primary hover:bg-[#00875A]' 
+                  ? 'bg-primary hover:bg-[#46C96B]' 
                   : 'bg-[#001058] hover:bg-[#000B3E] shadow-[#001058]/10'
               }`}
             >
@@ -1058,7 +1058,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onLogin, onSignUp, onG
               className="text-xs text-gray-600 font-medium hover:underline inline-flex items-center space-x-1 cursor-pointer"
             >
               <span>{isLogin ? "Don't have a commuter profile?" : 'Already registered?'}</span>
-              <span className={`font-bold transition-colors ${selectedRole === 'driver' ? 'text-[#001058] hover:text-[#000B3E]' : 'text-primary hover:text-[#00875A]'}`}>
+              <span className={`font-bold transition-colors ${selectedRole === 'driver' ? 'text-[#001058] hover:text-[#000B3E]' : 'text-primary hover:text-[#46C96B]'}`}>
                 {isLogin ? 'Sign up here' : 'Log in here'}
               </span>
             </button>

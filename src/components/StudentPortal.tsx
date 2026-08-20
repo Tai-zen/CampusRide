@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { UNIVERSITIES } from './SchoolSelection';
 import { CampusMap } from './CampusMap';
+import { BottomSheet, SheetSnap } from './BottomSheet';
 import { ComplaintForm } from './ComplaintForm';
 import { 
   Car, 
@@ -297,6 +298,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [checkoutPool, setCheckoutPool] = useState<ActivePool | null>(null);
   const [checkoutTimer, setCheckoutTimer] = useState<number>(30);
   const [simulatedMatchTime, setSimulatedMatchTime] = useState<number>(15); // simulated driver accepts at 45s left (15s elapsed)
+  const [sheetSnap, setSheetSnap] = useState<SheetSnap>('small');
+  const [stopSearchQuery, setStopSearchQuery] = useState<string>('');
+  const [activeStopField, setActiveStopField] = useState<'pickup' | 'dropoff' | null>(null);
   
   // Initialize stops
   useEffect(() => {
@@ -397,6 +401,19 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     }
     return 'idle';
   });
+
+  // Auto-adjust bottom sheet snap point when pooling lifecycle advances
+  useEffect(() => {
+    if (poolingState === 'forming') {
+      setSheetSnap('medium');
+    } else if (poolingState === 'matched') {
+      setSheetSnap('medium');
+    } else if (poolingState === 'transit') {
+      setSheetSnap('small');
+    } else if (poolingState === 'arrived' || poolingState === 'rated') {
+      setSheetSnap('large');
+    }
+  }, [poolingState]);
   const [isMatchingDriver, setIsMatchingDriver] = useState<boolean>(() => {
     const uid = userProfile?.id;
     if (uid) {
@@ -1938,61 +1955,237 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         {activeView === 'booking' && (
           <motion.div
             key="booking"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.05, ease: 'easeInOut' }}
-            className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 sm:p-6 lg:p-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="relative w-full h-[calc(100vh-64px)] md:h-[calc(100vh-72px)] lg:h-auto overflow-hidden lg:overflow-visible bg-slate-900 lg:bg-slate-50 lg:dark:bg-neutral-900 select-none lg:flex-1 lg:p-8 lg:flex lg:flex-col lg:gap-6"
           >
-          
-          {/* LEFT SIDE OR MAIN BOOKING SECTION (12 COLS ON LARGE) */}
-          <div className="lg:col-span-12 flex flex-col space-y-6">
-            <CampusMap
-              schoolId={selectedSchool.id}
-              pickupId={pickup}
-              dropoffId={dropoff}
-              poolingState={poolingState}
-              isMatchingDriver={isMatchingDriver}
-              liveDistance={liveDistance}
-              onSelectPickup={(stopId) => setPickup(stopId)}
-              onSelectDropoff={(stopId) => setDropoff(stopId)}
-            />
+            {/* 1. CONTINUOUS BACKGROUND MAP LAYER (Z-0) */}
+            <div className="absolute inset-0 w-full h-full z-0 lg:relative lg:inset-auto lg:z-auto">
+              <CampusMap
+                schoolId={selectedSchool.id}
+                pickupId={pickup}
+                dropoffId={dropoff}
+                poolingState={poolingState}
+                isMatchingDriver={isMatchingDriver}
+                liveDistance={liveDistance}
+                onSelectPickup={(stopId) => {
+                  setPickup(stopId);
+                  if (sheetSnap === 'small') setSheetSnap('medium');
+                }}
+                onSelectDropoff={(stopId) => {
+                  setDropoff(stopId);
+                  if (sheetSnap === 'small') setSheetSnap('medium');
+                }}
+                isContinuousBackground={true}
+              />
+              {/* Dark backdrop over the satellite map on completion */}
+              {(poolingState === 'arrived' || poolingState === 'rated') && (
+                <div className="absolute inset-0 bg-black/60 z-10 pointer-events-none transition-opacity duration-500"></div>
+              )}
+            </div>
 
+            {/* 2. FLOATING UI CONTROLS LAYER (Z-10) */}
+            <div className="lg:hidden absolute inset-x-0 top-0 p-3 sm:p-5 z-10 pointer-events-none flex items-center justify-between gap-2">
+              {/* Top Left: School Badge */}
+              <div className="pointer-events-auto flex items-center gap-2 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.5)] border border-slate-200/80 dark:border-neutral-800 text-xs font-black text-slate-800 dark:text-white">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#46C96B] animate-pulse shrink-0" />
+                <span className="truncate max-w-[120px] sm:max-w-[190px]">{selectedSchool.name}</span>
+              </div>
+
+              {/* Top Center: Route Quick Summary Pill (clickable to expand sheet) */}
+              <button
+                type="button"
+                onClick={() => setSheetSnap(sheetSnap === 'large' ? 'small' : 'large')}
+                className="pointer-events-auto hidden sm:flex items-center gap-2 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-4 py-2 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.5)] border border-slate-200/80 dark:border-neutral-800 text-xs font-semibold text-slate-700 dark:text-neutral-200 hover:border-[#46C96B] transition-all cursor-pointer transform active:scale-95"
+              >
+                <MapPin className="w-3.5 h-3.5 text-[#46C96B] shrink-0" />
+                <span className="font-bold truncate max-w-[140px]">{getStopName(pickup)}</span>
+                <ArrowRightLeft className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="font-bold truncate max-w-[140px]">{getStopName(dropoff)}</span>
+                <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-neutral-800 px-2 py-0.5 rounded-lg ml-1">
+                  {sheetSnap === 'large' ? 'Collapse' : 'Expand'}
+                </span>
+              </button>
+
+              {/* Top Right: Drivers Online Pill */}
+              <div className="pointer-events-auto flex items-center gap-1.5 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border border-slate-200/80 dark:border-neutral-800 text-[#46C96B] dark:text-emerald-400 px-3 py-2 rounded-2xl text-xs font-black shadow-[0_4px_16px_rgba(0,0,0,0.5)] font-mono">
+                <span className="w-2 h-2 rounded-full bg-[#46C96B] animate-ping shrink-0" />
+                <span className="whitespace-nowrap">Active Drivers</span>
+              </div>
+            </div>
+
+            {/* Floating Action Buttons on Map (Right side above Bottom Sheet) */}
+            <div className="lg:hidden absolute right-3.5 sm:right-6 bottom-[240px] sm:bottom-[260px] z-10 flex flex-col items-end gap-2.5 pointer-events-none">
+              {/* Recenter Map Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const temp = pickup;
+                  setPickup('');
+                  setTimeout(() => setPickup(temp), 50);
+                }}
+                className="pointer-events-auto w-10 h-10 sm:w-11 sm:h-11 bg-white dark:bg-neutral-900 text-slate-700 dark:text-neutral-200 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.5)] border border-slate-200/80 dark:border-neutral-800 flex items-center justify-center hover:bg-[#46C96B] hover:text-white transition-all cursor-pointer transform active:scale-95"
+                title="Recenter Campus Map"
+              >
+                <Compass className="w-5 h-5" />
+              </button>
+
+              {/* Safety SOS Quick Trigger */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSosActivated(!sosActivated);
+                  if (!sosActivated) {
+                    alert('SOS Emergency Beacon activated! Dispatchers alerted with GPS coordinates.');
+                  }
+                }}
+                className={`pointer-events-auto w-10 h-10 sm:w-11 sm:h-11 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.5)] border flex items-center justify-center transition-all cursor-pointer transform active:scale-95 ${
+                  sosActivated
+                    ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
+                    : 'bg-white dark:bg-neutral-900 text-rose-600 border-slate-200/80 dark:border-neutral-800 hover:bg-rose-50'
+                }`}
+                title="Emergency SOS Alert"
+              >
+                <ShieldAlert className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 3. SLIDING BOTTOM SHEET OVERLAY (Z-20) */}
+            <BottomSheet
+              snap={sheetSnap}
+              onSnapChange={setSheetSnap}
+              showBackdrop={!!checkoutPool}
+              onBackdropClick={() => setCheckoutPool(null)}
+              title={
+                poolingState === 'idle' 
+                  ? (sheetSnap === 'small' ? 'Where to?' : 'Plan Your Ride')
+                  : poolingState === 'forming'
+                  ? (isMatchingDriver ? 'Matching with Driver' : 'Pool Forming Lobby')
+                  : poolingState === 'matched'
+                  ? 'Driver Assigned'
+                  : poolingState === 'transit'
+                  ? 'Ride in Transit'
+                  : 'Trip Completed'
+              }
+              subtitle={
+                poolingState === 'idle'
+                  ? `${getStopName(pickup)} ➔ ${getStopName(dropoff)}`
+                  : undefined
+              }
+            >
             {/* IF IDLE, RENDER BOOKING FORM */}
             {poolingState === 'idle' && (
               <>
+                {/* Collapsed/Small State View: Modern Search Bar & Pill Controls */}
+                {sheetSnap === 'small' && (
+                  <div className="space-y-3 pb-2 lg:hidden">
+                    {/* Search Bar / Destination Trigger */}
+                    <div
+                      onClick={() => setSheetSnap('large')}
+                      className="w-full bg-[#F2F2F2] dark:bg-neutral-800 hover:bg-slate-100 dark:hover:bg-neutral-750 border border-slate-200/80 dark:border-neutral-700 px-4 py-3 rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-xs"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Search className="w-4 h-4 text-[#46C96B]" />
+                        <span className="text-xs font-semibold text-slate-600 dark:text-neutral-300 truncate">
+                          Where to on campus? (e.g. {getStopName(dropoff)})
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-black uppercase text-[#46C96B] dark:text-emerald-400 bg-[#46C96B]/10 px-2 py-1 rounded-lg shrink-0">
+                        Search
+                      </span>
+                    </div>
+
+                    {/* Inline Pill-Style Tags */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-bold">
+                      {/* Booking Mode Pill */}
+                      <button
+                        type="button"
+                        onClick={() => setBookingMode(bookingMode === 'now' ? 'schedule' : 'now')}
+                        className="px-3 py-1.5 rounded-full bg-[#F2F2F2] dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-700 dark:text-neutral-300 flex items-center gap-1.5 whitespace-nowrap hover:border-[#46C96B] transition-colors cursor-pointer"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-[#46C96B]" />
+                        <span>{bookingMode === 'now' ? 'Pickup Now' : 'Scheduled'}</span>
+                      </button>
+
+                      {/* Rider Pill */}
+                      <div className="px-3 py-1.5 rounded-full bg-[#F2F2F2] dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-700 dark:text-neutral-300 flex items-center gap-1.5 whitespace-nowrap">
+                        <img
+                          src={userProfile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150"}
+                          alt={userProfile.name}
+                          className="w-3.5 h-3.5 rounded-full object-cover"
+                        />
+                        <span>For Me</span>
+                      </div>
+
+                      {/* Ride Mode Pill */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRideMode(rideMode === 'create' ? 'solo' : 'create');
+                          setSheetSnap('medium');
+                        }}
+                        className="px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 text-[#46C96B] dark:text-emerald-400 flex items-center gap-1.5 whitespace-nowrap font-black cursor-pointer"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        <span>{rideMode === 'create' ? 'Pool (Save 60%)' : 'Solo Direct'}</span>
+                      </button>
+                    </div>
+
+                    {/* Primary Green CTA */}
+                    <button
+                      type="button"
+                      onClick={() => setSheetSnap('medium')}
+                      className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-3 px-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-[#46C96B]/20 transition-all cursor-pointer flex items-center justify-center gap-2 transform active:scale-98"
+                    >
+                      <span>Confirm Pickup & Choose Vehicle</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
                 {/* Main Form Booking details */}
                 <div className="bg-white p-6 rounded-3xl shadow-xs space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                    <h2 className="text-lg font-black tracking-tight text-[#00875A]">
+                    <h2 className="text-lg font-black tracking-tight text-[#46C96B]">
                       BOOK A CAMPUS RIDE
                     </h2>
                   </div>
                   
                   <form onSubmit={handleRequestPool} className="space-y-5">
                     {/* Choose bookingMode selection: Book Now vs Schedule Ride */}
-                    <div className="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl">
+                    <div className="relative grid grid-cols-2 gap-2 p-1.5 bg-slate-100 dark:bg-neutral-900 border border-slate-200/60 dark:border-neutral-800 rounded-2xl z-0 overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setBookingMode('now')}
-                        className={`py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer ${
-                          bookingMode === 'now'
-                            ? 'bg-[#00875A] text-white shadow-md'
-                            : 'text-slate-600 hover:text-slate-800'
-                        }`}
+                        className="relative py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-colors duration-200 cursor-pointer z-10 flex items-center justify-center"
                       >
-                        Book Now
+                        {bookingMode === 'now' && (
+                          <motion.div 
+                            layoutId="activeBookingModeBg"
+                            className="absolute inset-0 bg-[#46C96B] rounded-xl shadow-md -z-10"
+                            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                          />
+                        )}
+                        <span className={`transition-colors duration-200 ${bookingMode === 'now' ? 'text-white' : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'}`}>
+                          Book Now
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setBookingMode('schedule')}
-                        className={`py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer ${
-                          bookingMode === 'schedule'
-                            ? 'bg-[#00875A] text-white shadow-md'
-                            : 'text-slate-600 hover:text-slate-800'
-                        }`}
+                        className="relative py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-colors duration-200 cursor-pointer z-10 flex items-center justify-center"
                       >
-                        Schedule Ride
+                        {bookingMode === 'schedule' && (
+                          <motion.div 
+                            layoutId="activeBookingModeBg"
+                            className="absolute inset-0 bg-[#46C96B] dark:bg-neutral-800 rounded-xl shadow-md -z-10"
+                            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                          />
+                        )}
+                        <span className={`transition-colors duration-200 ${bookingMode === 'schedule' ? 'text-white' : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'}`}>
+                          Schedule Ride
+                        </span>
                       </button>
                     </div>
 
@@ -2002,11 +2195,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Pickup Spot</label>
                         <div className="relative">
-                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#00875A]" />
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#46C96B]" />
                           <select
                             value={pickup}
                             onChange={(e) => setPickup(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#00875A] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#00875A]/50 appearance-none cursor-pointer"
+                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#46C96B] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#46C96B]/50 appearance-none cursor-pointer"
                           >
                             {campusStops.map((stop) => (
                               <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
@@ -2026,7 +2219,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             setPickup(dropoff);
                             setDropoff(temp);
                           }}
-                          className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-md hover:border-[#00875A] text-[#00875A] flex items-center justify-center cursor-pointer transition-colors"
+                          className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-md hover:border-[#46C96B] text-[#46C96B] flex items-center justify-center cursor-pointer transition-colors"
                           title="Swap Route"
                         >
                           <ArrowRightLeft className="w-4 h-4" />
@@ -2037,11 +2230,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Destination Stop</label>
                         <div className="relative">
-                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#00875A]" />
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#46C96B]" />
                           <select
                             value={dropoff}
                             onChange={(e) => setDropoff(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#00875A] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#00875A]/50 appearance-none cursor-pointer"
+                            className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#46C96B] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#46C96B]/50 appearance-none cursor-pointer"
                           >
                             {campusStops.map((stop) => (
                               <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
@@ -2055,30 +2248,30 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                     {/* Schedule Date & Time inputs if bookingMode is schedule */}
                     {bookingMode === 'schedule' && (
-                      <div className="grid grid-cols-2 gap-3 p-4 bg-[#F9FAFB] rounded-2xl border border-slate-200 animate-fadeIn">
+                      <div className="grid grid-cols-2 gap-3 p-4 bg-[#F2F2F2] rounded-2xl border border-slate-200 animate-fadeIn">
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Select Date</label>
                           <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00875A]" />
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#46C96B]" />
                             <input
                               type="date"
                               required
                               value={scheduledDate}
                               onChange={(e) => setScheduledDate(e.target.value)}
-                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#46C96B]"
                             />
                           </div>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Select Time</label>
                           <div className="relative">
-                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00875A]" />
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#46C96B]" />
                             <input
                               type="time"
                               required
                               value={scheduledTime}
                               onChange={(e) => setScheduledTime(e.target.value)}
-                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#46C96B]"
                             />
                           </div>
                         </div>
@@ -2088,21 +2281,21 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Choose Mode tab selection: Create a Pool vs Go Solo */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Ride Mode Choice</label>
-                      <div className="relative grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl z-0 overflow-hidden">
+                      <div className="relative grid grid-cols-2 gap-2 bg-slate-100 dark:bg-neutral-900 border border-slate-200/60 dark:border-neutral-800 p-1.5 rounded-2xl z-0 overflow-hidden">
                         <button
                           type="button"
                           onClick={() => setRideMode('create')}
-                          className="relative py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer z-10"
+                          className="relative py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-colors duration-200 cursor-pointer z-10"
                         >
                           {rideMode === 'create' && (
                             <motion.div 
                               layoutId="activeRideModeBg"
-                              className="absolute inset-0 bg-[#00875A] rounded-xl shadow-md -z-10"
-                              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                              className="absolute inset-0 bg-[#46C96B] rounded-xl shadow-md -z-10"
+                              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                             />
                           )}
-                          <Users className={`w-4 h-4 transition-colors duration-200 ${rideMode === 'create' ? 'text-white' : 'text-slate-400'}`} />
-                          <span className={`transition-colors duration-200 ${rideMode === 'create' ? 'text-white' : 'text-slate-600 hover:text-slate-800'}`}>
+                          <Users className={`w-4 h-4 transition-colors duration-200 ${rideMode === 'create' ? 'text-white' : 'text-slate-500 dark:text-neutral-400'}`} />
+                          <span className={`transition-colors duration-200 ${rideMode === 'create' ? 'text-white' : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'}`}>
                             Create Pool
                           </span>
                         </button>
@@ -2110,17 +2303,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <button
                           type="button"
                           onClick={() => setRideMode('solo')}
-                          className="relative py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer z-10"
+                          className="relative py-3 px-2 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center space-y-1 transition-colors duration-200 cursor-pointer z-10"
                         >
                           {rideMode === 'solo' && (
                             <motion.div 
                               layoutId="activeRideModeBg"
-                              className="absolute inset-0 bg-[#00875A] rounded-xl shadow-md -z-10"
-                              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                              className="absolute inset-0 bg-[#46C96B] dark:bg-neutral-800 rounded-xl shadow-md -z-10"
+                              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                             />
                           )}
-                          <Car className={`w-4 h-4 transition-colors duration-200 ${rideMode === 'solo' ? 'text-white' : 'text-slate-400'}`} />
-                          <span className={`transition-colors duration-200 ${rideMode === 'solo' ? 'text-white' : 'text-slate-600 hover:text-slate-800'}`}>
+                          <Car className={`w-4 h-4 transition-colors duration-200 ${rideMode === 'solo' ? 'text-white' : 'text-slate-500 dark:text-neutral-400'}`} />
+                          <span className={`transition-colors duration-200 ${rideMode === 'solo' ? 'text-white' : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'}`}>
                             Go Solo
                           </span>
                         </button>
@@ -2143,8 +2336,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   onClick={() => setSelectedVehicleId(v.id)}
                                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
                                     isSelected 
-                                      ? 'bg-slate-100 border-[#00875A] text-[#00875A] shadow-sm font-bold' 
-                                      : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-[#46C96B] text-[#46C96B] dark:text-emerald-400 shadow-sm font-bold' 
+                                      : 'bg-slate-50 dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 hover:bg-white dark:hover:bg-neutral-800 text-slate-600 dark:text-neutral-400'
                                   }`}
                                 >
                                   {v.id === 'Keke' ? (
@@ -2155,8 +2348,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                     <Car className="w-5 h-5 stroke-[2]" />
                                   )}
                                   <span className="text-[11px] font-bold truncate max-w-full text-center leading-tight">{v.name}</span>
-                                  <span className="text-[9px] text-slate-400 font-semibold">Cap: {v.capacity}</span>
-                                  <span className="text-[10px] font-mono font-black text-[#00875A] bg-[#00875A]/5 px-1.5 py-0.5 rounded-md">{currencySymbol}{v.poolPrice}/seat</span>
+                                  <span className="text-[9px] text-slate-400 dark:text-neutral-500 font-semibold">Cap: {v.capacity}</span>
+                                  <span className="text-[10px] font-mono font-black text-[#46C96B] dark:text-emerald-400 bg-[#46C96B]/10 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-md">{currencySymbol}{v.poolPrice}/seat</span>
                                 </button>
                               );
                             })}
@@ -2164,38 +2357,38 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </div>
 
                         {/* Dynamic Pooling Info display */}
-                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
-                          <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Dynamic Pooling Tiers</span>
-                            <span className="text-[10px] font-mono text-[#00875A] font-bold">FLAT RATE FOR ALL COMMUTERS</span>
+                        <div className="bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 p-4 rounded-2xl space-y-3">
+                          <div className="flex justify-between items-center border-b border-slate-200 dark:border-neutral-800 pb-2">
+                            <span className="text-xs font-bold text-slate-600 dark:text-neutral-300 uppercase tracking-wider">Dynamic Pooling Tiers</span>
+                            <span className="text-[10px] font-mono text-[#46C96B] dark:text-emerald-400 font-bold">FLAT RATE FOR ALL COMMUTERS</span>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-center">
-                            <div className="bg-slate-100/40 p-2.5 rounded-xl border border-slate-200 text-left flex justify-between items-center">
+                            <div className="bg-white dark:bg-neutral-800 p-2.5 rounded-xl border border-slate-200 dark:border-neutral-700 text-left flex justify-between items-center">
                               <div>
-                                <span className="text-[10px] text-slate-500 font-bold block">Flat Rate Per Seat</span>
-                                <span className="text-xs text-slate-400">Paid by each commuter</span>
+                                <span className="text-[10px] text-slate-500 dark:text-neutral-400 font-bold block">Flat Rate Per Seat</span>
+                                <span className="text-xs text-slate-400 dark:text-neutral-500">Paid by each commuter</span>
                               </div>
-                              <span className="text-base font-mono font-black text-[#00875A] bg-[#00875A]/10 px-2 py-0.5 rounded-lg">{currencySymbol}{activeVehicleConfig.poolPrice}</span>
+                              <span className="text-base font-mono font-black text-[#46C96B] dark:text-emerald-400 bg-[#46C96B]/10 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg">{currencySymbol}{activeVehicleConfig.poolPrice}</span>
                             </div>
-                            <div className="bg-[#00875A]/5 p-2.5 rounded-xl border border-[#00875A]/20 text-left flex justify-between items-center">
+                            <div className="bg-[#46C96B]/5 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-[#46C96B]/20 dark:border-emerald-500/30 text-left flex justify-between items-center">
                               <div>
-                                <span className="text-[10px] text-[#00875A] font-extrabold block">Lobby Capacity</span>
-                                <span className="text-xs text-slate-500">Max seats available</span>
+                                <span className="text-[10px] text-[#46C96B] dark:text-emerald-400 font-extrabold block">Lobby Capacity</span>
+                                <span className="text-xs text-slate-500 dark:text-neutral-400">Max seats available</span>
                               </div>
-                              <span className="text-base font-mono font-black text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-lg">{activeVehicleConfig.capacity} Seats</span>
+                              <span className="text-base font-mono font-black text-slate-800 dark:text-white bg-slate-100 dark:bg-neutral-800 px-2.5 py-0.5 rounded-lg">{activeVehicleConfig.capacity} Seats</span>
                             </div>
                           </div>
                         </div>
 
                         {/* Toggle safety companions option */}
-                        <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-neutral-900 rounded-2xl border border-slate-200 dark:border-neutral-800">
                           <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-lg bg-[#00875A]/15 flex items-center justify-center border border-[#00875A]/30">
-                              <ShieldCheck className="w-5 h-5 text-[#00875A]" />
+                            <div className="w-8 h-8 rounded-lg bg-[#46C96B]/15 flex items-center justify-center border border-[#46C96B]/30">
+                              <ShieldCheck className="w-5 h-5 text-[#46C96B]" />
                             </div>
                             <div>
-                              <span className="text-xs font-bold block text-slate-800">Safe Student Peer Matching</span>
-                              <span className="text-[10px] text-slate-500 block">Only match with active university verified students</span>
+                              <span className="text-xs font-bold block text-slate-800 dark:text-white">Safe Student Peer Matching</span>
+                              <span className="text-[10px] text-slate-500 dark:text-neutral-400 block">Only match with active university verified students</span>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -2205,14 +2398,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               onChange={() => setVerifyPeer(!verifyPeer)} 
                               className="sr-only peer" 
                             />
-                            <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                            <div className="w-10 h-6 bg-slate-200 dark:bg-neutral-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
                           </label>
                         </div>
 
                         {/* CTA button */}
                         <button
                           type="submit"
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                          className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                         >
                           <Users className="w-5 h-5" />
                           {bookingMode === 'schedule' ? 'Schedule Pool Ride' : 'Form Live Ride Pool'}
@@ -2223,8 +2416,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Option 2: FIND POOL VIEW DETAILS */}
                     {rideMode === 'find' && (
                       <div className="space-y-4 animate-fadeIn text-left">
-                        <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-slate-200">
-                          <p className="text-xs font-bold text-[#00875A] uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                        <div className="bg-[#F2F2F2] p-4 rounded-2xl border border-slate-200">
+                          <p className="text-xs font-bold text-[#46C96B] uppercase tracking-wide flex items-center gap-1.5 mb-1">
                             <Search className="w-4 h-4" /> Available Pools Headed Your Way
                           </p>
                           <p className="text-[10px] text-slate-500">Join an existing campus ride pool to instantly slash your travel expenses today.</p>
@@ -2247,7 +2440,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                 <div>
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-xs font-black text-slate-800">{simPool.host}</span>
-                                    <span className="text-[9px] bg-[#00875A]/10 text-[#00875A] px-1.5 py-0.5 rounded-md font-bold">★ {simPool.rating}</span>
+                                    <span className="text-[9px] bg-[#46C96B]/10 text-[#46C96B] px-1.5 py-0.5 rounded-md font-bold">★ {simPool.rating}</span>
                                   </div>
                                   <p className="text-[10px] text-slate-500 font-medium font-sans">{simPool.major} • heading to {simPool.dropoff}</p>
                                   <p className="text-[10px] text-slate-500 font-bold font-mono uppercase mt-0.5 text-slate-600">{simPool.vehicleType} Vehicle</p>
@@ -2257,7 +2450,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
                                 <div className="text-right">
                                   <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Est. Cost</span>
-                                  <span className="text-sm font-mono font-black text-[#00875A]">{currencySymbol}{simPool.fare}/seat</span>
+                                  <span className="text-sm font-mono font-black text-[#46C96B]">{currencySymbol}{simPool.fare}/seat</span>
                                 </div>
 
                                 <button
@@ -2291,7 +2484,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                     setCheckoutPool(poolObj);
                                     setCheckoutTimer(30);
                                   }}
-                                  className="bg-[#00875A] hover:bg-[#00875A]/95 text-white text-xs font-black py-2.5 px-4 rounded-xl cursor-pointer shadow-sm transition-colors"
+                                  className="bg-[#46C96B] hover:bg-[#46C96B]/95 text-white text-xs font-black py-2.5 px-4 rounded-xl cursor-pointer shadow-sm transition-colors"
                                 >
                                   Join Pool
                                 </button>
@@ -2318,7 +2511,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   onClick={() => setSelectedVehicleId(v.id)}
                                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
                                     isSelected 
-                                      ? 'bg-slate-100 border-[#00875A] text-[#00875A] shadow-sm font-bold' 
+                                      ? 'bg-slate-100 border-[#46C96B] text-[#46C96B] shadow-sm font-bold' 
                                       : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
                                   }`}
                                 >
@@ -2331,7 +2524,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   )}
                                   <span className="text-[11px] font-bold truncate max-w-full text-center leading-tight">{v.name}</span>
                                   <span className="text-[9px] text-slate-400 font-semibold">Cap: {v.capacity}</span>
-                                  <span className="text-[10px] font-mono font-black text-[#00875A] bg-[#00875A]/5 px-1.5 py-0.5 rounded-md">{currencySymbol}{v.soloPrice}</span>
+                                  <span className="text-[10px] font-mono font-black text-[#46C96B] bg-[#46C96B]/5 px-1.5 py-0.5 rounded-md">{currencySymbol}{v.soloPrice}</span>
                                 </button>
                               );
                             })}
@@ -2350,7 +2543,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         {/* Solo CTA Button */}
                         <button
                           type="submit"
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                          className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-4 px-6 rounded-2xl shadow-lg transition-all transform active:scale-[0.99] duration-150 cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                         >
                           <Car className="w-5 h-5" />
                           {bookingMode === 'schedule' ? 'Schedule Solo Ride' : 'Book Direct Solo Ride'}
@@ -2363,7 +2556,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Scheduled rides section if any exist */}
                 {scheduledRides.length > 0 && (
                   <div className="bg-white p-6 rounded-3xl border border-slate-150 shadow-xs space-y-4 animate-fadeIn text-left mt-6">
-                    <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-sm font-black text-[#46C96B] uppercase tracking-wider flex items-center gap-1.5">
                       <Calendar className="w-4.5 h-4.5" /> Your Scheduled Rides ({scheduledRides.length})
                     </h3>
 
@@ -2392,12 +2585,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                 </div>
                                 <p className="text-xs text-slate-700 font-medium">{getStopName(ride.pickup)} ➔ {getStopName(ride.dropoff)}</p>
                                 <p className="text-[10px] text-slate-500 font-semibold font-mono flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-[#00875A]" /> {ride.date} • <Clock className="w-3 h-3 text-[#00875A]" /> {ride.time}
+                                  <Calendar className="w-3 h-3 text-[#46C96B]" /> {ride.date} • <Clock className="w-3 h-3 text-[#46C96B]" /> {ride.time}
                                 </p>
                               </div>
 
                               <div className="text-right flex flex-col items-end gap-2">
-                                <span className="text-xs font-mono font-black text-[#00875A]">{currencySymbol}{ride.fare}</span>
+                                <span className="text-xs font-mono font-black text-[#46C96B]">{currencySymbol}{ride.fare}</span>
                                 <button
                                   type="button"
                                   id={`cancel-scheduled-ride-${ride.id}`}
@@ -2450,7 +2643,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6 flex-1 flex flex-col justify-between">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="bg-[#00875A]/15 text-[#00875A] text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                    <span className="bg-[#46C96B]/15 text-[#46C96B] text-xs font-bold border border-[#46C96B]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
                       {isMatchingDriver ? 'MATCHING WITH DRIVER' : 'POOL FORMING LOBBY'}
                     </span>
                     <span className="text-xs font-mono text-slate-500">Route: {getStopName(pickup)} ➔ {getStopName(dropoff)}</span>
@@ -2467,7 +2660,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-xl font-mono font-black text-[#00875A] bg-[#00875A]/10 px-2 py-0.5 rounded-md">
+                        <span className="text-xl font-mono font-black text-[#46C96B] bg-[#46C96B]/10 px-2 py-0.5 rounded-md">
                           {driverTimer}s
                         </span>
                       </div>
@@ -2492,7 +2685,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             setSearchFailed(false);
                             handleInitiateDriverMatch();
                           }}
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold py-2.5 px-4 rounded-xl text-[11px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                          className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold py-2.5 px-4 rounded-xl text-[11px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
                         >
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '6s' }} />
                           Retry Search
@@ -2514,7 +2707,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                   {!isMatchingDriver && !searchFailed && (
                     <div className="text-center py-6">
-                      <h3 className="text-2xl font-black text-[#00875A] tracking-tight">Searching for Companions...</h3>
+                      <h3 className="text-2xl font-black text-[#46C96B] tracking-tight">Searching for Companions...</h3>
                       <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Connecting campus commuters traveling in your direction to minimize your transport fares live.</p>
                     </div>
                   )}
@@ -2531,7 +2724,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <p className="text-[10px] text-amber-600">The pool host is waiting for all members to confirm before requesting a driver.</p>
                           <button
                             onClick={handleConfirmStartRide}
-                            className="bg-[#00875A] hover:bg-[#00875A]/90 text-white font-extrabold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-transform transform active:scale-95 shadow-md cursor-pointer"
+                            className="bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-extrabold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-transform transform active:scale-95 shadow-md cursor-pointer"
                           >
                             Confirm Start Ride
                           </button>
@@ -2545,7 +2738,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Seating Capacity Filled</span>
-                      <span className="text-sm font-mono font-black text-[#00875A]">{lobbyMembers.length}/{activeVehicleConfig.capacity} SEATS</span>
+                      <span className="text-sm font-mono font-black text-[#46C96B]">{lobbyMembers.length}/{activeVehicleConfig.capacity} SEATS</span>
                     </div>
 
                     {/* Seating progress bar indicators */}
@@ -2558,7 +2751,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <div 
                             key={idx}
                             className={`rounded-full transition-all duration-300 ${
-                              isFilled ? 'bg-[#00875A]' : 'bg-slate-200'
+                              isFilled ? 'bg-[#46C96B]' : 'bg-slate-200'
                             } ${isNextWaiting ? 'animate-pulse bg-slate-300' : ''}`}
                           ></div>
                         );
@@ -2568,7 +2761,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Pricing ticker based on joined members */}
                     <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-xs">
                       <span className="text-slate-500">Current Cost per Seat:</span>
-                      <span className="font-mono font-black text-lg text-[#00875A] flex items-center gap-1">
+                      <span className="font-mono font-black text-lg text-[#46C96B] flex items-center gap-1">
                         {currencySymbol}{activeVehicleConfig.poolPrice}
                         <span className="text-[10px] text-gray-500 font-medium font-sans">/seat</span>
                       </span>
@@ -2598,7 +2791,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0">
-                              <span className="text-[10px] font-mono text-amber-500 bg-[#00875A]/5 border border-amber-500/10 px-1.5 py-0.5 rounded-lg">
+                              <span className="text-[10px] font-mono text-amber-500 bg-[#46C96B]/5 border border-amber-500/10 px-1.5 py-0.5 rounded-lg">
                                 ★ {member.rating}
                               </span>
                               {isHost ? (
@@ -2686,7 +2879,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             : searchFailed
                               ? 'bg-rose-100 border border-rose-200 text-rose-800 font-mono cursor-not-allowed'
                               : matchEnabled
-                                ? 'bg-[#00875A] text-white hover:bg-[#00875A]/90'
+                                ? 'bg-[#46C96B] text-white hover:bg-[#46C96B]/90'
                                 : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                         }`}
                       >
@@ -2716,7 +2909,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <span className={`text-xs font-bold border px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider ${
                     activeRide?.status === 'arriving'
                       ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse'
-                      : 'bg-emerald-100 text-[#00875A] border-emerald-300'
+                      : 'bg-emerald-100 text-[#46C96B] border-emerald-300'
                   }`}>
                     {activeRide?.status === 'arriving' ? 'DRIVER HAS ARRIVED' : 'WAITING FOR DRIVER ARRIVAL'}
                   </span>
@@ -2745,9 +2938,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       className="w-14 h-14 rounded-2xl object-cover border border-slate-150 shadow-xs shadow-md"
                     />
                     <div>
-                      <h3 className="text-base font-black text-[#00875A] flex items-center gap-1.5">
+                      <h3 className="text-base font-black text-[#46C96B] flex items-center gap-1.5">
                         {activeRide?.driverName || 'David Alao'} 
-                        <span className="text-xs font-mono text-amber-500 bg-[#00875A]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        <span className="text-xs font-mono text-amber-500 bg-[#46C96B]/10 border border-amber-500/25 px-2 py-0.5 rounded-lg flex items-center gap-1">
                           ★ {activeRide?.driverRating || '4.9'}
                         </span>
                       </h3>
@@ -2759,13 +2952,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   {/* Security PIN code to unlock ride */}
                   <div className="bg-white border border-slate-150 shadow-xs px-4 py-3 rounded-2xl text-center shrink-0">
                     <span className="text-[10px] text-gray-500 font-bold block uppercase tracking-wider">BOARDING PIN</span>
-                    <span className="text-lg font-mono font-black tracking-widest text-[#00875A]">{verificationCode}</span>
+                    <span className="text-lg font-mono font-black tracking-widest text-[#46C96B]">{verificationCode}</span>
                   </div>
                 </div>
 
                 {/* Trust Payment Method Card */}
                 <div className="space-y-4">
-                  <div className="p-4 bg-[#00875A]/5 rounded-2xl border border-[#00875A]/15 flex items-center justify-between">
+                  <div className="p-4 bg-[#46C96B]/5 rounded-2xl border border-[#46C96B]/15 flex items-center justify-between">
                     <div className="flex items-center space-x-3 text-left">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
                         activeRide?.paymentMethod 
@@ -2802,7 +2995,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             onClick={() => {
                               setShowInlinePaymentChoice(true);
                             }}
-                            className="text-[10px] text-[#00875A] hover:underline font-extrabold cursor-pointer"
+                            className="text-[10px] text-[#46C96B] hover:underline font-extrabold cursor-pointer"
                           >
                             Change Method
                           </button>
@@ -2814,7 +3007,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               onClick={() => {
                                 setShowInlinePaymentChoice(true);
                               }}
-                              className="bg-[#00875A] hover:bg-[#00875A]/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow-sm animate-pulse"
+                              className="bg-[#46C96B] hover:bg-[#46C96B]/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow-sm animate-pulse"
                             >
                               Pay Fare (₦{activeRide?.cost})
                             </button>
@@ -2877,9 +3070,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             }
                             setShowInlinePaymentChoice(false);
                           }}
-                          className="p-3 bg-white hover:bg-emerald-50/40 border border-slate-200 hover:border-[#00875A] rounded-xl transition-all text-left flex items-start gap-2.5 cursor-pointer"
+                          className="p-3 bg-white hover:bg-emerald-50/40 border border-slate-200 hover:border-[#46C96B] rounded-xl transition-all text-left flex items-start gap-2.5 cursor-pointer"
                         >
-                          <div className="w-8 h-8 rounded-lg bg-[#00875A]/10 text-[#00875A] flex items-center justify-center shrink-0">
+                          <div className="w-8 h-8 rounded-lg bg-[#46C96B]/10 text-[#46C96B] flex items-center justify-center shrink-0">
                             <ArrowRightLeft className="w-4 h-4" />
                           </div>
                           <div>
@@ -2894,7 +3087,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   {activeRide?.paymentMethod === 'transfer' && (
                     <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-150 text-left space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-[#00875A] font-extrabold uppercase tracking-wider">Driver Bank Details (Transfer)</span>
+                        <span className="text-[10px] text-[#46C96B] font-extrabold uppercase tracking-wider">Driver Bank Details (Transfer)</span>
                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold font-mono ${
                           activeRide.paymentValidatedByDriver
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -2918,7 +3111,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <div className="flex justify-between items-center">
                           <span className="text-slate-500 font-medium">Account Number:</span>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-black text-[#00875A] text-sm tracking-wider">{getDriverBankDetails().accountNumber}</span>
+                            <span className="font-mono font-black text-[#46C96B] text-sm tracking-wider">{getDriverBankDetails().accountNumber}</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -2926,7 +3119,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                 setRideTransferCopied(true);
                                 setTimeout(() => setRideTransferCopied(false), 2000);
                               }}
-                              className="p-1 hover:bg-[#00875A]/10 text-[#00875A] rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                              className="p-1 hover:bg-[#46C96B]/10 text-[#46C96B] rounded-lg border border-slate-200 transition-colors cursor-pointer"
                               title="Copy account number"
                             >
                               {rideTransferCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -2943,7 +3136,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <button
                           type="button"
                           onClick={handleConfirmTransferPayment}
-                          className="w-full bg-[#00875A] hover:bg-[#00875A]/95 text-white font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="w-full bg-[#46C96B] hover:bg-[#46C96B]/95 text-white font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <CheckCircle className="w-4 h-4" />
                           Confirm Transfer Sent
@@ -2987,7 +3180,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     }}
                     className={`w-full font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 ${
                       activeRide?.riderPaid && activeRide?.status === 'arriving'
-                        ? 'bg-[#00875A] hover:bg-[#00875A]/90 text-white cursor-pointer'
+                        ? 'bg-[#46C96B] hover:bg-[#46C96B]/90 text-white cursor-pointer'
                         : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                     }`}
                   >
@@ -3016,8 +3209,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {poolingState === 'transit' && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6">
                 <div className="flex justify-between items-center">
-                  <span className="bg-[#00875A]/15 text-[#00875A] text-xs font-bold border border-[#00875A]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
-                    <span className="w-2 h-2 rounded-full bg-[#00875A] animate-ping"></span>
+                  <span className="bg-[#46C96B]/15 text-[#46C96B] text-xs font-bold border border-[#46C96B]/30 px-3 py-1 rounded-full flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-[#46C96B] animate-ping"></span>
                     RIDE IN TRANSIT
                   </span>
                   <span className="text-xs font-mono text-slate-500">ETA: {etaRemaining} Minutes</span>
@@ -3045,8 +3238,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     }}
                     className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 border cursor-pointer ${
                       sosActivated 
-                        ? 'bg-[#00875A] text-white border-[#00875A] animate-pulse' 
-                        : 'bg-transparent text-[#00875A] border-[#00875A]/30 hover:bg-[#00875A]/10'
+                        ? 'bg-[#46C96B] text-white border-[#46C96B] animate-pulse' 
+                        : 'bg-transparent text-[#46C96B] border-[#46C96B]/30 hover:bg-[#46C96B]/10'
                     }`}
                   >
                     {sosActivated ? 'SOS ON' : 'Trigger SOS'}
@@ -3056,7 +3249,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <div className="pt-4 border-t border-slate-200">
                   <button
                     onClick={handleEndRide}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
+                    className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-3.5 px-4 rounded-2xl shadow-sm transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <CheckCircle className="w-4 h-4" />
                     Conclude & End Ride
@@ -3078,12 +3271,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             {/* IF ARRIVED / TRIP FINISHED - RENDER RATING & REVIEW SCREEN */}
             {(poolingState === 'arrived' || poolingState === 'rated') && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-150 shadow-xs space-y-6 text-center">
-                <div className="w-16 h-16 bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <div className="w-16 h-16 bg-[#46C96B]/10 border border-[#46C96B]/20 text-[#46C96B] rounded-full flex items-center justify-center mx-auto shadow-inner">
                   <CheckCircle className="w-8 h-8" />
                 </div>
                 
                 <div className="space-y-1.5">
-                  <h3 className="text-2xl font-black text-[#00875A] tracking-tight">Trip Completed!</h3>
+                  <h3 className="text-2xl font-black text-[#46C96B] tracking-tight">Trip Completed!</h3>
                   <p className="text-xs text-slate-500">You arrived safely at {getStopName(dropoff)}.</p>
                 </div>
 
@@ -3096,7 +3289,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-500">Split Occupancy Fare ({lobbyMembers.length}/4 joined):</span>
-                    <span className="font-mono text-[#00875A] font-black">{currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
+                    <span className="font-mono text-[#46C96B] font-black">{currencySymbol}{Math.round(priceTiers[`tier${lobbyMembers.length as 1|2|3|4}` || 'tier1'])}</span>
                   </div>
                   <div className="h-px bg-gray-850"></div>
                   <div className="flex justify-between text-xs bg-sage-dark/10 p-2 rounded-lg border border-sage-light/30">
@@ -3132,17 +3325,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                   <button
                     onClick={handleRateSubmit}
-                    className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                   >
                     Finish & Close Trip
                   </button>
                 </div>
               </div>
             )}
-            
-          </div>
-        </motion.div>
-      )}
+            </BottomSheet>
+          </motion.div>
+        )}
 
         {/* BROWSE ACTIVE POOLS VIEW */}
         {activeView === 'browse_pools' && (
@@ -3157,7 +3349,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-black text-[#00875A] tracking-tight uppercase">Browse Active Pools</h1>
+              <h1 className="text-2xl font-black text-[#46C96B] tracking-tight uppercase">Browse Active Pools</h1>
               <p className="text-xs text-slate-500">
                 Join matching commutes created by fellow students to split fares and ride safely.
               </p>
@@ -3167,7 +3359,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 setRideMode('create');
                 onNavigate('booking');
               }}
-              className="px-5 py-3 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#00875A]/10"
+              className="px-5 py-3 bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#46C96B]/10"
             >
               <Plus className="w-4.5 h-4.5" />
               <span>Start New Pool</span>
@@ -3177,7 +3369,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           {/* Filters Widget Panel */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center space-x-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
-              <Search className="w-4 h-4 text-[#00875A]" />
+              <Search className="w-4 h-4 text-[#46C96B]" />
               <span>Search Filters</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -3187,7 +3379,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <select
                   value={browseFilterPickup}
                   onChange={(e) => setBrowseFilterPickup(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#46C96B]"
                 >
                   <option value="all">All Pickup Stops</option>
                   {campusStops.map((stop) => (
@@ -3202,7 +3394,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <select
                   value={browseFilterDropoff}
                   onChange={(e) => setBrowseFilterDropoff(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#46C96B]"
                 >
                   <option value="all">All Destinations</option>
                   {campusStops.map((stop) => (
@@ -3217,7 +3409,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <select
                   value={browseFilterVehicle}
                   onChange={(e) => setBrowseFilterVehicle(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00875A]"
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#46C96B]"
                 >
                   <option value="all">All Vehicles (Any)</option>
                   <option value="Car">Car (Cozy Comfort)</option>
@@ -3236,7 +3428,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     setBrowseFilterDropoff('all');
                     setBrowseFilterVehicle('all');
                   }}
-                  className="text-[10px] font-bold text-[#00875A] hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-[10px] font-bold text-[#46C96B] hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <RefreshCw className="w-3 h-3 animate-spin" /> Clear Filters
                 </button>
@@ -3257,21 +3449,21 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             const isHost = myPool.hostName === (userProfile.name || 'Temi Adeyemi');
 
             return (
-              <div className="bg-emerald-50 border-2 border-[#00875A]/20 p-6 rounded-3xl space-y-4 animate-fadeIn">
+              <div className="bg-emerald-50 border-2 border-[#46C96B]/20 p-6 rounded-3xl space-y-4 animate-fadeIn">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center space-x-3">
-                    <div className="p-3 bg-[#00875A]/10 text-[#00875A] rounded-2xl shrink-0">
+                    <div className="p-3 bg-[#46C96B]/10 text-[#46C96B] rounded-2xl shrink-0">
                       <Car className="w-6 h-6 animate-pulse" />
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#00875A]/10 text-[#00875A] px-2 py-0.5 rounded-md font-mono">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#46C96B]/10 text-[#46C96B] px-2 py-0.5 rounded-md font-mono">
                         {isHost ? 'Your Created Pool Lobby' : 'Your Joined Pool Lobby'}
                       </span>
                       <h3 className="text-base font-extrabold text-slate-800 mt-1">
                         Active Ride: {getStopName(myPool.pickupId)} ➔ {getStopName(myPool.dropoffId)}
                       </h3>
                       <p className="text-xs text-slate-500 font-mono mt-0.5">
-                        Status: <span className="font-extrabold text-[#00875A] uppercase">{myPool.status}</span> • {myPool.currentRiders.length}/{myPool.maxRiders} Seats Filled
+                        Status: <span className="font-extrabold text-[#46C96B] uppercase">{myPool.status}</span> • {myPool.currentRiders.length}/{myPool.maxRiders} Seats Filled
                       </p>
                     </div>
                   </div>
@@ -3287,7 +3479,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         }
                         onNavigate('booking');
                       }}
-                      className="px-5 py-3 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#00875A]/10 shrink-0"
+                      className="px-5 py-3 bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#46C96B]/10 shrink-0"
                     >
                       <Compass className="w-4 h-4" />
                       <span>Enter Live Lobby</span>
@@ -3407,7 +3599,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     {/* Route Line */}
                     <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl space-y-2">
                       <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-[#00875A] shrink-0" />
+                        <MapPin className="w-4 h-4 text-[#46C96B] shrink-0" />
                         <div>
                           <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Pickup</span>
                           <span className="text-xs font-bold text-slate-800 truncate block">{getStopName(pool.pickupId)}</span>
@@ -3427,7 +3619,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                         <span>Lobby Capacity</span>
-                        <span className={isFull ? 'text-red-500' : 'text-[#00875A]'}>
+                        <span className={isFull ? 'text-red-500' : 'text-[#46C96B]'}>
                           {pool.currentRiders.length}/{pool.maxRiders} Seats Filled
                         </span>
                       </div>
@@ -3437,7 +3629,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <div
                             key={idx}
                             className={`rounded-full h-full ${
-                              idx < pool.currentRiders.length ? 'bg-[#00875A]' : 'bg-slate-150'
+                              idx < pool.currentRiders.length ? 'bg-[#46C96B]' : 'bg-slate-150'
                             }`}
                           ></div>
                         ))}
@@ -3465,7 +3657,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       {/* Vehicle Category Badge */}
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono ${
                         pool.vehicleType === 'Car' 
-                          ? 'bg-sage-bg/30 border border-sage-light text-[#00875A]'
+                          ? 'bg-sage-bg/30 border border-sage-light text-[#46C96B]'
                           : pool.vehicleType === 'Keke'
                             ? 'bg-amber-50 border border-amber-200 text-amber-600'
                             : 'bg-[#EFF4FF] border border-[#C7D7FE] text-[#001058]'
@@ -3479,7 +3671,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div>
                         <span className="text-[9px] text-slate-500 block uppercase tracking-wide">Dynamic split fare</span>
                         <div className="flex items-baseline space-x-1.5 mt-0.5">
-                          <span className="text-base font-extrabold text-[#00875A] font-mono">
+                          <span className="text-base font-extrabold text-[#46C96B] font-mono">
                             {currencySymbol}{splitFareMax}
                           </span>
                           <span className="text-[9px] text-slate-400 line-through font-mono">
@@ -3507,7 +3699,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             }
                             onNavigate('booking');
                           }}
-                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-[#00875A] hover:bg-[#00875A]/95 text-white shadow-xs"
+                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-[#46C96B] hover:bg-[#46C96B]/95 text-white shadow-xs"
                         >
                           <Compass className="w-4 h-4" />
                           <span>Enter Lobby</span>
@@ -3532,7 +3724,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             }
                             onNavigate('booking');
                           }}
-                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-[#00875A] hover:bg-[#00875A]/95 text-white shadow-xs"
+                          className="h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-[#46C96B] hover:bg-[#46C96B]/95 text-white shadow-xs"
                         >
                           <Compass className="w-4 h-4" />
                           <span>Enter Lobby</span>
@@ -3555,7 +3747,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         className={`w-full h-11 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                           isFull
                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                            : 'bg-[#00875A] hover:bg-[#00875A]/95 text-white shadow-md shadow-sage-medium/10'
+                            : 'bg-[#46C96B] hover:bg-[#46C96B]/95 text-white shadow-md shadow-sage-medium/10'
                         }`}
                       >
                         {isFull ? (
@@ -3574,7 +3766,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
           ) : (
             <div className="bg-white p-12 rounded-3xl border border-slate-200 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-150 flex items-center justify-center text-[#00875A]">
+              <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-150 flex items-center justify-center text-[#46C96B]">
                 <Compass className="w-8 h-8" />
               </div>
               <div className="space-y-1 max-w-sm">
@@ -3600,7 +3792,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     if (browseFilterDropoff !== 'all') setDropoff(browseFilterDropoff);
                     onNavigate('booking');
                   }}
-                  className="px-4 py-2.5 bg-[#00875A] hover:bg-[#00875A]/95 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+                  className="px-4 py-2.5 bg-[#46C96B] hover:bg-[#46C96B]/95 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
                 >
                   Start New Pool
                 </button>
@@ -3620,7 +3812,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             transition={{ duration: 0.05, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">RIDER PORTAL SUMMARY</h1>
+          <h1 className="text-2xl font-black text-[#46C96B] tracking-tight">RIDER PORTAL SUMMARY</h1>
           
           {/* Quick Metrics Cards */}
           {(() => {
@@ -3651,7 +3843,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider">Weekly Transit Outlay</h3>
+                <h3 className="text-sm font-black text-[#46C96B] uppercase tracking-wider">Weekly Transit Outlay</h3>
                 <p className="text-xs text-gray-500">Breakdown of transport expenses on campus (split vs. solo)</p>
               </div>
               <span className="text-xs bg-slate-100 border border-slate-150 shadow-xs px-3 py-1 rounded-xl font-mono">Last 7 Days</span>
@@ -3716,7 +3908,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div key={idx} className="flex flex-col items-center flex-1 group relative">
                       {/* Tooltip */}
                       <div className="absolute bottom-full mb-2 bg-gray-950 text-white text-[10px] p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all border border-slate-200 flex flex-col pointer-events-none z-10 whitespace-nowrap shadow-xl">
-                        <span className="font-extrabold text-[#00875A]">Split: {currencySymbol}{data.split}</span>
+                        <span className="font-extrabold text-[#46C96B]">Split: {currencySymbol}{data.split}</span>
                         <span className="text-slate-500 line-through">Solo: {currencySymbol}{data.solo}</span>
                       </div>
 
@@ -3728,7 +3920,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         ></div>
                         {/* Active Pool Split Bar */}
                         <div 
-                          className="w-3.5 bg-gradient-to-t from-[#00875A] to-emerald-600 rounded-t-sm transition-all duration-300"
+                          className="w-3.5 bg-gradient-to-t from-[#46C96B] to-emerald-600 rounded-t-sm transition-all duration-300"
                           style={{ height: `${splitHeight}px` }}
                         ></div>
                       </div>
@@ -3741,7 +3933,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
             <div className="flex justify-center items-center gap-6 pt-4 border-t border-slate-200 text-xs text-gray-500">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 bg-gradient-to-r from-[#00875A] to-[#00875A] rounded-xs"></span>
+                <span className="w-3 h-3 bg-gradient-to-r from-[#46C96B] to-[#46C96B] rounded-xs"></span>
                 <span>Active Split Ride Outlay</span>
               </div>
               <div className="flex items-center gap-2">
@@ -3753,7 +3945,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
           {/* Historic Trips Log List */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
-            <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider">Past Completed Rides</h3>
+            <h3 className="text-sm font-black text-[#46C96B] uppercase tracking-wider">Past Completed Rides</h3>
             {studentPastRides.length > 0 ? (
               <div className="space-y-3">
                 {studentPastRides.map((ride, index) => {
@@ -3774,7 +3966,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div key={ride.id || index} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between hover:border-slate-300 transition-all">
                       <div className="flex items-center space-x-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          isCompleted ? 'bg-emerald-50 text-[#00875A]' : 'bg-rose-50 text-rose-500'
+                          isCompleted ? 'bg-emerald-50 text-[#46C96B]' : 'bg-rose-50 text-rose-500'
                         }`}>
                           {vehicleLabel === 'Keke' ? (
                             <Zap className="w-5 h-5" />
@@ -3785,7 +3977,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <div>
                           <span className="text-xs font-bold block text-slate-800">{title}</span>
                           <span className="text-[10px] text-gray-500 block font-mono">
-                            {dateStr} {timeStr ? `• ${timeStr}` : ''} • <span className="font-sans font-extrabold uppercase text-[9px] text-[#00875A]">{vehicleLabel} ({isSolo ? 'Solo' : 'Pool'})</span>
+                            {dateStr} {timeStr ? `• ${timeStr}` : ''} • <span className="font-sans font-extrabold uppercase text-[9px] text-[#46C96B]">{vehicleLabel} ({isSolo ? 'Solo' : 'Pool'})</span>
                           </span>
                         </div>
                       </div>
@@ -3795,7 +3987,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </span>
                         <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-mono tracking-wide font-black ${
                           isCompleted 
-                            ? 'bg-emerald-100 text-[#00875A]' 
+                            ? 'bg-emerald-100 text-[#46C96B]' 
                             : 'bg-rose-100 text-rose-600'
                         }`}>
                           {isCompleted ? 'Paid' : 'Canceled'}
@@ -3820,7 +4012,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     </div>
                     <div className="text-right">
                       <span className="text-xs font-mono font-black text-slate-800 block">-{currencySymbol}{txn.amount}</span>
-                      <span className="text-[9px] bg-[#00875A]/10 text-[#00875A] px-2 py-0.5 rounded-full uppercase font-mono tracking-wide font-bold">Paid</span>
+                      <span className="text-[9px] bg-[#46C96B]/10 text-[#46C96B] px-2 py-0.5 rounded-full uppercase font-mono tracking-wide font-bold">Paid</span>
                     </div>
                   </div>
                 ))}
@@ -3845,13 +4037,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-black text-[#00875A] tracking-tight">NOTIFICATIONS INBOX</h1>
+            <h1 className="text-2xl font-black text-[#46C96B] tracking-tight">NOTIFICATIONS INBOX</h1>
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => {
                   onMarkNotificationsRead();
                 }}
-                className="text-xs text-[#00875A] hover:underline font-bold cursor-pointer"
+                className="text-xs text-[#46C96B] hover:underline font-bold cursor-pointer"
               >
                 Mark all as read
               </button>
@@ -3882,15 +4074,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     <div className="flex items-start space-x-3.5">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                         notif.type === 'success' 
-                          ? 'bg-[#00875A]/10 text-sage-medium' 
+                          ? 'bg-[#46C96B]/10 text-sage-medium' 
                           : notif.type === 'receipt' 
-                            ? 'bg-[#00875A]/10 text-[#00875A]' 
+                            ? 'bg-[#46C96B]/10 text-[#46C96B]' 
                             : 'bg-slate-200 text-slate-500'
                       }`}>
                         <BellRing className="w-5 h-5" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">{notif.title}</h3>
+                        <h3 className="text-xs font-black text-[#46C96B] uppercase tracking-wider">{notif.title}</h3>
                         <p className="text-xs text-slate-500 mt-1 leading-relaxed">{notif.message}</p>
                       </div>
                     </div>
@@ -3917,7 +4109,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             transition={{ duration: 0.05, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">WALLET & PAYMENTS</h1>
+          <h1 className="text-2xl font-black text-[#46C96B] tracking-tight">WALLET & PAYMENTS</h1>
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
@@ -3925,22 +4117,22 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             <div className="lg:col-span-7 space-y-6">
               
               {/* Sleek Virtual Debit Card Mockup */}
-              <div className="bg-gradient-to-br from-[#F9FAFB] via-[#00875A] to-black rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-xs relative overflow-hidden shadow-xl ring-1 ring-[#00875A]/10 min-h-[220px] flex flex-col justify-between">
-                <div className="absolute top-0 right-0 w-[40%] h-[40%] rounded-full bg-[#00875A]/5 blur-3xl pointer-events-none"></div>
+              <div className="bg-gradient-to-br from-[#F2F2F2] via-[#46C96B] to-black rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-xs relative overflow-hidden shadow-xl ring-1 ring-[#46C96B]/10 min-h-[220px] flex flex-col justify-between">
+                <div className="absolute top-0 right-0 w-[40%] h-[40%] rounded-full bg-[#46C96B]/5 blur-3xl pointer-events-none"></div>
                 
                 <div className="flex justify-between items-start relative z-10">
                   <div className="space-y-1">
                     <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest font-mono">CAMPUS TRANSIT PASS</span>
                     <h3 className="text-lg font-black text-white">{userProfile.name || 'Temi Adeyemi'}</h3>
                   </div>
-                  <span className="bg-[#00875A]/10 text-[#00875A] text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border border-[#00875A]/20 uppercase">
+                  <span className="bg-[#46C96B]/10 text-[#46C96B] text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border border-[#46C96B]/20 uppercase">
                     STUDENT COMMUTER
                   </span>
                 </div>
 
                 <div className="my-6 relative z-10">
                   <span className="text-[10px] text-gray-500 font-bold uppercase block tracking-wider font-mono">DIGITAL BALANCE</span>
-                  <div className="text-3xl sm:text-4xl font-black text-[#00875A] font-mono mt-0.5 tracking-tight">
+                  <div className="text-3xl sm:text-4xl font-black text-[#46C96B] font-mono mt-0.5 tracking-tight">
                     {currencySymbol}{userProfile.walletBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}
                   </div>
                 </div>
@@ -3953,8 +4145,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               {/* Instant Fund Wallet Form */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
-                <h3 className="text-sm font-black text-[#00875A] uppercase tracking-wider flex items-center gap-1.5">
-                  <CreditCard className="w-4.5 h-4.5 text-[#00875A]" /> Reload Comm commuter wallet
+                <h3 className="text-sm font-black text-[#46C96B] uppercase tracking-wider flex items-center gap-1.5">
+                  <CreditCard className="w-4.5 h-4.5 text-[#46C96B]" /> Reload Comm commuter wallet
                 </h3>
                 
                 <form onSubmit={(e) => { e.preventDefault(); setShowPaystackPopup(true); }} className="space-y-4">
@@ -3966,7 +4158,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         onClick={() => { setFundAmount(amount); setCustomFundAmount(''); }}
                         className={`py-3 rounded-xl border font-mono font-bold text-xs transition-all cursor-pointer ${
                           fundAmount === amount && !customFundAmount
-                            ? 'bg-gradient-to-b from-gray-900 to-slate-950 border-[#00875A] text-[#00875A]' 
+                            ? 'bg-gradient-to-b from-gray-900 to-slate-950 border-[#46C96B] text-[#46C96B]' 
                             : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-white hover:bg-slate-100'
                         }`}
                       >
@@ -3991,7 +4183,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full bg-[#00875A] hover:bg-[#00875A] text-slate-800 font-black py-4 px-6 rounded-2xl shadow-lg transition-all text-xs uppercase tracking-wider cursor-pointer"
+                    className="w-full bg-[#46C96B] hover:bg-[#46C96B] text-slate-800 font-black py-4 px-6 rounded-2xl shadow-lg transition-all text-xs uppercase tracking-wider cursor-pointer"
                   >
                     REFOUND WALLET WITH PAYSTACK CO
                   </button>
@@ -4006,8 +4198,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               {/* Virtual Account Details for Instant Bank Deposits */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
                 <div className="flex items-center space-x-2">
-                  <ArrowRightLeft className="w-5 h-5 text-[#00875A]" />
-                  <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider block">Instant Bank Transfer Channel</h3>
+                  <ArrowRightLeft className="w-5 h-5 text-[#46C96B]" />
+                  <h3 className="text-xs font-black text-[#46C96B] uppercase tracking-wider block">Instant Bank Transfer Channel</h3>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Make an online bank transfer to your customized virtual account below. Refills reflect instantly via automated credit tracking.
@@ -4021,7 +4213,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Account Number:</span>
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-[#00875A] font-black tracking-widest">9283748291</span>
+                      <span className="text-[#46C96B] font-black tracking-widest">9283748291</span>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText('9283748291');
@@ -4050,7 +4242,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               {/* Past Transactions Ledger list */}
               <div className="bg-white p-5 rounded-3xl border border-slate-200 space-y-4">
-                <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">Payments Transactions Ledger</h3>
+                <h3 className="text-xs font-black text-[#46C96B] uppercase tracking-wider">Payments Transactions Ledger</h3>
                 {transactions.length > 0 ? (
                   <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                     {transactions.map((txn, index) => (
@@ -4059,7 +4251,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <span className="text-xs font-bold block text-slate-800 truncate max-w-[150px]">{txn.description}</span>
                           <span className="text-[9px] text-gray-500 block font-mono">{txn.time} • {txn.method}</span>
                         </div>
-                        <span className={`text-xs font-mono font-black ${txn.type === 'reload' ? 'text-[#00875A]' : 'text-[#00875A]'}`}>
+                        <span className={`text-xs font-mono font-black ${txn.type === 'reload' ? 'text-[#46C96B]' : 'text-[#46C96B]'}`}>
                           {txn.type === 'reload' ? '+' : '-'}{currencySymbol}{txn.amount}
                         </span>
                       </div>
@@ -4087,7 +4279,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   className="bg-white text-slate-900 max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl border border-gray-200"
                 >
                   {/* Paystack Styled header */}
-                  <div className="p-6 bg-gradient-to-r from-emerald-500 to-[#00875A] text-white flex justify-between items-center">
+                  <div className="p-6 bg-gradient-to-r from-emerald-500 to-[#46C96B] text-white flex justify-between items-center">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-bold tracking-widest block uppercase opacity-75">Paystack Secure Checkout</span>
                       <h4 className="text-base font-black">Refill {currencySymbol}{(Number(customFundAmount) || fundAmount).toLocaleString()}</h4>
@@ -4154,13 +4346,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     </div>
 
                     <div className="bg-gray-50 p-3 rounded-2xl flex items-center justify-center gap-1.5 border border-gray-100 text-[10px] text-gray-500">
-                      <ShieldCheck className="w-4 h-4 text-[#00875A]" /> SECURE ADVANCED 256-BIT SSL ENCRYPTION
+                      <ShieldCheck className="w-4 h-4 text-[#46C96B]" /> SECURE ADVANCED 256-BIT SSL ENCRYPTION
                     </div>
 
                     <button
                       type="submit"
                       disabled={paystackLoading}
-                      className="w-full bg-[#00875A] hover:bg-[#00875A] text-slate-800 font-black py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer"
+                      className="w-full bg-[#46C96B] hover:bg-[#46C96B] text-slate-800 font-black py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-md transition-colors cursor-pointer"
                     >
                       {paystackLoading ? 'Refilling Comm wallet...' : `PROCEED PAY ${currencySymbol}${(Number(customFundAmount) || fundAmount).toLocaleString()}`}
                     </button>
@@ -4181,7 +4373,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   className="bg-white text-slate-800 max-w-md w-full rounded-3xl overflow-hidden shadow-2xl border border-slate-200"
                 >
                   {/* Header */}
-                  <div className="p-6 bg-[#00875A] text-white flex justify-between items-center">
+                  <div className="p-6 bg-[#46C96B] text-white flex justify-between items-center">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-bold tracking-widest block uppercase opacity-85">Campus Ride Trust Payment</span>
                       <h4 className="text-lg font-black">Choose Payment Method</h4>
@@ -4200,11 +4392,11 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       <div className="space-y-4">
                         <div className="text-center pb-2">
                           <p className="text-sm text-slate-600">
-                            Your driver <span className="font-extrabold text-[#00875A]">{activeReq.driverName || 'David Alao'}</span> has accepted your request. How would you like to pay for this trip?
+                            Your driver <span className="font-extrabold text-[#46C96B]">{activeReq.driverName || 'David Alao'}</span> has accepted your request. How would you like to pay for this trip?
                           </p>
-                          <div className="mt-3 inline-block bg-[#00875A]/10 border border-[#00875A]/20 px-4 py-1.5 rounded-full">
+                          <div className="mt-3 inline-block bg-[#46C96B]/10 border border-[#46C96B]/20 px-4 py-1.5 rounded-full">
                             <span className="text-xs text-slate-500 uppercase tracking-wider font-bold">Total Fare: </span>
-                            <span className="text-base font-black text-[#00875A]">{currencySymbol}{activeReq.cost}</span>
+                            <span className="text-base font-black text-[#46C96B]">{currencySymbol}{activeReq.cost}</span>
                           </div>
                         </div>
 
@@ -4213,14 +4405,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <button
                             type="button"
                             onClick={handleSelectWalletPayment}
-                            className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
+                            className="p-4 border border-slate-200 hover:border-[#46C96B] bg-slate-50 hover:bg-[#46C96B]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
                           >
                             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
                               <Wallet className="w-5 h-5" />
                             </div>
                             <div className="space-y-1 w-full">
                               <div className="flex justify-between items-baseline gap-2">
-                                <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Deduct from Wallet</h5>
+                                <h5 className="font-black text-sm text-[#46C96B] group-hover:text-[#46C96B]">Deduct from Wallet</h5>
                                 <span className="text-[10px] font-mono text-slate-500 shrink-0">Bal: ₦{userProfile.walletBalance.toLocaleString()}</span>
                               </div>
                               <p className="text-xs text-slate-500 leading-relaxed">
@@ -4233,13 +4425,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <button
                             type="button"
                             onClick={handleSelectCashPayment}
-                            className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
+                            className="p-4 border border-slate-200 hover:border-[#46C96B] bg-slate-50 hover:bg-[#46C96B]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
                           >
                             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
                               <Wallet className="w-5 h-5" />
                             </div>
                             <div className="space-y-1">
-                              <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Pay physically with Cash</h5>
+                              <h5 className="font-black text-sm text-[#46C96B] group-hover:text-[#46C96B]">Pay physically with Cash</h5>
                               <p className="text-xs text-slate-500 leading-relaxed">
                                 Hand over physical cash of {currencySymbol}{activeReq.cost} to the driver after you safely reach your destination.
                               </p>
@@ -4250,13 +4442,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <button
                             type="button"
                             onClick={() => setPaymentStep('transfer_details')}
-                            className="p-4 border border-slate-200 hover:border-[#00875A] bg-slate-50 hover:bg-[#00875A]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
+                            className="p-4 border border-slate-200 hover:border-[#46C96B] bg-slate-50 hover:bg-[#46C96B]/5 rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-start gap-3.5 group w-full text-left"
                           >
-                            <div className="w-10 h-10 rounded-xl bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] flex items-center justify-center shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-[#46C96B]/10 border border-[#46C96B]/20 text-[#46C96B] flex items-center justify-center shrink-0">
                               <ArrowRightLeft className="w-5 h-5" />
                             </div>
                             <div className="space-y-1">
-                              <h5 className="font-black text-sm text-[#00875A] group-hover:text-[#00875A]">Instant Bank Transfer</h5>
+                              <h5 className="font-black text-sm text-[#46C96B] group-hover:text-[#46C96B]">Instant Bank Transfer</h5>
                               <p className="text-xs text-slate-500 leading-relaxed">
                                 Transfer to the driver's university account. You'll get the bank details and can launch your bank app with copied details.
                               </p>
@@ -4267,9 +4459,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     ) : (
                       // Transfer Details Step
                       <div className="space-y-5">
-                        <div className="bg-[#00875A]/5 border border-[#00875A]/15 p-4 rounded-2xl text-center">
+                        <div className="bg-[#46C96B]/5 border border-[#46C96B]/15 p-4 rounded-2xl text-center">
                           <span className="text-xs text-slate-500 font-bold block uppercase tracking-wider">Amount to Transfer</span>
-                          <span className="text-3xl font-black text-[#00875A] tracking-tight">{currencySymbol}{activeReq.cost}</span>
+                          <span className="text-3xl font-black text-[#46C96B] tracking-tight">{currencySymbol}{activeReq.cost}</span>
                         </div>
 
                         {/* Bank Details Display */}
@@ -4286,7 +4478,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <div className="flex justify-between items-center text-xs">
                             <span className="text-slate-500 font-semibold">Account Number:</span>
                             <div className="flex items-center gap-2">
-                              <span className="font-mono font-black text-[#00875A] text-sm tracking-wider">{getDriverBankDetails().accountNumber}</span>
+                              <span className="font-mono font-black text-[#46C96B] text-sm tracking-wider">{getDriverBankDetails().accountNumber}</span>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4294,7 +4486,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   setRideTransferCopied(true);
                                   setTimeout(() => setRideTransferCopied(false), 2000);
                                 }}
-                                className="p-1 hover:bg-[#00875A]/10 text-[#00875A] rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                                className="p-1 hover:bg-[#46C96B]/10 text-[#46C96B] rounded-lg border border-slate-200 transition-colors cursor-pointer"
                                 title="Copy account number"
                               >
                                 {rideTransferCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -4315,7 +4507,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             type="button"
                             onClick={handleCopyDetailsAndRedirect}
                             disabled={isSimulatingRedirect}
-                            className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                           >
                             {isSimulatingRedirect ? (
                               <>
@@ -4375,7 +4567,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             transition={{ duration: 0.05, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">STUDENT PROFILE</h1>
+          <h1 className="text-2xl font-black text-[#46C96B] tracking-tight">STUDENT PROFILE</h1>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
@@ -4388,7 +4580,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               />
               <div className="text-center sm:text-left space-y-1">
                 <h3 className="text-lg font-black text-slate-800">{userProfile.name}</h3>
-                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-[#00875A]/10 border border-[#00875A]/20 text-[#00875A] inline-block font-mono tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-[#46C96B]/10 border border-[#46C96B]/20 text-[#46C96B] inline-block font-mono tracking-wider">
                   Verified Commuter
                 </span>
                 <p className="text-xs text-gray-500 font-mono">Joined: June 2026</p>
@@ -4441,7 +4633,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               <button
                 type="submit"
-                className="bg-[#00875A] hover:bg-[#00875A] text-slate-950 font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                className="bg-[#46C96B] hover:bg-[#46C96B] text-slate-950 font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
               >
                 Save Profile Details
               </button>
@@ -4461,7 +4653,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             transition={{ duration: 0.05, ease: 'easeInOut' }}
             className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl"
           >
-          <h1 className="text-2xl font-black text-[#00875A] tracking-tight">APP SETTINGS</h1>
+          <h1 className="text-2xl font-black text-[#46C96B] tracking-tight">APP SETTINGS</h1>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-6">
             
@@ -4508,7 +4700,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       </div>
                     </div>
 
-                    <label className="w-full h-10 bg-white border border-slate-200 hover:border-[#00875A] rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs">
+                    <label className="w-full h-10 bg-white border border-slate-200 hover:border-[#46C96B] rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs">
                       <UploadCloud className="w-4 h-4 text-slate-500" />
                       <span>{uploadingAvatar ? 'Uploading...' : 'Choose Picture'}</span>
                       <input 
@@ -4525,7 +4717,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider border-b border-slate-200 pb-2">Transit Preferences</h3>
+              <h3 className="text-xs font-black text-[#46C96B] uppercase tracking-wider border-b border-slate-200 pb-2">Transit Preferences</h3>
               
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
@@ -4539,7 +4731,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={() => setSafetySharing(!safetySharing)} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
                 </label>
               </div>
 
@@ -4555,7 +4747,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={onToggleDarkMode} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
                 </label>
               </div>
 
@@ -4571,7 +4763,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={() => setSameGenderOnly(!sameGenderOnly)} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
                 </label>
               </div>
 
@@ -4587,7 +4779,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onChange={() => setLowBalanceAlert(!lowBalanceAlert)} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
                 </label>
               </div>
 
@@ -4607,14 +4799,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     }} 
                     className="sr-only peer" 
                   />
-                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00875A]"></div>
+                  <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
                 </label>
               </div>
             </div>
 
             {/* Account deletion */}
             <div className="space-y-4 pt-4 border-t border-slate-200">
-              <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider block">Danger Zone</h3>
+              <h3 className="text-xs font-black text-[#46C96B] uppercase tracking-wider block">Danger Zone</h3>
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 Permanently delete your university commuter account. This clears your digital wallet balance, trips ledger, safety ratings, and registrar linkages completely. This action is irreversible.
               </p>
@@ -4625,7 +4817,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     onDeleteAccount();
                   }
                 }}
-                className="bg-[#00875A]/10 hover:bg-red-100 text-[#00875A] border border-[#00875A]/20 font-black py-3 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
+                className="bg-[#46C96B]/10 hover:bg-red-100 text-[#46C96B] border border-[#46C96B]/20 font-black py-3 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
               >
                 Delete Transit Account
               </button>
@@ -4659,7 +4851,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
               {/* Title & Description */}
               <div className="text-center mb-6">
-                <h3 className="text-xl font-black text-[#00875A] tracking-tight">Confirm Seat Join</h3>
+                <h3 className="text-xl font-black text-[#46C96B] tracking-tight">Confirm Seat Join</h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Complete your pool join before the driver matching window closes!
                 </p>
@@ -4684,7 +4876,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Route */}
                 <div className="space-y-1 text-xs text-slate-700">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#00875A]"></span>
+                    <span className="w-2 h-2 rounded-full bg-[#46C96B]"></span>
                     <span className="font-semibold">Pickup: <span className="font-bold text-slate-800">{getStopName(checkoutPool.pickupId)}</span></span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -4697,7 +4889,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 <div className="flex justify-between items-center pt-3 border-t border-slate-200/60">
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Est. Split Price</span>
-                    <span className="text-lg font-mono font-black text-[#00875A]">
+                    <span className="text-lg font-mono font-black text-[#46C96B]">
                       {currencySymbol}{(() => {
                         const vCfg = VEHICLES.find(v => v.type === checkoutPool.vehicleType) || VEHICLES[0];
                         return Math.round(vCfg.soloPrice / (checkoutPool.currentRiders.length + 1));
@@ -4738,7 +4930,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     handleJoinPool(checkoutPool);
                     setCheckoutPool(null);
                   }}
-                  className="w-full bg-[#00875A] hover:bg-[#00875A]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  className="w-full bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                 >
                   Confirm & Join
                 </button>
@@ -4775,7 +4967,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               className={`relative w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl border cursor-grab active:cursor-grabbing transition-colors duration-200 ${
                 isChatOverlayOpen 
                   ? 'bg-rose-600 border-rose-500 hover:bg-rose-700' 
-                  : 'bg-[#00875A] border-[#00875A]/20 hover:bg-[#00875A]/95'
+                  : 'bg-[#46C96B] border-[#46C96B]/20 hover:bg-[#46C96B]/95'
               }`}
               style={{ boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)' }}
               id="floating-messenger-bubble"
@@ -4822,7 +5014,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   id="floating-messenger-panel"
                 >
                   {/* Header */}
-                  <div className="p-4 bg-[#00875A] text-white flex items-center justify-between">
+                  <div className="p-4 bg-[#46C96B] text-white flex items-center justify-between">
                     <div className="flex items-center space-x-2.5">
                       <div className="relative">
                         <img 
@@ -4873,9 +5065,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           </div>
                           <div className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed shadow-2xs ${
                             msg.sender === 'System' 
-                              ? 'bg-[#00875A]/5 text-slate-600 border border-slate-150 italic text-center w-full font-mono'
+                              ? 'bg-[#46C96B]/5 text-slate-600 border border-slate-150 italic text-center w-full font-mono'
                               : msg.isUser 
-                                ? 'bg-[#00875A] text-white rounded-tr-none' 
+                                ? 'bg-[#46C96B] text-white rounded-tr-none' 
                                 : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
                           }`}>
                             {msg.text}
@@ -4898,7 +5090,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             floatingChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
                           }, 100);
                         }}
-                        className="px-2.5 py-1 bg-slate-50 hover:bg-[#00875A] border border-slate-150 text-slate-500 hover:text-white rounded-lg text-[9px] font-bold transition-all shrink-0 cursor-pointer"
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-[#46C96B] border border-slate-150 text-slate-500 hover:text-white rounded-lg text-[9px] font-bold transition-all shrink-0 cursor-pointer"
                       >
                         {phrase}
                       </button>
@@ -4921,12 +5113,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       placeholder="Type a message..."
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#00875A] focus:ring-1 focus:ring-[#00875A]/20"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#46C96B] focus:ring-1 focus:ring-[#46C96B]/20"
                     />
                     <button
                       type="submit"
                       disabled={!chatInput.trim()}
-                      className="p-2 bg-[#00875A] hover:bg-[#00875A]/90 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-xl transition duration-150 cursor-pointer shrink-0"
+                      className="p-2 bg-[#46C96B] hover:bg-[#46C96B]/90 disabled:bg-slate-100 text-white disabled:text-slate-400 rounded-xl transition duration-150 cursor-pointer shrink-0"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>

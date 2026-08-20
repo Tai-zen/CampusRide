@@ -1,0 +1,160 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-08-20T11:44:11Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 4666711413,
+  "lat": 6.6699431,
+  "lon": 3.1582986,
+  "tags": {
+    "amenity": "place_of_worship",
+    "name": "Covenant University Chapel",
+    "religion": "christian"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711417,
+  "lat": 6.6696074,
+  "lon": 3.1555174,
+  "tags": {
+    "name": "Esther Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711418,
+  "lat": 6.6684352,
+  "lon": 3.1545196,
+  "tags": {
+    "name": "Peter Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711420,
+  "lat": 6.6692875,
+  "lon": 3.1533211,
+  "tags": {
+    "name": "John Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711421,
+  "lat": 6.6705306,
+  "lon": 3.1537974,
+  "tags": {
+    "name": "Paul Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711422,
+  "lat": 6.6706883,
+  "lon": 3.1530596,
+  "tags": {
+    "name": "Joseph Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711423,
+  "lat": 6.6718015,
+  "lon": 3.1525739,
+  "tags": {
+    "name": "Daniel Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711425,
+  "lat": 6.6722004,
+  "lon": 3.1555907,
+  "tags": {
+    "name": "Lydia Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711427,
+  "lat": 6.6718757,
+  "lon": 3.1569450,
+  "tags": {
+    "name": "Dorcas Hall",
+    "tourism": "hostel"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711428,
+  "lat": 6.6694081,
+  "lon": 3.1540869,
+  "tags": {
+    "amenity": "cafe",
+    "name": "Cafeteria 1"
+  }
+},
+{
+  "type": "node",
+  "id": 4666711430,
+  "lat": 6.6725437,
+  "lon": 3.1619045,
+  "tags": {
+    "amenity": "cafe",
+    "name": "Cafeteria 2"
+  }
+},
+{
+  "type": "node",
+  "id": 4666718949,
+  "lat": 6.6714760,
+  "lon": 3.1626496,
+  "tags": {
+    "name": "Covenant University Guest House",
+    "tourism": "hotel"
+  }
+},
+{
+  "type": "node",
+  "id": 8533320900,
+  "lat": 6.6704700,
+  "lon": 3.1575800,
+  "tags": {
+    "Latitude": "6.67047",
+    "Longitude": "3.15758",
+    "amenity": "school",
+    "name": "Local Government Primary School, Orogan-Adewolu"
+  }
+},
+{
+  "type": "node",
+  "id": 8533569945,
+  "lat": 6.6705000,
+  "lon": 3.1576000,
+  "tags": {
+    "Latitude": "6.6705",
+    "Longitude": "3.1576",
+    "amenity": "school",
+    "min_age": "3yrs",
+    "name": "Africa Church Primary School, Meesan Ota",
+    "opening_hours": "Mo-Fr 07:45 - 4:00",
+    "wheelchair": "yes"
+  }
+}
+
+  ]
+}

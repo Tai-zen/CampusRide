@@ -1113,7 +1113,7 @@ export default function App() {
   };
 
   return (
-    <div id="application-layout-context" className={`flex flex-col md:flex-row min-h-screen bg-[#F9FAFB] ${currentRole === 'driver' ? 'text-[#001058]' : 'text-[#00875A]'} font-sans antialiased`}>
+    <div id="application-layout-context" className={`flex flex-col md:flex-row min-h-screen bg-[#F2F2F2] ${currentRole === 'driver' ? 'text-[#001058]' : 'text-[#46C96B]'} font-sans antialiased`}>
       
       {/* Sidebar Navigation */}
       <Sidebar 

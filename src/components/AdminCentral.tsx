@@ -835,12 +835,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
   });
 
   return (
-    <div id="admin-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#F9FAFB]">
+    <div id="admin-portal-viewport" className="flex-1 overflow-y-auto px-4 py-6 md:p-8 bg-[#F2F2F2]">
       
       {/* Header operations central */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 border-b border-gray-100 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#00875A] tracking-tight">
+          <h1 className="text-2xl font-extrabold text-[#46C96B] tracking-tight">
             {activeView === 'admin_operations' && 'Live Despatch Operations'}
             {activeView === 'admin_users' && 'User Directory & Management'}
             {activeView === 'admin_analytics' && 'Ridership Performance Analytics'}
@@ -854,7 +854,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-              className="p-2.5 text-gray-500 hover:text-[#00875A] hover:bg-white border border-gray-150 rounded-xl transition duration-150 relative cursor-pointer shadow-sm bg-white flex items-center justify-center"
+              className="p-2.5 text-gray-500 hover:text-[#46C96B] hover:bg-white border border-gray-150 rounded-xl transition duration-150 relative cursor-pointer shadow-sm bg-white flex items-center justify-center"
               title="Admin Alerts & Notifications"
             >
               <Bell className="w-5 h-5" />
@@ -877,8 +877,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                 >
                   <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                     <div className="flex items-center space-x-2">
-                      <BellRing className="w-4 h-4 text-[#00875A]" />
-                      <h3 className="text-xs font-black text-[#00875A] uppercase tracking-wider">Admin Notifications</h3>
+                      <BellRing className="w-4 h-4 text-[#46C96B]" />
+                      <h3 className="text-xs font-black text-[#46C96B] uppercase tracking-wider">Admin Notifications</h3>
                     </div>
                     {notifications.length > 0 && (
                       <button
@@ -886,7 +886,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           onMarkNotificationsRead?.();
                           alert('All admin alerts marked as read.');
                         }}
-                        className="text-[10px] text-[#00875A] hover:underline font-bold"
+                        className="text-[10px] text-[#46C96B] hover:underline font-bold"
                       >
                         Mark read
                       </button>
@@ -898,7 +898,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       notifications.map((notif, idx) => (
                         <div 
                           key={idx} 
-                          className={`p-3.5 transition-colors ${notif.isRead ? 'bg-white opacity-70' : 'bg-[#00875A]/5'}`}
+                          className={`p-3.5 transition-colors ${notif.isRead ? 'bg-white opacity-70' : 'bg-[#46C96B]/5'}`}
                         >
                           <div className="flex items-start justify-between gap-2.5">
                             <div className="text-left min-w-0 flex-1">
@@ -958,11 +958,11 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               <div className="min-w-0 flex-1 mr-2 text-left">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono truncate">Active Campus Rides</span>
                 <span className="text-2xl font-extrabold text-primary block my-0.5">{SYSTEM_KPIS.activeRides}</span>
-                <span className="text-[9px] text-[#00875A] font-bold bg-[#00875A]/10 px-2.5 py-0.5 rounded-full inline-block">
+                <span className="text-[9px] text-[#46C96B] font-bold bg-[#46C96B]/10 px-2.5 py-0.5 rounded-full inline-block">
                   Within nominal limit
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#F9FAFB] text-primary flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[#F2F2F2] text-primary flex items-center justify-center shrink-0">
                 <Activity className="w-5 h-5 animate-pulse" />
               </div>
             </div>
@@ -970,12 +970,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between min-w-0">
               <div className="min-w-0 flex-1 mr-2 text-left">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono truncate">Idle Peer Drivers</span>
-                <span className="text-2xl font-extrabold text-[#00875A] block my-0.5">{SYSTEM_KPIS.idleDrivers}</span>
-                <span className="text-[9px] text-[#00875A] font-bold bg-[#F9FAFB]/35 px-2.5 py-0.5 rounded-full inline-block">
+                <span className="text-2xl font-extrabold text-[#46C96B] block my-0.5">{SYSTEM_KPIS.idleDrivers}</span>
+                <span className="text-[9px] text-[#46C96B] font-bold bg-[#F2F2F2]/35 px-2.5 py-0.5 rounded-full inline-block">
                   Ready in queue
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#00875A]/10 text-[#00875A] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[#46C96B]/10 text-[#46C96B] flex items-center justify-center shrink-0">
                 <Users className="w-5 h-5" />
               </div>
             </div>
@@ -983,22 +983,22 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between min-w-0">
               <div className="min-w-0 flex-1 mr-2 text-left">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block font-mono truncate">Revenue Today</span>
-                <span className="text-2xl font-extrabold text-[#00875A] block my-0.5">₦{SYSTEM_KPIS.revenueToday}</span>
-                <span className="text-[9px] text-[#00875A] font-bold bg-[#00875A]/10 px-2.5 py-0.5 rounded-full inline-block">
+                <span className="text-2xl font-extrabold text-[#46C96B] block my-0.5">₦{SYSTEM_KPIS.revenueToday}</span>
+                <span className="text-[9px] text-[#46C96B] font-bold bg-[#46C96B]/10 px-2.5 py-0.5 rounded-full inline-block">
                   +14% vs weekday avg
                 </span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-[#00875A]/10 text-[#00875A] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[#46C96B]/10 text-[#46C96B] flex items-center justify-center shrink-0">
                 <span className="text-lg font-black font-sans leading-none">₦</span>
               </div>
             </div>
 
             {/* Incidents KPI with dynamic trigger */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:bg-[#00875A]/10/20 transition group min-w-0">
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center justify-between cursor-pointer hover:bg-[#46C96B]/10/20 transition group min-w-0">
               <div className="min-w-0 flex-1 mr-2 text-left">
                 <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider block font-mono truncate">Reported Safety Flags</span>
-                <span className="text-2xl font-extrabold text-[#00875A] block my-0.5">{incidentsCount}</span>
-                <span className="text-[9px] text-red-650 font-bold bg-[#00875A]/10 px-2.5 py-0.5 rounded-full inline-block group-hover:bg-red-100/50">
+                <span className="text-2xl font-extrabold text-[#46C96B] block my-0.5">{incidentsCount}</span>
+                <span className="text-[9px] text-red-650 font-bold bg-[#46C96B]/10 px-2.5 py-0.5 rounded-full inline-block group-hover:bg-red-100/50">
                   Click to resolve one
                 </span>
               </div>
@@ -1012,7 +1012,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     alert('Congratulations! Zero outstanding active incident reports.');
                   }
                 }}
-                className="w-10 h-10 rounded-xl bg-[#00875A]/10 text-[#00875A] flex items-center justify-center hover:bg-red-100 transition shrink-0"
+                className="w-10 h-10 rounded-xl bg-[#46C96B]/10 text-[#46C96B] flex items-center justify-center hover:bg-red-100 transition shrink-0"
               >
                 <AlertTriangle className="w-5 h-5" />
               </button>
@@ -1025,7 +1025,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="lg:col-span-8 bg-white rounded-3xl p-5 border border-gray-100 shadow-sm overflow-hidden space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-extrabold text-[#00875A]">Live Operations Layout Map</h3>
+                  <h3 className="text-sm font-extrabold text-[#46C96B]">Live Operations Layout Map</h3>
                   <p className="text-xs text-gray-400">Traces active peer vehicle coordinate coordinates on a real university campus base.</p>
                 </div>
                 <span className="bg-primary/10 text-primary text-[10px] font-bold px-2.5 py-1 rounded font-mono uppercase">
@@ -1046,17 +1046,17 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                 <div className="absolute top-[80px] left-[150px] bg-primary text-white p-1 rounded-full border border-white shrink-0 shadow animate-bounce">
                   <Activity className="w-3.5 h-3.5" />
                 </div>
-                <div className="absolute top-[160px] left-[380px] bg-[#00875A] text-white p-1 rounded-full border border-white shrink-0 shadow animate-pulse">
+                <div className="absolute top-[160px] left-[380px] bg-[#46C96B] text-white p-1 rounded-full border border-white shrink-0 shadow animate-pulse">
                   <Users className="w-3.5 h-3.5" />
                 </div>
-                <div className="absolute top-[210px] left-[490px] bg-[#00875A] text-white p-1 rounded-full border border-white shrink-0 shadow">
+                <div className="absolute top-[210px] left-[490px] bg-[#46C96B] text-white p-1 rounded-full border border-white shrink-0 shadow">
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </div>
 
-                <div className="absolute top-[50px] left-[162px] bg-[#00875A] text-[8px] text-white px-2 py-0.5 rounded shadow">
+                <div className="absolute top-[50px] left-[162px] bg-[#46C96B] text-[8px] text-white px-2 py-0.5 rounded shadow">
                   David Moore Camry • On Route
                 </div>
-                <div className="absolute top-[130px] left-[392px] bg-[#00875A] text-[8px] text-white px-2 py-0.5 rounded shadow">
+                <div className="absolute top-[130px] left-[392px] bg-[#46C96B] text-[8px] text-white px-2 py-0.5 rounded shadow">
                   Evelyn Carter Elantra • Pick Up
                 </div>
               </div>
@@ -1065,7 +1065,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             {/* Simulated Peak hours chart */}
             <div className="lg:col-span-4 bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
               <div>
-                <h3 className="text-sm font-extrabold text-[#00875A]">Peak Traffic Ride Hours</h3>
+                <h3 className="text-sm font-extrabold text-[#46C96B]">Peak Traffic Ride Hours</h3>
                 <p className="text-xs text-gray-400">Relative demands across class blocks of time.</p>
               </div>
 
@@ -1111,12 +1111,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     <div key={id} className="space-y-1 text-xs">
                       <div className="flex items-center justify-between text-[10px]">
                         <span className="font-semibold text-gray-600">{item.range}</span>
-                        <span className={`font-bold font-mono ${item.ratio >= 90 ? 'text-[#00875A]' : 'text-gray-500'}`}>{item.label}</span>
+                        <span className={`font-bold font-mono ${item.ratio >= 90 ? 'text-[#46C96B]' : 'text-gray-500'}`}>{item.label}</span>
                       </div>
                       {/* Progress tracking line */}
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div 
-                          className={`h-full rounded-full transition-all ${item.ratio >= 90 ? 'bg-[#00875A]' : item.ratio >= 80 ? 'bg-[#00875A]' : 'bg-primary'}`} 
+                          className={`h-full rounded-full transition-all ${item.ratio >= 90 ? 'bg-[#46C96B]' : item.ratio >= 80 ? 'bg-[#46C96B]' : 'bg-primary'}`} 
                           style={{ width: `${item.ratio}%` }}
                         ></div>
                       </div>
@@ -1131,7 +1131,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h3 className="text-base font-extrabold text-[#00875A]">Administrative Peer Roster</h3>
+                <h3 className="text-base font-extrabold text-[#46C96B]">Administrative Peer Roster</h3>
                 <p className="text-xs text-gray-400">Review currently online vehicles and update active operational status.</p>
               </div>
 
@@ -1145,7 +1145,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   value={driverSearch}
                   onChange={(e) => setDriverSearch(e.target.value)}
                   placeholder="Query driver name, vehicle..."
-                  className="w-full pl-9 pr-3 py-2 bg-[#F9FAFB] border border-gray-150 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#00875A]"
+                  className="w-full pl-9 pr-3 py-2 bg-[#F2F2F2] border border-gray-150 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary focus:bg-white text-[#46C96B]"
                 />
               </div>
             </div>
@@ -1175,7 +1175,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                             className="w-10 h-10 rounded-full object-cover border border-gray-200 shrink-0"
                           />
                           <div className="inline-block whitespace-normal break-words max-w-[110px]">
-                            <span className="font-bold text-[#00875A] block break-all">{drv.name}</span>
+                            <span className="font-bold text-[#46C96B] block break-all">{drv.name}</span>
                             <span className="font-mono text-[9px] text-[#737686] block break-all">{drv.id}</span>
                           </div>
                         </div>
@@ -1189,7 +1189,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       {/* Rating column */}
                       <td className="py-3 flex-1 min-w-[100px] inline-block whitespace-normal break-words">
                         <div className="inline-block whitespace-normal">
-                          <span className="font-mono font-bold text-[#00875A] block">★ {drv.rating ?? 5.0}</span>
+                          <span className="font-mono font-bold text-[#46C96B] block">★ {drv.rating ?? 5.0}</span>
                           <span className="text-[10px] text-gray-400 block font-semibold">{drv.ratingsCount ?? 0} reviews</span>
                         </div>
                       </td>
@@ -1208,9 +1208,9 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           <button
                             onClick={() => handleDriverStatusToggle(drv.id, drv.status)}
                             className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase tracking-wide border whitespace-normal break-words max-w-[110px] ${
-                              drv.status === 'On Trip' ? 'bg-[#F9FAFB] text-[#00875A] border-[#00875A]/20' :
-                              drv.status === 'Idle' ? 'bg-[#00875A]/10 text-[#00875A] border-sage-light' :
-                              drv.status === 'Break' ? 'bg-[#F9FAFB] text-[#00875A] border-[#00875A]/20' :
+                              drv.status === 'On Trip' ? 'bg-[#F2F2F2] text-[#46C96B] border-[#46C96B]/20' :
+                              drv.status === 'Idle' ? 'bg-[#46C96B]/10 text-[#46C96B] border-sage-light' :
+                              drv.status === 'Break' ? 'bg-[#F2F2F2] text-[#46C96B] border-[#46C96B]/20' :
                               'bg-gray-100 text-gray-500 border-gray-300'
                             }`}
                           >
@@ -1241,7 +1241,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-2xl p-4 border border-gray-150/80 shadow-sm flex items-center space-x-3.5">
-                <div className="p-2 rounded-xl bg-emerald-50 text-[#00875A] shrink-0">
+                <div className="p-2 rounded-xl bg-emerald-50 text-[#46C96B] shrink-0">
                   <Users className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
@@ -1251,12 +1251,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-gray-150/80 shadow-sm flex items-center space-x-3.5">
-                <div className="p-2 rounded-xl bg-emerald-50 text-[#00875A] shrink-0">
+                <div className="p-2 rounded-xl bg-emerald-50 text-[#46C96B] shrink-0">
                   <User className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Student Riders</p>
-                  <p className="text-lg font-extrabold text-[#00875A] leading-none mt-1">{studentCount}</p>
+                  <p className="text-lg font-extrabold text-[#46C96B] leading-none mt-1">{studentCount}</p>
                 </div>
               </div>
 
@@ -1271,12 +1271,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-gray-150/80 shadow-sm flex items-center space-x-3.5">
-                <div className="p-2 rounded-xl bg-emerald-50 text-[#00875A] shrink-0">
+                <div className="p-2 rounded-xl bg-emerald-50 text-[#46C96B] shrink-0">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Admins Authorized</p>
-                  <p className="text-lg font-extrabold text-[#00875A] leading-none mt-1">{adminCount}</p>
+                  <p className="text-lg font-extrabold text-[#46C96B] leading-none mt-1">{adminCount}</p>
                 </div>
               </div>
             </div>
@@ -1292,7 +1292,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     placeholder="Search users by name, email, credentials..."
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
-                    className="w-full bg-slate-50 border border-gray-200 rounded-xl py-2.5 pl-11 pr-4 text-xs font-medium text-gray-900 focus:outline-none focus:border-[#00875A] transition"
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl py-2.5 pl-11 pr-4 text-xs font-medium text-gray-900 focus:outline-none focus:border-[#46C96B] transition"
                   />
                 </div>
 
@@ -1300,7 +1300,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setShowAddDriverModal(true)}
-                    className="bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+                    className="bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>Add Verified Driver</span>
@@ -1316,7 +1316,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
                   <button
                     onClick={downloadDriversCSV}
-                    className="bg-emerald-50 hover:bg-emerald-100 text-[#00875A] font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition border border-emerald-150 cursor-pointer"
+                    className="bg-emerald-50 hover:bg-emerald-100 text-[#46C96B] font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition border border-emerald-150 cursor-pointer"
                     title="Export all verified drivers as CSV"
                   >
                     <Download className="w-4 h-4" />
@@ -1325,7 +1325,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
                   <button
                     onClick={downloadRidersCSV}
-                    className="bg-emerald-50 hover:bg-emerald-100 text-[#00875A] font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition border border-emerald-150 cursor-pointer"
+                    className="bg-emerald-50 hover:bg-emerald-100 text-[#46C96B] font-bold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 transition border border-emerald-150 cursor-pointer"
                     title="Export all student student riders as CSV"
                   >
                     <Download className="w-4 h-4" />
@@ -1347,12 +1347,12 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     onClick={() => setUserFilterRole(tab.id)}
                     className={`px-4 py-2 text-xs font-bold border-b-2 transition duration-200 cursor-pointer ${
                       userFilterRole === tab.id
-                        ? 'border-[#00875A] text-[#00875A]'
+                        ? 'border-[#46C96B] text-[#46C96B]'
                         : 'border-transparent text-gray-500 hover:text-gray-950'
                     }`}
                   >
                     {tab.label} <span className={`ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                      userFilterRole === tab.id ? 'bg-[#00875A]/15 text-[#00875A]' : 'bg-gray-100 text-gray-500'
+                      userFilterRole === tab.id ? 'bg-[#46C96B]/15 text-[#46C96B]' : 'bg-gray-100 text-gray-500'
                     }`}>{tab.count}</span>
                   </button>
                 ))}
@@ -1403,8 +1403,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                             {/* Role Badge */}
                             <td className="py-4 px-4">
                               {user.role === 'admin' && (
-                                <span className="bg-emerald-50 text-[#00875A] border border-emerald-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
-                                  <ShieldCheck className="w-3.5 h-3.5 text-[#00875A]" />
+                                <span className="bg-emerald-50 text-[#46C96B] border border-emerald-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-[#46C96B]" />
                                   <span>Administrator</span>
                                 </span>
                               )}
@@ -1415,8 +1415,8 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                                 </span>
                               )}
                               {(user.role === 'student' || user.role === 'rider') && (
-                                <span className="bg-emerald-50 text-[#00875A] border border-emerald-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
-                                  <User className="w-3.5 h-3.5 text-[#00875A]" />
+                                <span className="bg-emerald-50 text-[#46C96B] border border-emerald-150 px-2.5 py-1 rounded-lg text-[10px] font-bold inline-flex items-center space-x-1">
+                                  <User className="w-3.5 h-3.5 text-[#46C96B]" />
                                   <span>Student Rider</span>
                                 </span>
                               )}
@@ -1476,10 +1476,10 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                                 {user.role !== 'admin' ? (
                                   <button
                                     onClick={() => handlePromoteToAdmin(user)}
-                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#00875A] border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer"
+                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#46C96B] border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer"
                                     title="Promote user to Administrator"
                                   >
-                                    <ShieldCheck className="w-3.5 h-3.5 text-[#00875A]" />
+                                    <ShieldCheck className="w-3.5 h-3.5 text-[#46C96B]" />
                                     <span>Make Admin</span>
                                   </button>
                                 ) : (
@@ -1537,13 +1537,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400 font-semibold text-[10px] uppercase">Authorized Role:</span>
                             {user.role === 'admin' && (
-                              <span className="text-[#00875A] font-bold text-[10px]">Administrator</span>
+                              <span className="text-[#46C96B] font-bold text-[10px]">Administrator</span>
                             )}
                             {user.role === 'driver' && (
                               <span className="text-[#001058] font-bold text-[10px]">Verified Driver</span>
                             )}
                             {(user.role === 'student' || user.role === 'rider') && (
-                              <span className="text-[#00875A] font-bold text-[10px]">Student Rider</span>
+                              <span className="text-[#46C96B] font-bold text-[10px]">Student Rider</span>
                             )}
                           </div>
 
@@ -1583,9 +1583,9 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                             {user.role !== 'admin' ? (
                               <button
                                 onClick={() => handlePromoteToAdmin(user)}
-                                className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#00875A] border border-emerald-200 rounded-lg text-xs font-extrabold flex items-center gap-1 transition"
+                                className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#46C96B] border border-emerald-200 rounded-lg text-xs font-extrabold flex items-center gap-1 transition"
                               >
-                                <ShieldCheck className="w-3.5 h-3.5 text-[#00875A]" />
+                                <ShieldCheck className="w-3.5 h-3.5 text-[#46C96B]" />
                                 <span>Make Admin</span>
                               </button>
                             ) : (
@@ -1624,13 +1624,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
               <div>
-                <h3 className="text-lg font-extrabold text-[#00875A]">System Ridership Analytics</h3>
+                <h3 className="text-lg font-extrabold text-[#46C96B]">System Ridership Analytics</h3>
                 <p className="text-xs text-gray-400">Aggregated digital data metrics synced from registrar logs.</p>
               </div>
 
               <button
                 onClick={() => alert('PDF audit logs downloaded successfully.')}
-                className="px-4 py-2 bg-[#00875A] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
+                className="px-4 py-2 bg-[#46C96B] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
               >
                 Export Audit Itinerary
               </button>
@@ -1640,13 +1640,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest font-mono">Total Trips Logged</span>
-                <span className="text-3xl font-extrabold text-[#00875A] block">{totalTripsLogged.toLocaleString()}</span>
+                <span className="text-3xl font-extrabold text-[#46C96B] block">{totalTripsLogged.toLocaleString()}</span>
                 <p className="text-[10px] text-gray-500 font-medium">Accumulating since September term.</p>
               </div>
 
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest font-mono">Keke & Shuttle Ratio</span>
-                <span className="text-3xl font-extrabold text-[#00875A] block">{kekeShuttleRatio}</span>
+                <span className="text-3xl font-extrabold text-[#46C96B] block">{kekeShuttleRatio}</span>
                 <p className="text-[10px] text-gray-500 font-medium">Riders ordering Keke or Shuttle categories.</p>
               </div>
 
@@ -1674,7 +1674,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4 gap-4">
                 <div>
-                  <h3 className="text-base font-extrabold text-[#00875A]">Driver Verification Queue</h3>
+                  <h3 className="text-base font-extrabold text-[#46C96B]">Driver Verification Queue</h3>
                   <p className="text-xs text-gray-400">
                     Review and approve submitted credentials for new peer drivers to activate their transit authorization.
                   </p>
@@ -1702,7 +1702,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   {pendingDrivers.map((driver) => (
                     <div 
                       key={driver.id} 
-                      className="bg-[#F9FAFB] rounded-2xl p-5 border border-gray-200 shadow-xs hover:border-[#00875A]/20 transition flex flex-col justify-between"
+                      className="bg-[#F2F2F2] rounded-2xl p-5 border border-gray-200 shadow-xs hover:border-[#46C96B]/20 transition flex flex-col justify-between"
                     >
                       <div>
                         {/* Upper Details */}
@@ -1712,7 +1712,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                               {driver.name.charAt(0)}
                             </div>
                             <div className="min-w-0">
-                              <h4 className="text-sm font-extrabold text-[#00875A] truncate">{driver.name}</h4>
+                              <h4 className="text-sm font-extrabold text-[#46C96B] truncate">{driver.name}</h4>
                               <p className="text-[11px] font-mono text-gray-500 truncate">{driver.email}</p>
                             </div>
                           </div>
@@ -1787,7 +1787,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                           value={commentsMap[driver.id] || ''}
                           onChange={(e) => setCommentsMap({ ...commentsMap, [driver.id]: e.target.value })}
                           placeholder="Provide reasons for rejection or instructions for approved drivers..."
-                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#00875A] focus:border-[#00875A] transition resize-none placeholder-gray-400 font-sans"
+                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#46C96B] focus:border-[#46C96B] transition resize-none placeholder-gray-400 font-sans"
                         />
                       </div>
 
@@ -1926,7 +1926,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                         {complaint.status !== 'resolved' && (
                           <button
                             onClick={() => handleResolveComplaint(complaint.id)}
-                            className="bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold py-2 px-3.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition duration-150 cursor-pointer"
+                            className="bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold py-2 px-3.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition duration-150 cursor-pointer"
                           >
                             <CheckCircle className="w-4 h-4 text-emerald-100" />
                             <span>Mark Resolved</span>
@@ -1960,7 +1960,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             className="space-y-6"
           >
             {/* Top Overview Banner */}
-            <div className="bg-[#00875A] rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
+            <div className="bg-[#46C96B] rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
               <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
               <div className="relative z-10 space-y-2">
                 <div className="flex items-center space-x-2">
@@ -1981,7 +1981,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-3.5">
                   <div className="flex items-center space-x-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center font-bold">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#46C96B] flex items-center justify-center font-bold">
                       <BellRing className="w-5 h-5" />
                     </div>
                     <div>
@@ -2008,7 +2008,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   <div className="bg-slate-50 p-3.5 rounded-2xl border border-gray-150 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <Smartphone className="w-4 h-4 text-[#00875A]" />
+                        <Smartphone className="w-4 h-4 text-[#46C96B]" />
                         Desktop Web Push Status:
                       </span>
                       <span className="font-mono text-xs font-black text-slate-900 uppercase">
@@ -2020,7 +2020,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   <div className="flex flex-col sm:flex-row gap-2 pt-1">
                     <button
                       onClick={handleRequestDesktopPermission}
-                      className="flex-1 py-2.5 px-4 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
+                      className="flex-1 py-2.5 px-4 bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
                     >
                       <Bell className="w-4 h-4" />
                       <span>{desktopNotifPermission === 'granted' ? 'Re-Verify Desktop Alerts' : 'Enable Outside Browser Alerts'}</span>
@@ -2041,7 +2041,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-3.5">
                   <div className="flex items-center space-x-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center font-bold">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#46C96B] flex items-center justify-center font-bold">
                       <Volume2 className="w-5 h-5" />
                     </div>
                     <div>
@@ -2052,7 +2052,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   <button
                     onClick={() => setSoundAlertsEnabled(!soundAlertsEnabled)}
                     className={`p-1.5 rounded-xl transition cursor-pointer ${
-                      soundAlertsEnabled ? 'bg-emerald-100 text-[#00875A]' : 'bg-gray-100 text-gray-400'
+                      soundAlertsEnabled ? 'bg-emerald-100 text-[#46C96B]' : 'bg-gray-100 text-gray-400'
                     }`}
                   >
                     {soundAlertsEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
@@ -2082,7 +2082,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4 gap-3">
                 <div>
                   <div className="flex items-center space-x-2">
-                    <ShieldCheck className="w-5 h-5 text-[#00875A]" />
+                    <ShieldCheck className="w-5 h-5 text-[#46C96B]" />
                     <h3 className="text-base font-extrabold text-slate-900">Administrator Privileges & Staff Roster</h3>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">
@@ -2092,7 +2092,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
 
                 <button
                   onClick={() => setShowAddAdminModal(true)}
-                  className="px-4 py-2.5 bg-[#00875A] hover:bg-[#00875A]/90 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer shrink-0"
+                  className="px-4 py-2.5 bg-[#46C96B] hover:bg-[#46C96B]/90 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer shrink-0"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Register New Admin</span>
@@ -2112,13 +2112,13 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       className="p-4 bg-slate-50/80 rounded-2xl border border-gray-200/80 flex items-center justify-between"
                     >
                       <div className="flex items-center space-x-3 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#00875A] font-black flex items-center justify-center text-sm border border-emerald-200 shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#46C96B] font-black flex items-center justify-center text-sm border border-emerald-200 shrink-0">
                           {adminUser.name ? adminUser.name.charAt(0) : 'A'}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center space-x-1.5">
                             <h4 className="text-xs font-extrabold text-slate-900 truncate">{adminUser.name}</h4>
-                            <span className="px-1.5 py-0.5 bg-emerald-100 text-[#00875A] rounded text-[9px] font-extrabold font-mono uppercase">
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-[#46C96B] rounded text-[9px] font-extrabold font-mono uppercase">
                               Admin
                             </span>
                           </div>
@@ -2151,7 +2151,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   {allUsers.filter(u => u.role !== 'admin').slice(0, 6).map((candidate) => (
                     <div 
                       key={candidate.id}
-                      className="p-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between hover:border-[#00875A]/40 transition"
+                      className="p-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between hover:border-[#46C96B]/40 transition"
                     >
                       <div className="min-w-0 pr-2">
                         <p className="text-xs font-bold text-gray-800 truncate">{candidate.name}</p>
@@ -2159,7 +2159,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       </div>
                       <button
                         onClick={() => handlePromoteToAdmin(candidate)}
-                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#00875A] border border-emerald-200 rounded-lg text-[10px] font-extrabold shrink-0 transition cursor-pointer"
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#46C96B] border border-emerald-200 rounded-lg text-[10px] font-extrabold shrink-0 transition cursor-pointer"
                       >
                         + Make Admin
                       </button>
@@ -2173,7 +2173,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3.5">
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#46C96B] flex items-center justify-center font-bold">
                     <Sliders className="w-5 h-5" />
                   </div>
                   <div>
@@ -2181,7 +2181,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     <p className="text-[11px] text-gray-400">Automated matching radii, pricing models, and system triggers</p>
                   </div>
                 </div>
-                <span className="text-xs font-bold font-mono text-[#00875A] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                <span className="text-xs font-bold font-mono text-[#46C96B] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                   {selectedSchool.name} Campus
                 </span>
               </div>
@@ -2338,7 +2338,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-700">Assigned Vehicle ID / Plate:</span>
-                    <span className="font-mono text-[#00875A] font-extrabold">{selectedLicenseDriver.vehicleId || '001'} • {selectedLicenseDriver.plateNumber}</span>
+                    <span className="font-mono text-[#46C96B] font-extrabold">{selectedLicenseDriver.vehicleId || '001'} • {selectedLicenseDriver.plateNumber}</span>
                   </div>
                 </div>
               </div>
@@ -2493,7 +2493,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     </p>
 
                     {approvedEmailDetails.comments && (
-                      <div className="bg-[#00875A]/5 rounded-2xl p-4 border border-[#00875A]/15 space-y-1">
+                      <div className="bg-[#46C96B]/5 rounded-2xl p-4 border border-[#46C96B]/15 space-y-1">
                         <span className="text-[10px] font-bold text-emerald-700 block font-mono uppercase">Administrator Verification Comments</span>
                         <p className="text-xs text-slate-700 italic leading-relaxed">
                           "{approvedEmailDetails.comments}"
@@ -2507,7 +2507,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 block font-mono uppercase">Certified Transit Vehicle</span>
-                        <span className="text-xs font-bold text-[#00875A]">{approvedEmailDetails.vehicle}</span>
+                        <span className="text-xs font-bold text-[#46C96B]">{approvedEmailDetails.vehicle}</span>
                       </div>
                     </div>
 
@@ -2533,7 +2533,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               <div className="bg-gray-50 border-t border-gray-150 px-5 py-4 flex items-center justify-end space-x-2">
                 <button
                   onClick={() => setApprovedEmailDetails(null)}
-                  className={`px-4.5 py-2.5 ${approvedEmailDetails.type === 'decline' ? 'bg-red-950 hover:bg-red-800' : 'bg-slate-900 hover:bg-[#00875A]'} text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer`}
+                  className={`px-4.5 py-2.5 ${approvedEmailDetails.type === 'decline' ? 'bg-red-950 hover:bg-red-800' : 'bg-slate-900 hover:bg-[#46C96B]'} text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer`}
                 >
                   <Send className="w-4 h-4" />
                   <span>Acknowledge & Close Mail Log</span>
@@ -2559,7 +2559,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
               exit={{ scale: 0.92, y: 20 }}
               className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-md w-full overflow-hidden"
             >
-              <div className="bg-[#00875A] text-white px-5 py-4 flex items-center justify-between">
+              <div className="bg-[#46C96B] text-white px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <UserPlus className="w-5 h-5 shrink-0" />
                   <span className="font-extrabold text-sm tracking-tight">Register Authorized Driver</span>
@@ -2587,7 +2587,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     placeholder="e.g. Kola Ibrahim"
                     value={newDriverName}
                     onChange={(e) => setNewDriverName(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#00875A] transition"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#46C96B] transition"
                   />
                 </div>
 
@@ -2600,7 +2600,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     placeholder="e.g. kolabrahim@campusride.edu"
                     value={newDriverEmail}
                     onChange={(e) => setNewDriverEmail(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#00875A] transition"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#46C96B] transition"
                   />
                 </div>
 
@@ -2614,7 +2614,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       placeholder="e.g. Piaggio Ape (Yellow)"
                       value={newDriverCarBrand}
                       onChange={(e) => setNewDriverCarBrand(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#00875A] transition"
+                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#46C96B] transition"
                     />
                   </div>
 
@@ -2624,7 +2624,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                     <select
                       value={newDriverCarType}
                       onChange={(e) => setNewDriverCarType(e.target.value as any)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#00875A] transition"
+                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#46C96B] transition"
                     >
                       <option value="keke">Keke (Tricycle)</option>
                       <option value="shuttle">Mini-Shuttle Bus</option>
@@ -2643,7 +2643,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       placeholder="e.g. LA-339-KK"
                       value={newDriverPlateNumber}
                       onChange={(e) => setNewDriverPlateNumber(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#00875A] transition font-mono uppercase"
+                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#46C96B] transition font-mono uppercase"
                     />
                   </div>
 
@@ -2655,7 +2655,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                       placeholder="e.g. TR-KEKE-552"
                       value={newDriverVehicleId}
                       onChange={(e) => setNewDriverVehicleId(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#00875A] transition font-mono uppercase"
+                      className="w-full text-xs p-2.5 bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#46C96B] transition font-mono uppercase"
                     />
                   </div>
                 </div>
@@ -2671,7 +2671,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-[#00875A] hover:bg-[#00875A]/90 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                    className="px-5 py-2 bg-[#46C96B] hover:bg-[#46C96B]/90 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 cursor-pointer"
                   >
                     <Check className="w-4 h-4" />
                     <span>Create & Approve</span>
@@ -2700,7 +2700,7 @@ export const AdminCentral: React.FC<AdminCentralProps> = ({
             >
               <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-5 h-5 shrink-0 text-[#00875A]" />
+                  <ShieldCheck className="w-5 h-5 shrink-0 text-[#46C96B]" />
                   <span className="font-extrabold text-sm tracking-tight">Add System Administrator</span>
                 </div>
                 <button

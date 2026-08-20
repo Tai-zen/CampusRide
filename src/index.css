@@ -3,20 +3,48 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-primary: #00875A;
+  --color-primary: #46C96B;
   --color-primary-container: #00A36C;
-  --color-surface: #F9FAFB;
-  --color-on-surface: #00875A;
-  --color-sage-dark: #00875A;
+  --color-surface: #F2F2F2;
+  --color-on-surface: #46C96B;
+  --color-sage-dark: #46C96B;
   --color-sage-medium: #00A36C;
   --color-sage-light: #D2F4E3;
-  --color-sage-bg: #F9FAFB;
+  --color-sage-bg: #F2F2F2;
   --color-orange-50: #EFF4FF;
   --color-orange-100: #E0E7FF;
   --color-orange-200: #C7D7FE;
   --color-orange-500: #001F87;
   --color-orange-600: #001058;
   --color-orange-700: #000B3E;
+  
+  /* Light mode custom color mapping for requested secondary colors */
+  --color-slate-50: #F2F2F2;
+  --color-slate-100: #F2F2F2;
+  --color-gray-50: #F2F2F2;
+  --color-gray-100: #F2F2F2;
+  
+  --color-emerald-50: #D0F2DA;
+  --color-emerald-100: #D0F2DA;
+  --color-emerald-500: #46C96B;
+  --color-emerald-600: #46C96B;
+  --color-green-50: #D0F2DA;
+  --color-green-500: #46C96B;
+  --color-green-600: #46C96B;
+  
+  --color-slate-400: #8E8E8E;
+  --color-slate-500: #8E8E8E;
+  --color-slate-600: #8E8E8E;
+  --color-gray-400: #8E8E8E;
+  --color-gray-500: #8E8E8E;
+  --color-gray-600: #8E8E8E;
+  
+  --color-slate-700: #232323;
+  --color-slate-800: #232323;
+  --color-slate-900: #232323;
+  --color-gray-700: #232323;
+  --color-gray-800: #232323;
+  --color-gray-900: #232323;
 }
 
 /* Custom CSS transitions for map line dash animations */
@@ -65,7 +93,7 @@ html {
 }
 
 /* ==========================================================================
-   HIGH FIDELITY GLOBAL DARK MODE STYLING OVERRIDES (HCI COMPLIANT)
+   HIGH FIDELITY GLOBAL DARK MODE STYLING OVERRIDES (PURE BLACK THEME)
    ========================================================================== */
 .dark {
   color-scheme: dark;
@@ -73,14 +101,17 @@ html {
 
 /* 
    1. LEVEL 0: Outer Layout Base Canvas 
-   Gorgeous deep slate-blue/navy base that conforms with professional dark mode designs.
+   True Deep Pure Black base
 */
+.dark,
+.dark body,
 .dark #application-layout-context,
 .dark #student-portal-viewport,
 .dark #driver-portal-viewport,
-.dark #admin-portal-viewport {
-  background-color: #0F172A !important; /* Deep dark slate-blue (Slate-900) */
-  color: #E2E8F0 !important;
+.dark #admin-portal-viewport,
+.dark main {
+  background-color: #000000 !important; /* Pure Black */
+  color: #E5E5E5 !important;
 }
 
 /* 
@@ -91,25 +122,26 @@ html {
 .dark #mobile-navigation-bar,
 .dark #mobile-bottom-navbar,
 .dark .bg-white {
-  background-color: #1E293B !important; /* Elegant navy-slate (Slate-800) */
-  border-color: #334155 !important; /* Slate-700 border */
+  background-color: #0D0D0D !important; /* Deep Onyx Black */
+  border-color: #222222 !important; /* Subtle dark border */
 }
 
 /* Sidebar navigation buttons active state */
 .dark #side-rail-navigation button.bg-slate-50,
 .dark #side-rail-navigation button.text-slate-900,
-.dark #side-rail-navigation .bg-[#00875A]\/10 {
-  background-color: #334155 !important; /* Slate-700 */
-  color: #F8FAFC !important;
+.dark #side-rail-navigation .bg-[#46C96B]\/10,
+.dark #side-rail-navigation .bg-[#001058]\/10 {
+  background-color: #1A1A1A !important;
+  color: #FFFFFF !important;
 }
 
 /* 
    3. LEVEL 2: Soft Inner Lists and Card Panels
-   Nested structures, status banners, input groups. Beautifully elevated from Slate-800.
+   Nested structures, status banners, input groups.
 */
 .dark .bg-slate-50,
 .dark .bg-gray-50,
-.dark .bg-[#F9FAFB],
+.dark .bg-[#F2F2F2],
 .dark .bg-slate-50\/50,
 .dark .bg-gray-50\/50,
 .dark .bg-slate-100,
@@ -117,9 +149,9 @@ html {
 .dark .bg-amber-500\/5,
 .dark .bg-orange-50\/50,
 .dark .bg-amber-50 {
-  background-color: #243248 !important; /* Comfortably lighter Slate-750 */
-  color: #CBD5E1 !important;
-  border-color: #334155 !important;
+  background-color: #141414 !important; /* Rich Dark Panel */
+  color: #D4D4D4 !important;
+  border-color: #222222 !important;
 }
 
 /* 
@@ -133,13 +165,13 @@ html {
 .dark .border-slate-100,
 .dark .border-slate-300,
 .dark .border-gray-300 {
-  border-color: #334155 !important;
+  border-color: #222222 !important;
 }
 
 /* 
    5. TYPOGRAPHY: Strict HCI Contrast Hierarchies 
 */
-/* Primary Headers (Highly crisp, comfortable display text) */
+/* Primary Headers (Highly crisp white display text) */
 .dark h1,
 .dark h2,
 .dark h3,
@@ -150,24 +182,24 @@ html {
 .dark .text-gray-900,
 .dark .text-slate-800,
 .dark .text-gray-800 {
-  color: #F8FAFC !important; /* Slate 50 */
+  color: #FFFFFF !important;
 }
 
-/* Secondary Copy (Muted body text to minimize glare) */
+/* Secondary Copy */
 .dark .text-slate-700,
 .dark .text-gray-700,
 .dark .text-slate-600,
 .dark .text-gray-600,
 .dark span.text-white {
-  color: #CBD5E1 !important; /* Slate 300 */
+  color: #D4D4D4 !important;
 }
 
-/* Muted Footnotes and Captions (Ensures clean secondary reading) */
+/* Muted Footnotes and Captions */
 .dark .text-slate-500,
 .dark .text-gray-500,
 .dark .text-slate-400,
 .dark .text-gray-400 {
-  color: #94A3B8 !important; /* Slate 400 */
+  color: #888888 !important;
 }
 
 /* 
@@ -180,56 +212,56 @@ html {
 .dark input[type="search"],
 .dark select,
 .dark textarea {
-  background-color: #0F172A !important; /* Recessed Slate-900 for high-contrast form elements */
-  color: #F8FAFC !important;
-  border-color: #334155 !important;
+  background-color: #0A0A0A !important;
+  color: #FFFFFF !important;
+  border-color: #262626 !important;
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #64748B !important; /* Slate 500 */
+  color: #666666 !important;
 }
 
 /* Dropdown selections and options context */
 .dark select option {
-  background-color: #121824 !important;
-  color: #F8FAFC !important;
+  background-color: #0A0A0A !important;
+  color: #FFFFFF !important;
 }
 
-/* Intercept light-mode hover events to prevent white flashes */
+/* Intercept light-mode hover events to prevent flashes */
 .dark .hover\:bg-slate-50:hover,
 .dark .hover\:bg-gray-50:hover,
 .dark .hover\:bg-slate-100:hover,
 .dark .hover\:bg-gray-100:hover,
 .dark .hover\:bg-slate-150:hover {
-  background-color: #1E293B !important;
+  background-color: #1A1A1A !important;
 }
 
 /* 
    7. BRAND ACCENTS: Contrast Optimized & Eyesafe Colorways
 */
 /* Green Accents (Student/Commuter Scope) */
-.dark .text-[#00875A] {
+.dark .text-[#46C96B] {
   color: #34D399 !important; /* Bright soft Emerald-400 for text readability */
 }
-.dark .bg-[#00875A] {
+.dark .bg-[#46C96B] {
   background-color: #10B981 !important; /* Vivid Emerald-500 for solid buttons */
-  color: #0B0F19 !important; /* High contrast dark text on green button */
+  color: #000000 !important; /* High contrast black text on green button */
 }
-.dark .bg-[#00875A] .text-white,
-.dark .bg-[#00875A] span {
-  color: #0B0F19 !important;
+.dark .bg-[#46C96B] .text-white,
+.dark .bg-[#46C96B] span {
+  color: #000000 !important;
 }
-.dark .border-[#00875A] {
+.dark .border-[#46C96B] {
   border-color: #10B981 !important;
 }
 
 /* Navy / Blue Accents (Driver Scope) */
 .dark .text-\[\#001058\] {
-  color: #8CAEFF !important; /* Soft glowing blue for text readability */
+  color: #8CAEFF !important; /* Soft bright blue for text readability */
 }
 .dark .bg-\[\#001058\] {
-  background-color: #1E40AF !important; /* Vivid Blue for solid buttons */
+  background-color: #2563EB !important; /* Vivid Blue for solid buttons */
   color: #FFFFFF !important;
 }
 .dark .bg-\[\#001058\] .text-white,
@@ -242,17 +274,19 @@ html {
 
 /* 
    8. INTERACTIVE CANVAS / MAPS FILTERS
-   Soften the map colors in dark mode to fit the overall ambient workspace.
+   Dark mode inverted canvas for seamless black look
 */
 .dark #campus-interactive-canvas,
 .dark .map-container-overlay {
-  filter: invert(0.9) hue-rotate(180deg) contrast(1.1) brightness(0.9);
-  opacity: 0.85;
+  filter: invert(1) hue-rotate(180deg) contrast(1.15) brightness(0.85);
+  opacity: 0.9;
 }
 
 /* Modals overlays color saturation increase */
-.dark .bg-black\/70 {
-  background-color: rgba(9, 13, 22, 0.85) !important;
+.dark .bg-black\/70,
+.dark .bg-slate-900\/60,
+.dark .bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.85) !important;
 }
 
 /* ==========================================================================
@@ -270,39 +304,39 @@ html {
 }
 
 /* Arbitrary Hex Green to Navy */
-:root:not(.dark) #driver-portal-viewport .text-\[\#00875A\] {
+:root:not(.dark) #driver-portal-viewport .text-\[\#46C96B\] {
   color: #001058 !important;
 }
-:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\] {
+:root:not(.dark) #driver-portal-viewport .bg-\[\#46C96B\] {
   background-color: #001058 !important;
 }
-:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\] {
+:root:not(.dark) #driver-portal-viewport .border-\[\#46C96B\] {
   border-color: #001058 !important;
 }
-:root:not(.dark) #driver-portal-viewport .from-\[\#00875A\] {
+:root:not(.dark) #driver-portal-viewport .from-\[\#46C96B\] {
   --tw-gradient-from: #001058 !important;
   --tw-gradient-to: #001058 !important;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
 }
-:root:not(.dark) #driver-portal-viewport .to-\[\#00875A\] {
+:root:not(.dark) #driver-portal-viewport .to-\[\#46C96B\] {
   --tw-gradient-to: #001058 !important;
 }
-:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\]\/10 {
+:root:not(.dark) #driver-portal-viewport .bg-\[\#46C96B\]\/10 {
   background-color: rgba(0, 16, 88, 0.1) !important;
 }
-:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\]\/15 {
+:root:not(.dark) #driver-portal-viewport .bg-\[\#46C96B\]\/15 {
   background-color: rgba(0, 16, 88, 0.15) !important;
 }
-:root:not(.dark) #driver-portal-viewport .bg-\[\#00875A\]\/5 {
+:root:not(.dark) #driver-portal-viewport .bg-\[\#46C96B\]\/5 {
   background-color: rgba(0, 16, 88, 0.05) !important;
 }
-:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\]\/15 {
+:root:not(.dark) #driver-portal-viewport .border-\[\#46C96B\]\/15 {
   border-color: rgba(0, 16, 88, 0.15) !important;
 }
-:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\]\/20 {
+:root:not(.dark) #driver-portal-viewport .border-\[\#46C96B\]\/20 {
   border-color: rgba(0, 16, 88, 0.20) !important;
 }
-:root:not(.dark) #driver-portal-viewport .border-\[\#00875A\]\/30 {
+:root:not(.dark) #driver-portal-viewport .border-\[\#46C96B\]\/30 {
   border-color: rgba(0, 16, 88, 0.30) !important;
 }
 

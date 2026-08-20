@@ -1,0 +1,339 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-08-20T11:44:11Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 501264336,
+  "lat": 7.4317978,
+  "lon": 3.9093993,
+  "tags": {
+    "GNS:dsg_code": "AIRP",
+    "GNS:dsg_string": "airport",
+    "GNS:id": "-2010461",
+    "aeroway": "aerodrome",
+    "is_in:country": "Nigeria",
+    "name": "Old Ibadan Airport",
+    "source": "GNS"
+  }
+},
+{
+  "type": "node",
+  "id": 2542783215,
+  "lat": 7.4451827,
+  "lon": 3.9005424,
+  "tags": {
+    "name": "University Bookshop",
+    "shop": "books"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871649,
+  "lat": 7.4352447,
+  "lon": 3.9084766,
+  "tags": {
+    "name": "Trans Amuserment Park",
+    "tourism": "theme_park"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871653,
+  "lat": 7.4403725,
+  "lon": 3.9073608,
+  "tags": {
+    "addr:city": "Ibadan",
+    "name": "Agbowo Shopping Complex",
+    "shop": "supermarket"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871681,
+  "lat": 7.4387621,
+  "lon": 3.9076559,
+  "tags": {
+    "name": "Preboye's World",
+    "shop": "supermarket"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871684,
+  "lat": 7.4379701,
+  "lon": 3.9087482,
+  "tags": {
+    "amenity": "fuel",
+    "name": "Conoil Petrol Station"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871686,
+  "lat": 7.4379239,
+  "lon": 3.9082573,
+  "tags": {
+    "amenity": "fuel",
+    "name": "Conoil Petrol Station"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871689,
+  "lat": 7.4378472,
+  "lon": 3.9075164,
+  "tags": {
+    "amenity": "fuel",
+    "name": "Conoil Petrol Station"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871746,
+  "lat": 7.4376716,
+  "lon": 3.9089846,
+  "tags": {
+    "amenity": "bar",
+    "name": "TinTin"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871749,
+  "lat": 7.4332293,
+  "lon": 3.9065005,
+  "tags": {
+    "amenity": "bar",
+    "name": "Hideout"
+  }
+},
+{
+  "type": "node",
+  "id": 2594871752,
+  "lat": 7.4414543,
+  "lon": 3.9078349,
+  "tags": {
+    "amenity": "pharmacy",
+    "name": "Hilma Chemist"
+  }
+},
+{
+  "type": "node",
+  "id": 2597666492,
+  "lat": 7.4372700,
+  "lon": 3.9098289,
+  "tags": {
+    "amenity": "bank",
+    "name": "Acces bank"
+  }
+},
+{
+  "type": "node",
+  "id": 2627679698,
+  "lat": 7.4416532,
+  "lon": 3.9062510,
+  "tags": {
+    "amenity": "taxi",
+    "name": "UI Campus Cab Terminus"
+  }
+},
+{
+  "type": "node",
+  "id": 2627690899,
+  "lat": 7.4411399,
+  "lon": 3.9076056,
+  "tags": {
+    "amenity": "fire_station",
+    "name": "Agbowo Fire Station"
+  }
+},
+{
+  "type": "node",
+  "id": 2639209659,
+  "lat": 7.4378963,
+  "lon": 3.9096062,
+  "tags": {
+    "amenity": "marketplace",
+    "name": "Tolulope Plaza"
+  }
+},
+{
+  "type": "node",
+  "id": 2639209663,
+  "lat": 7.4383813,
+  "lon": 3.9092120,
+  "tags": {
+    "name": "Plaza Park Hotel",
+    "tourism": "hotel"
+  }
+},
+{
+  "type": "node",
+  "id": 2819861347,
+  "lat": 7.4306482,
+  "lon": 3.9081438,
+  "tags": {
+    "name": "Samonda",
+    "place": "neighbourhood"
+  }
+},
+{
+  "type": "node",
+  "id": 2819861348,
+  "lat": 7.4477245,
+  "lon": 3.8967116,
+  "tags": {
+    "name": "University of Ibadan",
+    "place": "neighbourhood"
+  }
+},
+{
+  "type": "node",
+  "id": 2883203615,
+  "lat": 7.4383180,
+  "lon": 3.8947412,
+  "tags": {
+    "amenity": "restaurant",
+    "cuisine": "regional",
+    "internet_access": "no",
+    "name": "U&I",
+    "operator": "University of Ibadan",
+    "smoking": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 3084912688,
+  "lat": 7.4324510,
+  "lon": 3.8902397,
+  "tags": {
+    "amenity": "bank",
+    "name": "wema bank poly ibadan"
+  }
+},
+{
+  "type": "node",
+  "id": 3084912689,
+  "lat": 7.4313283,
+  "lon": 3.8924864,
+  "tags": {
+    "leisure": "track",
+    "name": "poly ibadan south field"
+  }
+},
+{
+  "type": "node",
+  "id": 3084951447,
+  "lat": 7.4326754,
+  "lon": 3.9057141,
+  "tags": {
+    "amenity": "place_of_worship",
+    "name": "lighthouse international christain center",
+    "religion": "christian"
+  }
+},
+{
+  "type": "node",
+  "id": 3084951448,
+  "lat": 7.4325714,
+  "lon": 3.9053760,
+  "tags": {
+    "amenity": "place_of_worship",
+    "name": "national council of womens societies"
+  }
+},
+{
+  "type": "node",
+  "id": 3084951449,
+  "lat": 7.4439537,
+  "lon": 3.9079197,
+  "tags": {
+    "amenity": "place_of_worship",
+    "denomination": "baptist",
+    "name": "ajegunle baptist church",
+    "religion": "christian"
+  }
+},
+{
+  "type": "node",
+  "id": 3685315899,
+  "lat": 7.4455596,
+  "lon": 3.9001255,
+  "tags": {
+    "amenity": "food_court",
+    "internet_access": "no",
+    "name": "Mellamby's Foodcourt",
+    "opening_hours": "24/7",
+    "operator": "Mellanby",
+    "smoking": "no",
+    "source": "bing",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 3685325136,
+  "lat": 7.4456153,
+  "lon": 3.8988405,
+  "tags": {
+    "amenity": "food_court",
+    "internet_access": "no",
+    "name": "Tedder's Foodcourt",
+    "opening_hours": "24/7",
+    "operator": "Teddr HAll",
+    "smoking": "no",
+    "source": "bing",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 8960415286,
+  "lat": 7.4425270,
+  "lon": 3.9068670,
+  "tags": {
+    "addr:city": "Ibadan",
+    "amenity": "pharmacy",
+    "description": "pharmacy outside Sasa community",
+    "health_facility:type": "pharmacy",
+    "healthcare": "pharmacy",
+    "name": "Omak Pharmacy, opposite UI"
+  }
+},
+{
+  "type": "node",
+  "id": 8960475566,
+  "lat": 7.4425946,
+  "lon": 3.9007560,
+  "tags": {
+    "addr:city": "Ibadan",
+    "amenity": "clinic",
+    "description": "Clinic outside Sasa community",
+    "health_facility:type": "clinic",
+    "healthcare": "clinic",
+    "name": "University Health Service, Jaja Clinic, UI"
+  }
+},
+{
+  "type": "node",
+  "id": 8960475576,
+  "lat": 7.4419450,
+  "lon": 3.9094780,
+  "tags": {
+    "addr:city": "Ibadan",
+    "amenity": "clinic",
+    "description": "Clinic outside Sasa community",
+    "health_facility:type": "clinic",
+    "healthcare": "clinic",
+    "name": "Better Life Health Care, Agbowo"
+  }
+}
+
+  ]
+}

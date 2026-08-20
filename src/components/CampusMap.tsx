@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
-import { MapPin, Navigation, Car, Zap, Users, Info, Compass } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { UNIVERSITIES } from './SchoolSelection';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { TrackedDriver, LatLng } from '../lib/geo';
+import { getRoute, RouteResult } from '../lib/routing';
 
 interface CampusMapProps {
   schoolId: string;
@@ -11,407 +13,391 @@ interface CampusMapProps {
   dropoffId?: string;
   poolingState: 'idle' | 'forming' | 'matched' | 'transit' | 'arrived' | 'rated';
   isMatchingDriver?: boolean;
-  liveDistance?: number; // 0 to 100
+  liveDistance?: number;
   onSelectPickup?: (stopId: string) => void;
   onSelectDropoff?: (stopId: string) => void;
   matchedDriverName?: string;
+  isContinuousBackground?: boolean;
 }
 
-interface SimulatedDriver {
-  id: string;
-  name: string;
-  vehicleType: 'Car' | 'Keke' | 'Shuttle';
-  vehicleName: string;
-  rating: number;
-  lat: number;
-  lng: number;
-  angle: number;
-  targetStopIndex: number;
-  speedMultiplier: number;
+// Fix default Leaflet marker asset paths
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+function divIcon(html: string, size: [number, number] = [30, 30]) {
+  return L.divIcon({
+    html,
+    className: 'campusride-leaflet-icon',
+    iconSize: size,
+    iconAnchor: [size[0] / 2, size[1] / 2],
+  });
 }
 
-const API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
-  '';
+const pickupIcon = divIcon(
+  `<div style="position:relative;display:flex;align-items:center;justify-content:center;">
+    <span style="position:absolute;width:32px;height:32px;border-radius:9999px;background:rgba(46,204,113,0.5);animation:crPing 1.5s infinite;"></span>
+    <div style="width:28px;height:28px;background:#2ECC71;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:14px;">📍</div>
+  </div>`
+);
+const dropoffIcon = divIcon(
+  `<div style="width:28px;height:28px;background:#E74C3C;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:14px;">🏁</div>`
+);
+const stopIcon = divIcon(
+  `<div style="width:14px;height:14px;background:#fff;border:3px solid #2ECC71;border-radius:9999px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.6);"></div>`,
+  [14, 14]
+);
 
-// Google Maps API keys strictly start with 'AIzaSy'
-const isKeyValid = (key: string) => {
-  return typeof key === 'string' && key.trim().length > 10 && key.startsWith('AIzaSy');
-};
-
-const hasValidKey = isKeyValid(API_KEY);
+function driverIcon(vehicleType: 'Car' | 'Keke' | 'Shuttle', isMatched: boolean) {
+  const emoji = vehicleType === 'Keke' ? '🛺' : vehicleType === 'Shuttle' ? '🚐' : '🚗';
+  const bg = isMatched ? '#F1C40F' : '#ffffff';
+  const border = isMatched ? '#fff' : '#F1C40F';
+  const color = isMatched ? '#000' : '#000';
+  const s = isMatched ? 36 : 28;
+  return divIcon(
+    `<div style="width:${s}px;height:${s}px;background:${bg};color:${color};border:3px solid ${border};border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:${isMatched ? 18 : 14}px;">${emoji}</div>`
+  );
+}
 
 export const CampusMap: React.FC<CampusMapProps> = ({
   schoolId,
   pickupId,
   dropoffId,
   poolingState,
-  isMatchingDriver = false,
-  liveDistance = 0,
+  liveDistance,
   onSelectPickup,
   onSelectDropoff,
   matchedDriverName = 'David Alao',
+  isContinuousBackground = false,
 }) => {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const stopsLayerRef = useRef<L.LayerGroup | null>(null);
+  const driversLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
+
   const selectedSchool = UNIVERSITIES.find((u) => u.id === schoolId) || UNIVERSITIES[0];
   const stops = selectedSchool.stops;
-  
-  // Local state for simulated drivers
-  const [drivers, setDrivers] = useState<SimulatedDriver[]>([]);
-  const [actualOnlineDriversCount, setActualOnlineDriversCount] = useState<number>(0);
 
-  // Synchronize actual online drivers from Firestore in real-time
-  useEffect(() => {
-    try {
-      const q = query(collection(db, 'users'), where('role', '==', 'driver'));
-      const unsub = onSnapshot(q, (snapshot) => {
-        let count = 0;
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data && data.status !== 'Offline') {
-            count++;
-          }
-        });
-        setActualOnlineDriversCount(count);
-      }, (err) => {
-        console.warn("Error subscribing to online drivers in Firestore:", err);
-      });
-      return () => unsub();
-    } catch (err) {
-      console.warn("Firestore not available:", err);
-    }
-  }, []);
-  
-  // Map visualization state ('google' or 'vector' schematic board)
-  const [mapMode, setMapMode] = useState<'google' | 'vector'>('vector');
-  const [mapError, setMapError] = useState<boolean>(false);
-
-  useEffect(() => {
-    // Catch Google Maps billing/auth errors gracefully
-    const originalAuthFailure = (window as any).gm_authFailure;
-    (window as any).gm_authFailure = () => {
-      console.warn("Google Maps API auth/billing error detected. Falling back to vector schematic map.");
-      setMapError(true);
-      if (typeof originalAuthFailure === 'function') {
-        try { originalAuthFailure(); } catch (e) {}
-      }
-    };
-  }, []);
-  
-  // Selected stops coordinates
   const pickupStop = stops.find((s) => s.id === pickupId);
   const dropoffStop = stops.find((s) => s.id === dropoffId);
 
-  // Find min/max lat/lng to scale/normalize the stops inside our container for custom map mode
-  const lats = stops.map((s) => s.lat);
-  const lngs = stops.map((s) => s.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
+  // ---- Live driver locations from Firestore ----
+  const [trackedDrivers, setTrackedDrivers] = useState<TrackedDriver[]>([]);
 
-  const getCoordinates = (lat: number, lng: number) => {
-    const latRange = maxLat - minLat || 0.005;
-    const lngRange = maxLng - minLng || 0.005;
-
-    // Scale to percentage coordinates with proper margins
-    const x = 12 + ((lng - minLng) / lngRange) * 76;
-    const y = 88 - ((lat - minLat) / latRange) * 76;
-
-    return { x: `${x}%`, y: `${y}%`, xNum: x, yNum: y };
-  };
-
-  const pickupCoords = pickupStop ? getCoordinates(pickupStop.lat, pickupStop.lng) : null;
-  const dropoffCoords = dropoffStop ? getCoordinates(dropoffStop.lat, dropoffStop.lng) : null;
-
-  // Initialize drivers on mount/school change
   useEffect(() => {
-    if (stops.length === 0) return;
-    
-    // Create 4 active drivers scattered across different stops
-    const initialDrivers: SimulatedDriver[] = [
-      {
-        id: 'drv-keke-1',
-        name: 'Tunde (Keke)',
-        vehicleType: 'Keke',
-        vehicleName: 'Keke Tricycle',
-        rating: 4.8,
-        lat: stops[0].lat + 0.0005,
-        lng: stops[0].lng - 0.0005,
-        angle: 45,
-        targetStopIndex: 2 % stops.length,
-        speedMultiplier: 0.8,
-      },
-      {
-        id: 'drv-car-1',
-        name: 'David Alao',
-        vehicleType: 'Car',
-        vehicleName: 'Toyota Corolla',
-        rating: 4.9,
-        lat: stops[1].lat - 0.0005,
-        lng: stops[1].lng + 0.0005,
-        angle: 180,
-        targetStopIndex: 4 % stops.length,
-        speedMultiplier: 1.2,
-      },
-      {
-        id: 'drv-shuttle-1',
-        name: 'Innocent (Shuttle)',
-        vehicleType: 'Shuttle',
-        vehicleName: 'Coaster Bus',
-        rating: 4.7,
-        lat: stops[2].lat + 0.0003,
-        lng: stops[2].lng + 0.0008,
-        angle: 270,
-        targetStopIndex: 0,
-        speedMultiplier: 1.0,
-      },
-      {
-        id: 'drv-car-2',
-        name: 'Amina (Car)',
-        vehicleType: 'Car',
-        vehicleName: 'Toyota Sienna',
-        rating: 4.9,
-        lat: stops[Math.min(3, stops.length - 1)].lat + 0.0005,
-        lng: stops[Math.min(3, stops.length - 1)].lng - 0.0003,
-        angle: 90,
-        targetStopIndex: Math.min(5, stops.length - 1),
-        speedMultiplier: 1.1,
-      },
-    ];
-    setDrivers(initialDrivers);
-  }, [schoolId]);
-
-  // Handle simulated driver tracking movement loops
-  useEffect(() => {
-    if (stops.length === 0) return;
-    
-    const interval = setInterval(() => {
-      setDrivers((prevDrivers) => {
-        return prevDrivers.map((drv) => {
-          // If in transit and this is the matched driver, we tie their position directly to liveDistance!
-          if (poolingState === 'transit' && drv.name === matchedDriverName) {
-            if (!pickupStop || !dropoffStop) return drv;
-            // Interpolate coordinate along pickup -> dropoff based on liveDistance (0 - 100)
-            const fraction = liveDistance / 100;
-            const newLat = pickupStop.lat + (dropoffStop.lat - pickupStop.lat) * fraction;
-            const newLng = pickupStop.lng + (dropoffStop.lng - pickupStop.lng) * fraction;
-            
-            // Calculate angle
-            const angle = Math.atan2(dropoffStop.lng - pickupStop.lng, dropoffStop.lat - pickupStop.lat) * (180 / Math.PI);
-            return {
-              ...drv,
-              lat: newLat,
-              lng: newLng,
-              angle: angle,
-            };
+    const unsub = onSnapshot(
+      collection(db, 'driverLocations'),
+      (snapshot) => {
+        const list: TrackedDriver[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as any;
+          if (typeof d.lat === 'number' && typeof d.lng === 'number') {
+            list.push({
+              id: docSnap.id,
+              name: d.name || 'Driver',
+              lat: d.lat,
+              lng: d.lng,
+              vehicleType: d.vehicleType || 'Car',
+              status: d.status || 'Offline',
+              updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : 0,
+              rating: d.rating,
+            });
           }
-
-          // If matched (driver arriving to pickup), we animate matched driver heading to pickup stop
-          if (poolingState === 'matched' && drv.name === matchedDriverName) {
-            if (!pickupStop) return drv;
-            
-            // Move driver closer to pickup stop per tick
-            const dx = pickupStop.lat - drv.lat;
-            const dy = pickupStop.lng - drv.lng;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance < 0.00005) {
-              return {
-                ...drv,
-                lat: pickupStop.lat,
-                lng: pickupStop.lng,
-              };
-            }
-            
-            const step = 0.15 * drv.speedMultiplier;
-            const newLat = drv.lat + dx * step;
-            const newLng = drv.lng + dy * step;
-            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            
-            return {
-              ...drv,
-              lat: newLat,
-              lng: newLng,
-              angle: angle,
-            };
-          }
-
-          // Otherwise, drivers roam campus stops in circular loops
-          const targetStop = stops[drv.targetStopIndex];
-          const dx = targetStop.lat - drv.lat;
-          const dy = targetStop.lng - drv.lng;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 0.00015) {
-            // Reached target stop, set next stop as target
-            const nextIdx = (drv.targetStopIndex + 1) % stops.length;
-            return {
-              ...drv,
-              targetStopIndex: nextIdx,
-            };
-          }
-
-          // Move towards target stop
-          const speed = 0.00004 * drv.speedMultiplier;
-          const headingX = dx / distance;
-          const headingY = dy / distance;
-          
-          const newLat = drv.lat + headingX * speed;
-          const newLng = drv.lng + headingY * speed;
-          const angle = Math.atan2(headingY, headingX) * (180 / Math.PI);
-
-          return {
-            ...drv,
-            lat: newLat,
-            lng: newLng,
-            angle: angle,
-          };
         });
-      });
-    }, 1000);
+        setTrackedDrivers(list);
+      },
+      (err) => console.warn('Error subscribing to driverLocations:', err)
+    );
+    return () => unsub();
+  }, []);
 
-    return () => clearInterval(interval);
-  }, [stops, poolingState, pickupId, dropoffId, liveDistance]);
+  const onlineDriversCount = trackedDrivers.filter((d) => d.status !== 'Offline').length;
+  const matchedDriver = trackedDrivers.find((d) => d.name === matchedDriverName);
 
-  const getVehicleIcon = (type: 'Car' | 'Keke' | 'Shuttle') => {
-    switch (type) {
-      case 'Keke':
-        return <Zap className="w-3.5 h-3.5 text-white" />;
-      case 'Shuttle':
-        return <Users className="w-3.5 h-3.5 text-white" />;
-      default:
-        return <Car className="w-3.5 h-3.5 text-white" />;
+  // ---- OSM/ORS route (pickup -> dropoff, or matched driver -> pickup) ----
+  const [route, setRoute] = useState<RouteResult | null>(null);
+  const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function computeRoute() {
+      if ((poolingState === 'matched' || poolingState === 'transit') && matchedDriver) {
+        const target = poolingState === 'transit' && dropoffStop ? dropoffStop : pickupStop;
+        if (!target) return;
+        const r = await getRoute(
+          { lat: matchedDriver.lat, lng: matchedDriver.lng },
+          { lat: target.lat, lng: target.lng },
+          matchedDriver.vehicleType
+        );
+        if (!cancelled) {
+          setRoute(r);
+          setEtaMinutes(r.durationMinutes);
+        }
+        return;
+      }
+
+      if (pickupStop && dropoffStop) {
+        const r = await getRoute(
+          { lat: pickupStop.lat, lng: pickupStop.lng },
+          { lat: dropoffStop.lat, lng: dropoffStop.lng },
+          'Car'
+        );
+        if (!cancelled) {
+          setRoute(r);
+          setEtaMinutes(r.durationMinutes);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setRoute(null);
+        setEtaMinutes(null);
+      }
     }
-  };
+
+    computeRoute();
+    const interval =
+      (poolingState === 'matched' || poolingState === 'transit') && matchedDriver
+        ? setInterval(computeRoute, 10_000)
+        : null;
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [pickupId, dropoffId, poolingState, matchedDriver?.lat, matchedDriver?.lng]);
+
+  // Points to fit bounds to
+  const boundsPoints = useMemo(() => {
+    const pts: LatLng[] = [];
+    if (pickupStop) pts.push({ lat: pickupStop.lat, lng: pickupStop.lng });
+    if (dropoffStop) pts.push({ lat: dropoffStop.lat, lng: dropoffStop.lng });
+    if (matchedDriver && (poolingState === 'matched' || poolingState === 'transit')) {
+      pts.push({ lat: matchedDriver.lat, lng: matchedDriver.lng });
+    }
+    return pts;
+  }, [pickupStop?.id, dropoffStop?.id, matchedDriver?.lat, matchedDriver?.lng, poolingState]);
+
+  // ---- Initialize Leaflet Map Instance Safely ----
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    const container = mapContainerRef.current;
+    if ((container as any)._leaflet_id) {
+      delete (container as any)._leaflet_id;
+    }
+
+    const map = L.map(container, {
+      center: [selectedSchool.center.lat, selectedSchool.center.lng],
+      zoom: selectedSchool.zoom,
+      scrollWheelZoom: true,
+      zoomControl: true,
+    });
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Reference overlay for places/labels
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      opacity: 0.5,
+    }).addTo(map);
+
+    // Reference overlay for roads/transportation
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      opacity: 0.5,
+    }).addTo(map);
+
+    const stopsLayer = L.layerGroup().addTo(map);
+    const driversLayer = L.layerGroup().addTo(map);
+    const routeLayer = L.layerGroup().addTo(map);
+
+    stopsLayerRef.current = stopsLayer;
+    driversLayerRef.current = driversLayer;
+    routeLayerRef.current = routeLayer;
+    mapInstanceRef.current = map;
+
+    // Handle container resizing smoothly
+    const resizeObserver = new ResizeObserver(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      stopsLayerRef.current = null;
+      driversLayerRef.current = null;
+      routeLayerRef.current = null;
+      map.remove();
+      mapInstanceRef.current = null;
+      if ((container as any)._leaflet_id) {
+        delete (container as any)._leaflet_id;
+      }
+    };
+  }, [selectedSchool.id]);
+
+  // ---- Update Stops Layer ----
+  useEffect(() => {
+    const layer = stopsLayerRef.current;
+    if (!layer) return;
+
+    layer.clearLayers();
+
+    stops.forEach((stop) => {
+      const isPickup = stop.id === pickupId;
+      const isDropoff = stop.id === dropoffId;
+      const icon = isPickup ? pickupIcon : isDropoff ? dropoffIcon : stopIcon;
+
+      const marker = L.marker([stop.lat, stop.lng], {
+        icon,
+        title: stop.name,
+      });
+
+      marker.on('click', () => {
+        if (onSelectPickup && !pickupId) {
+          onSelectPickup(stop.id);
+        } else if (onSelectDropoff && pickupId && !dropoffId) {
+          onSelectDropoff(stop.id);
+        }
+      });
+
+      marker.addTo(layer);
+    });
+  }, [stops, pickupId, dropoffId, onSelectPickup, onSelectDropoff]);
+
+  // ---- Update Drivers Layer ----
+  useEffect(() => {
+    const layer = driversLayerRef.current;
+    if (!layer) return;
+
+    layer.clearLayers();
+
+    trackedDrivers
+      .filter((d) => d.status !== 'Offline')
+      .forEach((drv) => {
+        const isMatched = (poolingState === 'matched' || poolingState === 'transit') && drv.name === matchedDriverName;
+        
+        let lat = drv.lat;
+        let lng = drv.lng;
+
+        // If matched and in transit, simulate car movement along the actual route using liveDistance
+        if (isMatched && poolingState === 'transit' && route && typeof liveDistance === 'number' && route.coordinates.length > 1) {
+           const percent = Math.max(0, Math.min(100, liveDistance)) / 100;
+           const totalSegments = route.coordinates.length - 1;
+           const exactIndex = percent * totalSegments;
+           const lowerIndex = Math.floor(exactIndex);
+           const upperIndex = Math.ceil(exactIndex);
+           if (lowerIndex === upperIndex) {
+              lat = route.coordinates[lowerIndex][0];
+              lng = route.coordinates[lowerIndex][1];
+           } else {
+              const remainder = exactIndex - lowerIndex;
+              const lat1 = route.coordinates[lowerIndex][0];
+              const lng1 = route.coordinates[lowerIndex][1];
+              const lat2 = route.coordinates[upperIndex][0];
+              const lng2 = route.coordinates[upperIndex][1];
+              lat = lat1 + (lat2 - lat1) * remainder;
+              lng = lng1 + (lng2 - lng1) * remainder;
+           }
+        }
+
+        const marker = L.marker([lat, lng], {
+          icon: driverIcon(drv.vehicleType, isMatched),
+          title: `${drv.name} (${drv.vehicleType})`,
+          zIndexOffset: isMatched ? 1000 : 0,
+        });
+        marker.addTo(layer);
+      });
+  }, [trackedDrivers, poolingState, matchedDriverName, route, liveDistance]);
+
+  // ---- Update Route Polyline Layer ----
+  useEffect(() => {
+    const layer = routeLayerRef.current;
+    if (!layer) return;
+
+    layer.clearLayers();
+
+    if (route && route.coordinates.length > 1) {
+      const polyline = L.polyline(route.coordinates, {
+        color: '#2ECC71',
+        weight: 5,
+        opacity: 1.0,
+        dashArray: route.source === 'fallback' ? '6 8' : undefined,
+      });
+      polyline.addTo(layer);
+    }
+  }, [route]);
+
+  // ---- Update FitBounds ----
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const pointsToFit = boundsPoints.length > 0 ? boundsPoints : stops.map((s) => ({ lat: s.lat, lng: s.lng }));
+    if (pointsToFit.length === 0) return;
+
+    if (pointsToFit.length === 1) {
+      map.setView([pointsToFit[0].lat, pointsToFit[0].lng], map.getZoom() || selectedSchool.zoom);
+      return;
+    }
+
+    const bounds = L.latLngBounds(pointsToFit.map((p) => [p.lat, p.lng]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+  }, [boundsPoints, stops, selectedSchool.zoom]);
 
   return (
-    <div className="w-full bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col animate-fadeIn">
-      {/* Main Map Stage */}
-      <div className="relative w-full h-[320px] md:h-[400px] bg-slate-100 flex items-center justify-center overflow-hidden">
-        {hasValidKey && !mapError ? (
-          /* GOOGLE MAPS COMPONENT */
-          <APIProvider apiKey={API_KEY} version="weekly">
-            <Map
-              defaultCenter={selectedSchool.center}
-              defaultZoom={selectedSchool.zoom}
-              mapId="DEMO_MAP_ID"
-              internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-              style={{ width: '100%', height: '100%' }}
-              options={{
-                disableDefaultUI: false,
-                clickableIcons: true,
-              }}
-            >
-              {/* Stops Pins */}
-              {stops.map((stop) => {
-                const isPickup = stop.id === pickupId;
-                const isDropoff = stop.id === dropoffId;
-                
-                return (
-                  <AdvancedMarker
-                    key={stop.id}
-                    position={{ lat: stop.lat, lng: stop.lng }}
-                    title={stop.name}
-                    onClick={() => {
-                      if (onSelectPickup && !pickupId) {
-                        onSelectPickup(stop.id);
-                      } else if (onSelectDropoff && pickupId && !dropoffId) {
-                        onSelectDropoff(stop.id);
-                      }
-                    }}
-                  >
-                    {isPickup ? (
-                      <div className="relative flex items-center justify-center">
-                        <span className="absolute w-8 h-8 rounded-full bg-[#001058]/30 animate-ping"></span>
-                        <div className="w-7 h-7 bg-[#001058] text-white rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-                          <MapPin className="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-                    ) : isDropoff ? (
-                      <div className="w-7 h-7 bg-slate-900 text-white rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-                        <Navigation className="w-3.5 h-3.5" />
-                      </div>
-                    ) : (
-                      <Pin background="#E2E8F0" glyphColor="#475569" scale={0.8} />
-                    )}
-                  </AdvancedMarker>
-                );
-              })}
+    <div className={`w-full transition-all ${
+      isContinuousBackground 
+        ? 'h-full relative overflow-hidden bg-slate-100 dark:bg-neutral-900 lg:bg-white lg:rounded-3xl lg:border lg:border-slate-200 lg:shadow-xs lg:flex lg:flex-col lg:animate-fadeIn lg:h-auto'
+        : 'bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col animate-fadeIn'
+    }`}>
+      <style>{`
+        @keyframes crPing { 0% { transform: scale(1); opacity: 1; } 75%, 100% { transform: scale(2); opacity: 0; } }
+        .campusride-leaflet-icon { background: transparent; border: none; }
+        .leaflet-container { font-family: inherit; width: 100%; height: 100%; z-index: 1; }
+      `}</style>
 
-              {/* Drivers Pins */}
-              {drivers.map((drv) => {
-                const isMatchedDriver = (poolingState !== 'idle' && drv.name === matchedDriverName);
-                
-                return (
-                  <AdvancedMarker
-                    key={drv.id}
-                    position={{ lat: drv.lat, lng: drv.lng }}
-                    title={`${drv.name} (${drv.vehicleName})`}
-                  >
-                    <div 
-                      className={`p-2 rounded-xl flex items-center justify-center shadow-md border-2 transition-transform duration-300 ${
-                        isMatchedDriver 
-                          ? 'bg-[#001058] border-white scale-110 text-white z-20' 
-                          : 'bg-white border-[#001058] text-[#001058] scale-95 z-10'
-                      }`}
-                      style={{ transform: `rotate(${drv.angle}deg)` }}
-                    >
-                      <div style={{ transform: `rotate(${-drv.angle}deg)` }}>
-                        {getVehicleIcon(drv.vehicleType)}
-                      </div>
-                    </div>
-                  </AdvancedMarker>
-                );
-              })}
-            </Map>
-          </APIProvider>
-        ) : (
-          /* GOOGLE MAPS API KEY REQUIRED SPLASH SCREEN */
-          <div className="relative w-full h-full bg-slate-900 text-white p-6 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-12 h-12 bg-[#001058]/20 border border-[#001058]/40 rounded-2xl flex items-center justify-center text-[#001058]">
-              <Compass className="w-6 h-6 animate-spin" />
-            </div>
-            <div className="max-w-md space-y-2">
-              <h3 className="text-lg font-black tracking-tight text-white uppercase">Google Maps API Key Required</h3>
-              <p className="text-xs text-gray-300 leading-relaxed">
-                To render live Google Maps tiles and interactive campus navigation, please provide a valid Google Maps Platform API Key.
-              </p>
-            </div>
-
-            <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl text-left text-xs space-y-2 w-full max-w-sm">
-              <p className="font-bold text-amber-400">Setup Instructions:</p>
-              <ol className="list-decimal list-inside text-gray-300 space-y-1 text-[11px]">
-                <li>Get a key from <a href="https://console.cloud.google.com/google/maps-apis/start?utm_campaign=gmp-code-assist-ais" target="_blank" rel="noopener noreferrer" className="text-sky-400 underline font-semibold">Google Maps Platform</a></li>
-                <li>Open <strong>Settings</strong> (⚙️ icon, top-right) → <strong>Secrets</strong></li>
-                <li>Add key named <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_PLATFORM_KEY</code></li>
-                <li>The app rebuilds automatically with live maps enabled!</li>
-              </ol>
-            </div>
-          </div>
-        )}
+      <div className={`relative w-full ${isContinuousBackground ? 'h-full lg:h-[320px] lg:md:h-[400px]' : 'h-[320px] md:h-[400px]'}`}>
+        <div
+          ref={mapContainerRef}
+          className="w-full h-full"
+          style={{ width: '100%', height: '100%' }}
+        />
       </div>
 
-      {/* Map Stats footer */}
-      <div className="p-4 bg-slate-50 border-t border-slate-150 flex flex-wrap gap-4 items-center justify-between text-xs font-semibold text-slate-600">
+      <div className={`p-4 bg-slate-50 dark:bg-black text-slate-600 dark:text-neutral-200 border-t border-slate-150 dark:border-neutral-800 flex-wrap gap-4 items-center justify-between text-xs font-semibold ${isContinuousBackground ? 'hidden lg:flex' : 'flex'}`}>
         <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>{actualOnlineDriversCount} {actualOnlineDriversCount === 1 ? 'driver' : 'drivers'} online on campus</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
+          <span>{onlineDriversCount} {onlineDriversCount === 1 ? 'driver' : 'drivers'} online on campus</span>
+          {etaMinutes !== null && (
+            <span className="ml-3 px-2 py-0.5 rounded-full bg-[#46C96B]/10 dark:bg-white/10 text-[#46C96B] dark:text-emerald-300 font-bold text-[10px] uppercase tracking-wide">
+              ETA {etaMinutes} min{route?.source === 'fallback' ? ' (est.)' : ''}
+            </span>
+          )}
         </div>
 
         <div className="flex gap-4">
           <div className="flex items-center space-x-1.5">
             <div className="w-3 h-3 rounded-full bg-[#001058]"></div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Pickup</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 dark:text-neutral-400">Pickup</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <div className="w-3 h-3 rounded-full bg-slate-900"></div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Destination</span>
+            <div className="w-3 h-3 rounded-full bg-slate-900 border border-slate-400 dark:border-slate-500"></div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 dark:text-neutral-400">Destination</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <div className="w-3 h-3 rounded-full bg-slate-300"></div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Campus Stops</span>
+            <div className="w-3 h-3 rounded-full bg-slate-300 dark:bg-neutral-600"></div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 dark:text-neutral-400">Campus Stops</span>
           </div>
         </div>
       </div>

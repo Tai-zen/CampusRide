@@ -178,6 +178,17 @@ service cloud.firestore {
       return data.email is string && data.email.size() <= 100;
     }
 
+    function isValidDriverLocation(data) {
+      return data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+             data.lng is number && data.lng >= -180 && data.lng <= 180 &&
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('vehicleType' in data) || (data.vehicleType is string && (data.vehicleType == 'Car' || data.vehicleType == 'Keke' || data.vehicleType == 'Shuttle'))) &&
+             (!('status' in data) || (data.status is string && (data.status == 'On Trip' || data.status == 'Idle' || data.status == 'Break' || data.status == 'Offline'))) &&
+             (!('heading' in data) || (data.heading is number) || data.heading == null) &&
+             (!('rating' in data) || (data.rating is number)) &&
+             (!('updatedAt' in data) || (data.updatedAt is number));
+    }
+
     // Match blocks
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -282,6 +293,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn();
+    }
+
+    // Live GPS feed written by drivers, consumed by CampusMap + the
+    // nearest-driver dispatch matcher (src/lib/geo.ts).
+    match /driverLocations/{driverId} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(driverId) && isDriver() && isValidDriverLocation(incoming());
+      allow delete: if isOwner(driverId) || isAdmin();
     }
 
     match /activity_logs/{logId} {

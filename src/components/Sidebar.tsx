@@ -69,14 +69,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isDriver = currentRole === 'driver';
   
   // Dynamic color classes based on role
-  const brandTextColor = isDriver ? 'text-[#001058]' : 'text-[#00875A]';
+  const brandTextColor = isDriver ? 'text-[#001058]' : 'text-[#46C96B]';
   const brandBgLight = isDriver ? 'bg-[#EFF4FF]' : 'bg-emerald-50';
   const brandBorderLight = isDriver ? 'border-[#E0E7FF]' : 'border-emerald-100';
-  const brandTextActive = isDriver ? 'text-[#001058]' : 'text-[#00875A]';
-  const brandBgActive = isDriver ? 'bg-[#001058] shadow-[#001058]/20' : 'bg-[#00875A] shadow-[#00875A]/20';
-  const brandHoverBorder = isDriver ? 'hover:border-[#001058]/20 hover:bg-[#EFF4FF]' : 'hover:border-[#00875A]/20 hover:bg-emerald-50';
-  const brandButtonBorder = isDriver ? 'text-[#001058]' : 'text-[#00875A]';
-  const brandBadgeBg = isDriver ? 'bg-[#EFF4FF] text-[#001058]' : 'bg-emerald-50 text-[#00875A]';
+  const brandTextActive = isDriver ? 'text-[#001058]' : 'text-[#46C96B]';
+  const brandBgActive = isDriver ? 'bg-[#001058] shadow-[#001058]/20' : 'bg-[#46C96B] shadow-[#46C96B]/20';
+  const brandHoverBorder = isDriver ? 'hover:border-[#001058]/20 hover:bg-[#EFF4FF]' : 'hover:border-[#46C96B]/20 hover:bg-emerald-50';
+  const brandButtonBorder = isDriver ? 'text-[#001058]' : 'text-[#46C96B]';
+  const brandBadgeBg = isDriver ? 'bg-[#EFF4FF] text-[#001058]' : 'bg-emerald-50 text-[#46C96B]';
 
   // Define Navigation Items based on active role
   const getNavItems = () => {
@@ -154,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="flex items-center space-x-2.5">
           {/* Quick toggle mobile indicator */}
-          <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full font-mono bg-[#F9FAFB] ${brandTextActive}`}>
+          <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full font-mono bg-[#F2F2F2] ${brandTextActive}`}>
             {currentRole}
           </span>
           {/* Mobile notification bell */}
@@ -241,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* User Status Profile Card */}
-          <div className="p-3 rounded-xl border flex items-center space-x-3 bg-white border-gray-200 dark:bg-slate-800/50 dark:border-slate-700">
+          <div className="p-3 rounded-xl border flex items-center space-x-3 bg-white border-gray-200 dark:bg-black/60 dark:border-neutral-800">
             <img 
               referrerPolicy="no-referrer"
               src={userProfile.avatar} 
@@ -282,7 +282,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group cursor-pointer ${
                   isActive 
                     ? `${brandBgActive} text-white shadow-md` 
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-[#F9FAFB]'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-[#F2F2F2]'
                 }`}
               >
                 <div className="flex items-center space-x-3">

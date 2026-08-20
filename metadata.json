@@ -1,6 +1,6 @@
 {
   "name": "CampusRide",
   "description": "A modern university transit and ride-sharing portal supporting students, drivers, and campus administrators.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

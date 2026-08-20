@@ -103,6 +103,24 @@
       },
       "required": ["id", "title", "message", "isRead", "type"]
     },
+    
+    "DriverLocation": {
+  "title": "DriverLocation",
+  "description": "Live GPS coordinate ping for an active driver, used for dispatch matching and map display.",
+  "type": "object",
+  "properties": {
+    "lat": { "type": "number" },
+    "lng": { "type": "number" },
+    "name": { "type": "string" },
+    "vehicleType": { "type": "string", "enum": ["Car", "Keke", "Shuttle"] },
+    "status": { "type": "string", "enum": ["On Trip", "Idle", "Break", "Offline"] },
+    "heading": { "type": "number" },
+    "rating": { "type": "number" },
+    "updatedAt": { "type": "number" }
+  },
+  "required": ["lat", "lng"]
+},
+
     "PendingDriver": {
       "title": "PendingDriver",
       "description": "Driver signup details awaiting admin approval.",
@@ -217,6 +235,10 @@
     "/rideRequests/{rideId}/messages/{messageId}": {
       "schema": "ChatMessage",
       "description": "Nested chat messages for a ride pool/request."
+    },
+    "/driverLocations/{driverId}": {
+  "schema": "DriverLocation",
+  "description": "Live GPS position feed for each online driver, keyed by driver UID."
     },
     "/pendingDrivers/{driverId}": {
       "schema": "PendingDriver",
