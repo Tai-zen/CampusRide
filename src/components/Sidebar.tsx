@@ -85,7 +85,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'booking', label: 'Request Ride', icon: Car, badge: null },
         { id: 'browse_pools', label: 'Browse Active Pools', icon: Compass, badge: null },
         { id: 'dashboard', label: 'Activity Dashboard', icon: LayoutDashboard, badge: null },
-        { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
         { id: 'profile', label: 'Student Profile', icon: User, badge: null },
         { id: 'settings', label: 'App Settings', icon: Settings, badge: null },
       ];
@@ -94,7 +93,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'driver_dashboard', label: 'Shift Dashboard', icon: Gauge, badge: null },
         { id: 'driver_earnings', label: 'Shift Earnings Ledger', icon: TrendingUp, badge: null },
         { id: 'driver_scheduled', label: 'Scheduled Rides', icon: Calendar, badge: null },
-        { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
         { id: 'driver_settings', label: 'Driver Settings', icon: Settings, badge: null },
       ];
     } else {

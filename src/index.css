@@ -418,3 +418,112 @@ html {
 :root:not(.dark) #driver-portal-viewport .border-blue-500\/20 { border-color: rgba(0, 31, 135, 0.2) !important; }
 :root:not(.dark) #driver-portal-viewport .border-blue-900\/30 { border-color: rgba(0, 16, 88, 0.3) !important; }
 
+/* Focus Mode: Remove specific requested UI elements */
+div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(3),
+div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(4) {
+  display: none !important;
+}
+
+/* Focus Mode: Apply specific requested UI colors/backgrounds for dark themes */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > span:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(5) > div:nth-of-type(1) > span:nth-of-type(1) {
+  color: #46c96b !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(5),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) {
+  background-color: #000000 !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) {
+  background-color: #000000 !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) {
+  background-color: #0d0d0d !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1) {
+  background-color: #0d0d0d !important;
+  border-color: #222222 !important;
+  color: #46c96b !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div#floating-messenger-draggable-wrapper:nth-of-type(2) > div#floating-messenger-panel:nth-of-type(1) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div#floating-messenger-draggable-wrapper:nth-of-type(2) > div#floating-messenger-panel:nth-of-type(1) > div:nth-of-type(2) {
+  background-color: #0d0d0d !important;
+}
+
+/* Focus Mode: Adjust driver dashboard cards height for dark theme */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-dashboard:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-dashboard:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-dashboard:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) {
+  height: 100px !important;
+}
+
+/* Focus Mode: Remove requested element */
+div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-dashboard:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(3) {
+  display: none !important;
+}
+
+/* Focus Mode: Apply background color for driver scheduled view in dark theme */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-scheduled:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) {
+  background-color: #0d0d0d !important;
+}
+
+/* Focus Mode: Apply background color for driver dashboard element in dark theme */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-dashboard:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) {
+  background-color: #0d0d0d !important;
+}
+
+/* Focus Mode: Apply background color for driver settings in dark theme */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-settings:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-settings:nth-of-type(2) > div:nth-of-type(3) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-settings:nth-of-type(2) > div:nth-of-type(5) > div:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-settings:nth-of-type(2) > div:nth-of-type(5) > div:nth-of-type(3),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-settings:nth-of-type(2) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) {
+  background-color: #0d0d0d !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-dashboard:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) {
+  background-color: #0d0d0d !important;
+}
+
+/* Focus Mode: Apply background color for driver earnings in dark theme */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(3) > span:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(5),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(4),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(3),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-earnings:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2) {
+  background-color: #0d0d0d !important;
+}
+
+/* Focus Mode: Remove requested element */
+div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#driver-portal-viewport:nth-of-type(1) > div#view-driver-settings:nth-of-type(2) > div:nth-of-type(3) > div:nth-of-type(2) {
+  display: none !important;
+}
+
+/* Focus Mode: Apply background color to auth input panel in dark theme */
+.dark div#root:nth-of-type(1) > div#auth-screen-container:nth-of-type(1) > div#auth-input-panel:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) {
+  background-color: #0d0d0d !important;
+  border-color: #262626 !important;
+}
+
+/* Focus Mode: Apply dark theme background to student portal elements */
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) {
+  background-color: #0d0d0d !important;
+}

@@ -33,9 +33,9 @@ export const UNIVERSITIES: School[] = [
     center: { lat: 7.6781, lng: 4.4600 },
     zoom: 15,
     stops: [
-      { id: 'run-stop-1', name: "Redeemer's Univ Gate", lat: 7.6842234, lng: 4.4665215 },
-      { id: 'run-stop-2', name: 'Senate Building', lat: 7.6781633, lng: 4.4600885 },
-      { id: 'run-stop-3', name: 'Student Hostel', lat: 7.6778910, lng: 4.4494392 }
+      { id: 'run-stop-1', name: 'Container', lat: 7.6796781, lng: 4.4563471 },
+      { id: 'run-stop-2', name: 'Unity Field', lat: 7.6796746, lng: 4.4574946 },
+      { id: 'run-stop-3', name: 'Redeemers University Chapel of Power', lat: 7.6802284, lng: 4.4593831 }
     ]
   },
   {

@@ -83,7 +83,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-        className={`fixed lg:relative inset-x-0 bottom-0 lg:inset-auto z-40 lg:z-auto max-w-3xl lg:max-w-none mx-auto lg:mx-0 flex flex-col bg-white lg:bg-transparent dark:bg-neutral-900 lg:dark:bg-transparent rounded-t-[24px] lg:rounded-none shadow-[0_-4px_16px_rgba(0,0,0,0.5)] lg:shadow-none border-t border-slate-200/80 dark:border-neutral-800 lg:border-none transition-[height] lg:transition-none duration-300 ease-out overflow-hidden lg:overflow-visible select-none lg:select-auto ${snapHeights[snap]} lg:!h-auto lg:!max-h-none ${className}`}
+        className={`fixed lg:relative inset-x-0 bottom-0 lg:inset-auto z-40 lg:z-auto w-full max-w-[350px] lg:max-w-none mx-auto lg:mx-0 flex flex-col bg-white lg:bg-transparent dark:bg-neutral-900 lg:dark:bg-transparent rounded-t-[24px] lg:rounded-none shadow-[0_-4px_16px_rgba(0,0,0,0.5)] lg:shadow-none border-t border-slate-200/80 dark:border-neutral-800 lg:border-none transition-[height] lg:transition-none duration-300 ease-out overflow-hidden lg:overflow-visible select-none lg:select-auto ${snapHeights[snap]} lg:!h-auto lg:!max-h-none ${className}`}
       >
         {/* Top Drag Handle Header Bar */}
         <div

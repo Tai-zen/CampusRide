@@ -136,6 +136,24 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // Current School Details
   const selectedSchool = UNIVERSITIES.find(u => u.id === selectedSchoolId) || UNIVERSITIES[0];
   const campusStops = selectedSchool.stops;
+  
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => console.warn("Could not get user location", err),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, []);
+  
+  const extendedStops = userLocation 
+    ? [{ id: 'current_location', name: 'Current Location', lat: userLocation.lat, lng: userLocation.lng }, ...campusStops]
+    : campusStops;
 
   // Supabase Media & Logo Upload states
   const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
@@ -699,7 +717,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   // Helper to resolve stop name from ID
   const getStopName = (stopId: string) => {
-    const stop = campusStops.find(s => s.id === stopId);
+    const stop = extendedStops.find(s => s.id === stopId);
     return stop ? stop.name : stopId;
   };
 
@@ -1962,7 +1980,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             className="relative w-full h-[calc(100vh-64px)] md:h-[calc(100vh-72px)] lg:h-auto overflow-hidden lg:overflow-visible bg-slate-900 lg:bg-slate-50 lg:dark:bg-neutral-900 select-none lg:flex-1 lg:p-8 lg:flex lg:flex-col lg:gap-6"
           >
             {/* 1. CONTINUOUS BACKGROUND MAP LAYER (Z-0) */}
-            <div className="absolute inset-0 w-full h-full z-0 lg:relative lg:inset-auto lg:z-auto">
+            <div className="absolute inset-0 w-full h-full z-0 lg:relative lg:inset-auto lg:z-auto lg:w-full lg:h-auto">
               <CampusMap
                 schoolId={selectedSchool.id}
                 pickupId={pickup}
@@ -1970,6 +1988,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 poolingState={poolingState}
                 isMatchingDriver={isMatchingDriver}
                 liveDistance={liveDistance}
+                userLocation={userLocation || undefined}
                 onSelectPickup={(stopId) => {
                   setPickup(stopId);
                   if (sheetSnap === 'small') setSheetSnap('medium');
@@ -2081,22 +2100,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 {/* Collapsed/Small State View: Modern Search Bar & Pill Controls */}
                 {sheetSnap === 'small' && (
                   <div className="space-y-3 pb-2 lg:hidden">
-                    {/* Search Bar / Destination Trigger */}
-                    <div
-                      onClick={() => setSheetSnap('large')}
-                      className="w-full bg-[#F2F2F2] dark:bg-neutral-800 hover:bg-slate-100 dark:hover:bg-neutral-750 border border-slate-200/80 dark:border-neutral-700 px-4 py-3 rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-xs"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Search className="w-4 h-4 text-[#46C96B]" />
-                        <span className="text-xs font-semibold text-slate-600 dark:text-neutral-300 truncate">
-                          Where to on campus? (e.g. {getStopName(dropoff)})
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-black uppercase text-[#46C96B] dark:text-emerald-400 bg-[#46C96B]/10 px-2 py-1 rounded-lg shrink-0">
-                        Search
-                      </span>
-                    </div>
-
                     {/* Inline Pill-Style Tags */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-bold">
                       {/* Booking Mode Pill */}
@@ -2108,16 +2111,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <Clock className="w-3.5 h-3.5 text-[#46C96B]" />
                         <span>{bookingMode === 'now' ? 'Pickup Now' : 'Scheduled'}</span>
                       </button>
-
-                      {/* Rider Pill */}
-                      <div className="px-3 py-1.5 rounded-full bg-[#F2F2F2] dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-700 dark:text-neutral-300 flex items-center gap-1.5 whitespace-nowrap">
-                        <img
-                          src={userProfile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150"}
-                          alt={userProfile.name}
-                          className="w-3.5 h-3.5 rounded-full object-cover"
-                        />
-                        <span>For Me</span>
-                      </div>
 
                       {/* Ride Mode Pill */}
                       <button
@@ -2201,7 +2194,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             onChange={(e) => setPickup(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#46C96B] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#46C96B]/50 appearance-none cursor-pointer"
                           >
-                            {campusStops.map((stop) => (
+                            {extendedStops.map((stop) => (
                               <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
                                 {stop.name}
                               </option>
@@ -2236,7 +2229,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             onChange={(e) => setDropoff(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-150 shadow-xs hover:border-[#46C96B] text-slate-800 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#46C96B]/50 appearance-none cursor-pointer"
                           >
-                            {campusStops.map((stop) => (
+                            {extendedStops.map((stop) => (
                               <option key={stop.id} value={stop.id} className="bg-white text-slate-800">
                                 {stop.name}
                               </option>
@@ -2326,7 +2319,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         {/* Vehicle Type Select */}
                         <div className="space-y-2">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Choose Transit Vibe</label>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="flex overflow-x-auto gap-3 pb-2 snap-x hide-scrollbar" style={{ scrollbarWidth: 'none' }}>
                             {VEHICLES.map((v) => {
                               const isSelected = selectedVehicleId === v.id;
                               return (
@@ -2334,7 +2327,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   key={v.id}
                                   type="button"
                                   onClick={() => setSelectedVehicleId(v.id)}
-                                  className={`p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
+                                  className={`w-[100px] shrink-0 snap-start p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
                                     isSelected 
                                       ? 'bg-emerald-50 dark:bg-emerald-950/40 border-[#46C96B] text-[#46C96B] dark:text-emerald-400 shadow-sm font-bold' 
                                       : 'bg-slate-50 dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 hover:bg-white dark:hover:bg-neutral-800 text-slate-600 dark:text-neutral-400'
@@ -2356,51 +2349,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           </div>
                         </div>
 
-                        {/* Dynamic Pooling Info display */}
-                        <div className="bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 p-4 rounded-2xl space-y-3">
-                          <div className="flex justify-between items-center border-b border-slate-200 dark:border-neutral-800 pb-2">
-                            <span className="text-xs font-bold text-slate-600 dark:text-neutral-300 uppercase tracking-wider">Dynamic Pooling Tiers</span>
-                            <span className="text-[10px] font-mono text-[#46C96B] dark:text-emerald-400 font-bold">FLAT RATE FOR ALL COMMUTERS</span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-center">
-                            <div className="bg-white dark:bg-neutral-800 p-2.5 rounded-xl border border-slate-200 dark:border-neutral-700 text-left flex justify-between items-center">
-                              <div>
-                                <span className="text-[10px] text-slate-500 dark:text-neutral-400 font-bold block">Flat Rate Per Seat</span>
-                                <span className="text-xs text-slate-400 dark:text-neutral-500">Paid by each commuter</span>
-                              </div>
-                              <span className="text-base font-mono font-black text-[#46C96B] dark:text-emerald-400 bg-[#46C96B]/10 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg">{currencySymbol}{activeVehicleConfig.poolPrice}</span>
-                            </div>
-                            <div className="bg-[#46C96B]/5 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-[#46C96B]/20 dark:border-emerald-500/30 text-left flex justify-between items-center">
-                              <div>
-                                <span className="text-[10px] text-[#46C96B] dark:text-emerald-400 font-extrabold block">Lobby Capacity</span>
-                                <span className="text-xs text-slate-500 dark:text-neutral-400">Max seats available</span>
-                              </div>
-                              <span className="text-base font-mono font-black text-slate-800 dark:text-white bg-slate-100 dark:bg-neutral-800 px-2.5 py-0.5 rounded-lg">{activeVehicleConfig.capacity} Seats</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Toggle safety companions option */}
-                        <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-neutral-900 rounded-2xl border border-slate-200 dark:border-neutral-800">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-lg bg-[#46C96B]/15 flex items-center justify-center border border-[#46C96B]/30">
-                              <ShieldCheck className="w-5 h-5 text-[#46C96B]" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold block text-slate-800 dark:text-white">Safe Student Peer Matching</span>
-                              <span className="text-[10px] text-slate-500 dark:text-neutral-400 block">Only match with active university verified students</span>
-                            </div>
-                          </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                              type="checkbox" 
-                              checked={verifyPeer} 
-                              onChange={() => setVerifyPeer(!verifyPeer)} 
-                              className="sr-only peer" 
-                            />
-                            <div className="w-10 h-6 bg-slate-200 dark:bg-neutral-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#46C96B]"></div>
-                          </label>
-                        </div>
 
                         {/* CTA button */}
                         <button
@@ -2501,7 +2449,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         {/* Vehicle Type Select */}
                         <div className="space-y-2">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Choose Solo Transit</label>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="flex overflow-x-auto gap-3 pb-2 snap-x hide-scrollbar" style={{ scrollbarWidth: 'none' }}>
                             {VEHICLES.map((v) => {
                               const isSelected = selectedVehicleId === v.id;
                               return (
@@ -2509,7 +2457,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                                   key={v.id}
                                   type="button"
                                   onClick={() => setSelectedVehicleId(v.id)}
-                                  className={`p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
+                                  className={`w-[100px] shrink-0 snap-start p-3 rounded-2xl border flex flex-col items-center justify-center space-y-1 transition-all cursor-pointer ${
                                     isSelected 
                                       ? 'bg-slate-100 border-[#46C96B] text-[#46C96B] shadow-sm font-bold' 
                                       : 'bg-slate-50 border-slate-200 hover:bg-white text-slate-500'
@@ -2529,15 +2477,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               );
                             })}
                           </div>
-                        </div>
-
-                        {/* Flat Fare Receipt preview */}
-                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold text-slate-600 uppercase block tracking-wider">Direct Solo Fare</span>
-                            <span className="text-[10px] text-slate-500">No companions, straight direct delivery in {activeVehicleConfig.name}.</span>
-                          </div>
-                          <span className="text-lg font-mono font-black text-slate-800">{currencySymbol}{activeVehicleConfig.soloPrice}</span>
                         </div>
 
                         {/* Solo CTA Button */}
@@ -3912,15 +3851,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         <span className="text-slate-500 line-through">Solo: {currencySymbol}{data.solo}</span>
                       </div>
 
-                      <div className="w-12 h-[150px] flex items-end justify-center gap-1">
+                      <div className="w-full max-w-[48px] h-[150px] flex items-end justify-center gap-0.5 sm:gap-1">
                         {/* Solo Ride Bar Indicator (Backdrop) */}
                         <div 
-                          className="w-3.5 bg-slate-200 hover:bg-slate-400 rounded-t-sm transition-all duration-300"
+                          className="w-2.5 sm:w-3.5 bg-slate-200 hover:bg-slate-400 rounded-t-sm transition-all duration-300"
                           style={{ height: `${soloHeight}px` }}
                         ></div>
                         {/* Active Pool Split Bar */}
                         <div 
-                          className="w-3.5 bg-gradient-to-t from-[#46C96B] to-emerald-600 rounded-t-sm transition-all duration-300"
+                          className="w-2.5 sm:w-3.5 bg-gradient-to-t from-[#46C96B] to-emerald-600 rounded-t-sm transition-all duration-300"
                           style={{ height: `${splitHeight}px` }}
                         ></div>
                       </div>
@@ -4943,7 +4882,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       {/* FLOATING MESSENGER-STYLE CHAT OVERLAY ON THE LEFT */}
       {(() => {
         const chatId = joinedPoolId || (activeRide ? activeRide.id : null);
-        if (!chatId) return null;
+        if (!chatId || searchFailed) return null;
 
         const counterPartyName = activeRide?.driverName || "Campus Transit Pool";
         const counterPartyAvatar = activeRide?.driverAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80";

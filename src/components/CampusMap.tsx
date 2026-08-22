@@ -18,6 +18,7 @@ interface CampusMapProps {
   onSelectDropoff?: (stopId: string) => void;
   matchedDriverName?: string;
   isContinuousBackground?: boolean;
+  userLocation?: { lat: number; lng: number } | null;
 }
 
 // Fix default Leaflet marker asset paths
@@ -50,6 +51,13 @@ const stopIcon = divIcon(
   `<div style="width:14px;height:14px;background:#fff;border:3px solid #2ECC71;border-radius:9999px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.6);"></div>`,
   [14, 14]
 );
+const currentLocationIcon = divIcon(
+  `<div style="position:relative;display:flex;align-items:center;justify-content:center;">
+    <span style="position:absolute;width:32px;height:32px;border-radius:9999px;background:rgba(52,152,219,0.5);animation:crPing 1.5s infinite;"></span>
+    <div style="width:16px;height:16px;background:#3498DB;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);"></div>
+  </div>`,
+  [16, 16]
+);
 
 function driverIcon(vehicleType: 'Car' | 'Keke' | 'Shuttle', isMatched: boolean) {
   const emoji = vehicleType === 'Keke' ? '🛺' : vehicleType === 'Shuttle' ? '🚐' : '🚗';
@@ -72,6 +80,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   onSelectDropoff,
   matchedDriverName = 'David Alao',
   isContinuousBackground = false,
+  userLocation,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -80,7 +89,13 @@ export const CampusMap: React.FC<CampusMapProps> = ({
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
 
   const selectedSchool = UNIVERSITIES.find((u) => u.id === schoolId) || UNIVERSITIES[0];
-  const stops = selectedSchool.stops;
+  const stops = useMemo(() => {
+    const baseStops = selectedSchool.stops;
+    if (userLocation) {
+      return [{ id: 'current_location', name: 'Current Location', lat: userLocation.lat, lng: userLocation.lng }, ...baseStops];
+    }
+    return baseStops;
+  }, [selectedSchool, userLocation]);
 
   const pickupStop = stops.find((s) => s.id === pickupId);
   const dropoffStop = stops.find((s) => s.id === dropoffId);
@@ -199,6 +214,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
       zoomControl: true,
     });
 
+    // High-resolution satellite imagery from ESRI
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       maxZoom: 19,
@@ -256,11 +272,17 @@ export const CampusMap: React.FC<CampusMapProps> = ({
     stops.forEach((stop) => {
       const isPickup = stop.id === pickupId;
       const isDropoff = stop.id === dropoffId;
-      const icon = isPickup ? pickupIcon : isDropoff ? dropoffIcon : stopIcon;
+      const isCurrentLocation = stop.id === 'current_location';
+      const icon = isPickup ? pickupIcon : isDropoff ? dropoffIcon : isCurrentLocation ? currentLocationIcon : stopIcon;
 
       const marker = L.marker([stop.lat, stop.lng], {
         icon,
         title: stop.name,
+      }).bindTooltip(stop.name, {
+        permanent: true,
+        direction: 'right',
+        offset: [15, 0],
+        className: 'bg-white/90 backdrop-blur-sm dark:bg-neutral-900/90 text-slate-800 dark:text-neutral-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm border border-slate-200/50 dark:border-neutral-700/50 whitespace-nowrap'
       });
 
       marker.on('click', () => {
@@ -286,7 +308,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
       .filter((d) => d.status !== 'Offline')
       .forEach((drv) => {
         const isMatched = (poolingState === 'matched' || poolingState === 'transit') && drv.name === matchedDriverName;
-        
+
         let lat = drv.lat;
         let lng = drv.lng;
 
@@ -357,7 +379,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
 
   return (
     <div className={`w-full transition-all ${
-      isContinuousBackground 
+      isContinuousBackground
         ? 'h-full relative overflow-hidden bg-slate-100 dark:bg-neutral-900 lg:bg-white lg:rounded-3xl lg:border lg:border-slate-200 lg:shadow-xs lg:flex lg:flex-col lg:animate-fadeIn lg:h-auto'
         : 'bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col animate-fadeIn'
     }`}>
@@ -367,7 +389,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
         .leaflet-container { font-family: inherit; width: 100%; height: 100%; z-index: 1; }
       `}</style>
 
-      <div className={`relative w-full ${isContinuousBackground ? 'h-full lg:h-[320px] lg:md:h-[400px]' : 'h-[320px] md:h-[400px]'}`}>
+      <div className={`relative w-full ${isContinuousBackground ? 'h-full lg:h-[320px] xl:h-[400px]' : 'h-[320px] md:h-[400px]'}`}>
         <div
           ref={mapContainerRef}
           className="w-full h-full"
