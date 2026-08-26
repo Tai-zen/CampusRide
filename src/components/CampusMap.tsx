@@ -282,7 +282,7 @@ export const CampusMap: React.FC<CampusMapProps> = ({
         permanent: true,
         direction: 'right',
         offset: [15, 0],
-        className: 'bg-white/90 backdrop-blur-sm dark:bg-neutral-900/90 text-slate-800 dark:text-neutral-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm border border-slate-200/50 dark:border-neutral-700/50 whitespace-nowrap'
+        className: 'bg-transparent border-0 shadow-none px-0 py-0 text-[8px] font-bold text-slate-900 dark:text-white whitespace-nowrap drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]'
       });
 
       marker.on('click', () => {
