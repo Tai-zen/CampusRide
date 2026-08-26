@@ -612,8 +612,11 @@ div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#m
 
 .dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(2),
 .dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(3),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(3),
 .dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(4) {
-  background-color: #0d0d0d !important;
+  background-color: #222222 !important;
 }
 
 .dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) {
@@ -637,5 +640,27 @@ div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#m
 div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) {
   width: 100% !important;
   max-width: 100% !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > button:nth-of-type(1) {
+  background-color: #222222 !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(2) {
+  background-color: #222222 !important;
+}
+
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(2),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(3),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(5) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(4),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1),
+.dark div#root:nth-of-type(1) > div#application-layout-context:nth-of-type(1) > main#main-viewport-body:nth-of-type(1) > div#student-portal-viewport:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(3) {
+  background-color: #222222 !important;
+}
+
+.dark header#mobile-navigation-bar:nth-of-type(1) > div:nth-of-type(2) > span:nth-of-type(1) {
+  background-color: #0D0D0D !important;
 }
 

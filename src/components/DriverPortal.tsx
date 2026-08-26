@@ -741,7 +741,10 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       snapshot.forEach((docSnap) => {
         const r = docSnap.data() as RideRequest;
         if (!r.driverId && r.status === 'requested' && !declinedRideIds.has(r.id)) {
-          found = r;
+          found = {
+            ...r,
+            isScheduled: false
+          };
         }
       });
       immediateReq = found;
@@ -865,7 +868,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
 
     if (!incomingRequest) return;
 
-    const isScheduled = incomingRequest.isScheduled || incomingRequest.status === 'pending_driver_acceptance' || !!incomingRequest.date;
+    const isScheduled = incomingRequest.isScheduled === true;
     const driverPlate = driverProfile.plateNumber || (driverProfile.vehicle ? (driverProfile.vehicle.includes(' • ') ? driverProfile.vehicle.split(' • ')[1] : 'RUN-918-LA') : 'RUN-918-LA');
 
     if (isScheduled) {
@@ -1009,12 +1012,11 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
       });
     }
     setIncomingRequest(null);
-    alert('Ride request has been declined. Returning to pool.');
   };
 
   // Refresh incoming matching invitations
   const refreshPassengerMatches = () => {
-    alert("Real-time automated matching is active. New campus ride requests will show up instantly!");
+    // Silent refresh
   };
 
   // Helper to credit driver for a completed ride
@@ -1538,7 +1540,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({
                     <div className="bg-[#F2F2F2] rounded-2xl p-5 border border-gray-100 shadow-xs space-y-4">
                       
                       {/* Scheduled Ride badge if applicable */}
-                      {(incomingRequest.isScheduled || incomingRequest.date) && (
+                      {incomingRequest.isScheduled && (
                         <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 flex items-center gap-2 text-[#001058]">
                           <Calendar className="w-4 h-4 shrink-0 text-[#001058]" />
                           <div className="text-xs font-bold">

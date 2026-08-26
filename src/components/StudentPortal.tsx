@@ -1556,7 +1556,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       type: 'success'
     });
 
-    alert(`Successfully joined ${pool.hostName}'s pool! Redirecting to the Live forming lobby...`);
     onNavigate('booking');
   };
 
@@ -1577,7 +1576,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     });
     setActivePools(updated);
     localStorage.setItem('campusride_active_pools', JSON.stringify(updated));
-    alert("You have confirmed that you are ready to start the ride! Waiting for the host to match a driver.");
   };
 
   // Host initiates the driver match request (1 minute countdown starts)
@@ -1801,8 +1799,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       }
       setJoinedPoolId(null);
     }
-
-    alert(`Thank you for rating your ride! You rated the driver ${ratingScore} stars.`);
   };
 
   // Wallet Funding handler
