@@ -38,26 +38,34 @@ function divIcon(html: string, size: [number, number] = [30, 30]) {
   });
 }
 
-const pickupIcon = divIcon(
-  `<div style="position:relative;display:flex;align-items:center;justify-content:center;">
-    <span style="position:absolute;width:32px;height:32px;border-radius:9999px;background:rgba(46,204,113,0.5);animation:crPing 1.5s infinite;"></span>
-    <div style="width:28px;height:28px;background:#2ECC71;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:14px;">📍</div>
-  </div>`
-);
-const dropoffIcon = divIcon(
-  `<div style="width:28px;height:28px;background:#E74C3C;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:14px;">🏁</div>`
-);
-const stopIcon = divIcon(
-  `<div style="width:14px;height:14px;background:#fff;border:3px solid #2ECC71;border-radius:9999px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.6);"></div>`,
-  [14, 14]
-);
-const currentLocationIcon = divIcon(
-  `<div style="position:relative;display:flex;align-items:center;justify-content:center;">
-    <span style="position:absolute;width:32px;height:32px;border-radius:9999px;background:rgba(52,152,219,0.5);animation:crPing 1.5s infinite;"></span>
-    <div style="width:16px;height:16px;background:#3498DB;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);"></div>
-  </div>`,
-  [16, 16]
-);
+function createCustomIcon(locationName: string, type: 'pickup' | 'dropoff' | 'current' | 'stop' = 'stop') {
+  let badgeHtml = '';
+  if (type === 'pickup') {
+    badgeHtml = `<div style="position:relative;display:flex;align-items:center;justify-content:center;">
+      <span style="position:absolute;width:32px;height:32px;border-radius:9999px;background:rgba(46,204,113,0.5);animation:crPing 1.5s infinite;"></span>
+      <div style="width:28px;height:28px;background:#2ECC71;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:14px;">📍</div>
+    </div>`;
+  } else if (type === 'dropoff') {
+    badgeHtml = `<div style="width:28px;height:28px;background:#E74C3C;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;font-size:14px;">🏁</div>`;
+  } else if (type === 'current') {
+    badgeHtml = `<div style="position:relative;display:flex;align-items:center;justify-content:center;">
+      <span style="position:absolute;width:32px;height:32px;border-radius:9999px;background:rgba(52,152,219,0.5);animation:crPing 1.5s infinite;"></span>
+      <div style="width:16px;height:16px;background:#3498DB;color:#fff;border-radius:9999px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);"></div>
+    </div>`;
+  } else {
+    badgeHtml = `<div style="width:12px;height:12px;background:#2ECC71;border:2px solid #fff;border-radius:9999px;box-shadow:0 2px 6px rgba(0,0,0,0.6);"></div>`;
+  }
+
+  return L.divIcon({
+    html: `<div class="campusride-pin-container">
+      ${badgeHtml}
+      <span class="campusride-pin-label">${locationName}</span>
+    </div>`,
+    className: 'campusride-leaflet-icon',
+    iconSize: [120, 50],
+    iconAnchor: [60, 45],
+  });
+}
 
 function driverIcon(vehicleType: 'Car' | 'Keke' | 'Shuttle', isMatched: boolean) {
   const emoji = vehicleType === 'Keke' ? '🛺' : vehicleType === 'Shuttle' ? '🚐' : '🚗';
@@ -273,16 +281,12 @@ export const CampusMap: React.FC<CampusMapProps> = ({
       const isPickup = stop.id === pickupId;
       const isDropoff = stop.id === dropoffId;
       const isCurrentLocation = stop.id === 'current_location';
-      const icon = isPickup ? pickupIcon : isDropoff ? dropoffIcon : isCurrentLocation ? currentLocationIcon : stopIcon;
+      const type = isPickup ? 'pickup' : isDropoff ? 'dropoff' : isCurrentLocation ? 'current' : 'stop';
+      const icon = createCustomIcon(stop.name, type);
 
       const marker = L.marker([stop.lat, stop.lng], {
         icon,
         title: stop.name,
-      }).bindTooltip(stop.name, {
-        permanent: true,
-        direction: 'right',
-        offset: [15, 0],
-        className: 'bg-transparent border-0 shadow-none px-0 py-0 text-[8px] font-bold text-slate-900 dark:text-white whitespace-nowrap drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]'
       });
 
       marker.on('click', () => {
